@@ -1,0 +1,30 @@
+# ATTENTION : ce fichier est régénéré dynamiquement par setup_autonomy.sh
+# Ne pas éditer directement — relancer le déploiement depuis le PC
+
+[Unit]
+Description=RPi-PLC Studio — Automate programmable (gpiod/Bookworm)
+Documentation=https://github.com/rpi-plc
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/rpi-plc
+ExecStart=/usr/bin/python3 /home/pi/rpi-plc/server.py
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=10
+TimeoutStopSec=10
+KillMode=mixed
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rpi-plc
+SupplementaryGroups=gpio spi i2c
+AmbientCapabilities=CAP_SYS_RAWIO
+CapabilityBoundingSet=CAP_SYS_RAWIO
+
+[Install]
+WantedBy=multi-user.target

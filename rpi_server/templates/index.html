@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPi-PLC — Automate Visuel</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── Adaptateur de dates minimal pour Chart.js 4 (pas de dépendance externe) ──
+(function() {
+  const FORMATS = {
+    datetime: 'dd/MM HH:mm',
+    millisecond: 'HH:mm:ss.SSS',
+    second: 'HH:mm:ss',
+    minute: 'HH:mm',
+    hour: 'HH:mm',
+    day: 'dd/MM',
+    week: 'dd/MM',
+    month: 'MM/yyyy',
+    quarter: 'MM/yyyy',
+    year: 'yyyy'
+  };
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function fmt(ts, f) {
+    const d = new Date(ts);
+    return f
+      .replace('yyyy', d.getFullYear())
+      .replace('MM',   pad(d.getMonth()+1))
+      .replace('dd',   pad(d.getDate()))
+      .replace('HH',   pad(d.getHours()))
+      .replace('mm',   pad(d.getMinutes()))
+      .replace('ss',   pad(d.getSeconds()))
+      .replace('SSS',  String(d.getMilliseconds()).padStart(3,'0'));
+  }
+  Chart._adapters._date.override({
+    init()        {},
+    formats()     { return FORMATS; },
+    parse(v)      { if(v===null||v===undefined)return null; if(typeof v==='number')return v; const t=new Date(v).getTime(); return isNaN(t)?null:t; },
+    format(ts,f)  { return fmt(ts, FORMATS[f]||f); },
+    add(ts,a,u)   {
+      const d=new Date(ts);
+      if(u==='year')  d.setFullYear(d.getFullYear()+a);
+      else if(u==='month') d.setMonth(d.getMonth()+a);
+      else if(u==='week')  d.setDate(d.getDate()+a*7);
+      else if(u==='day')   d.setDate(d.getDate()+a);
+      else if(u==='hour')  d.setHours(d.getHours()+a);
+      else if(u==='minute')d.setMinutes(d.getMinutes()+a);
+      else if(u==='second')d.setSeconds(d.getSeconds()+a);
+      else d.setTime(d.getTime()+a);
+      return d.getTime();
+    },
+    diff(a,b,u) {
+      const ms=a-b;
+      if(u==='year')  return new Date(a).getFullYear()-new Date(b).getFullYear();
+      if(u==='month') return (new Date(a).getFullYear()-new Date(b).getFullYear())*12+(new Date(a).getMonth()-new Date(b).getMonth());
+      if(u==='week')  return Math.round(ms/604800000);
+      if(u==='day')   return Math.round(ms/86400000);
+      if(u==='hour')  return Math.round(ms/3600000);
+      if(u==='minute')return Math.round(ms/60000);
+      if(u==='second')return Math.round(ms/1000);
+      return ms;
+    },
+    startOf(ts,u,w) {
+      const d=new Date(ts);
+      if(u==='year')  { d.setMonth(0,1); d.setHours(0,0,0,0); }
+      else if(u==='month'){ d.setDate(1); d.setHours(0,0,0,0); }
+      else if(u==='day')  d.setHours(0,0,0,0);
+      else if(u==='hour') { d.setMinutes(0,0,0); }
+      else if(u==='minute'){ d.setSeconds(0,0); }
+      else if(u==='second') d.setMilliseconds(0);
+      return d.getTime();
+    },
+    endOf(ts,u) {
+      const d=new Date(ts);
+      if(u==='year')  { d.setMonth(11,31); d.setHours(23,59,59,999); }
+      else if(u==='month'){ d.setDate(new Date(d.getFullYear(),d.getMonth()+1,0).getDate()); d.setHours(23,59,59,999); }
+      else if(u==='day')  d.setHours(23,59,59,999);
+      else if(u==='hour') d.setMinutes(59,59,999);
+      else if(u==='minute')d.setSeconds(59,999);
+      else if(u==='second')d.setMilliseconds(999);
+      return d.getTime();
+    }
+  });
+})();
+</script>
+<style>
+:root {
+  --bg:     #0d1117; --bg2: #161b22; --bg3: #1c2128;
+  --border: #30363d; --text: #e6edf3; --text2: #8b949e;
+  --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+  --amber:  #d29922; --purple: #bc8cff; --teal: #39d353;
+  --radius: 8px; --font: 'JetBrains Mono','Fira Code',Consolas,monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text);
+       min-height: 100vh; font-size: 13px; }
+
+/* ── HEADER ── */
+header { display:flex; align-items:center; gap:12px; padding:8px 16px;
+         background:var(--bg2); border-bottom:1px solid var(--border);
+         position:sticky; top:0; z-index:100; }
+.logo { font-size:16px; font-weight:700; color:var(--accent); }
+.logo span { color:var(--green); }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--red); transition:background .3s; }
+.dot.on { background:var(--green); animation:pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.status-label { font-size:11px; color:var(--text2); }
+header .spacer { flex:1; }
+.btn { padding:5px 14px; border-radius:var(--radius); border:1px solid var(--border);
+       background:var(--bg3); color:var(--text); cursor:pointer;
+       font-family:var(--font); font-size:12px; transition:all .15s; }
+.btn:hover { border-color:var(--accent); color:var(--accent); }
+.btn.green { background:#1a4a1a; border-color:var(--green); color:var(--green); }
+.btn.red   { background:#4a1a1a; border-color:var(--red);   color:var(--red); }
+.cycle { font-size:11px; color:var(--text2); }
+
+/* ── TABS ── */
+.tabs { display:flex; gap:0; background:var(--bg2); border-bottom:1px solid var(--border); }
+.tab { padding:10px 20px; cursor:pointer; font-size:12px; color:var(--text2);
+       border-bottom:2px solid transparent; transition:all .15s; }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab:hover { color:var(--text); }
+.page { display:none; padding:16px; }
+.page.active { display:block; }
+
+/* ── GRILLE SONDES ── */
+.sonde-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:12px; }
+.sonde-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius);
+              padding:12px; transition:border-color .2s; }
+.sonde-card:hover { border-color:var(--accent); }
+.sonde-card.alarm { border-color:var(--red) !important; animation:blink 1s ease-in-out infinite; }
+@keyframes blink { 0%,100%{border-color:var(--red)} 50%{border-color:#3a1515} }
+.sonde-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.sonde-name { font-size:11px; color:var(--text2); }
+.sonde-addr { font-size:10px; color:var(--purple); }
+.sonde-temp { font-size:28px; font-weight:700; color:var(--accent); line-height:1; }
+.sonde-temp.hot  { color:var(--red); }
+.sonde-temp.warm { color:var(--amber); }
+.sonde-temp.cold { color:var(--teal); }
+.sonde-temp.err  { color:var(--text2); font-size:18px; }
+.sonde-volt { font-size:10px; color:var(--text2); margin-top:4px; }
+.sonde-bar { height:4px; background:var(--bg3); border-radius:2px; margin-top:8px; overflow:hidden; }
+.sonde-bar-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .5s; }
+.sonde-sim { margin-top:8px; }
+.sonde-sim label { font-size:10px; color:var(--text2); display:block; margin-bottom:2px; }
+.sonde-sim input { width:100%; accent-color:var(--accent); cursor:pointer; }
+
+/* ── GRAPHIQUE ── */
+.chart-container { background:var(--bg2); border:1px solid var(--border);
+                   border-radius:var(--radius); padding:16px; margin-bottom:16px; }
+.chart-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.chart-toolbar select, .chart-toolbar input {
+  background:var(--bg3); border:1px solid var(--border); color:var(--text);
+  padding:4px 8px; border-radius:var(--radius); font-family:var(--font); font-size:11px; }
+canvas#mainChart { max-height:350px; }
+
+/* ── GPIO ── */
+.gpio-section { margin-bottom:20px; }
+.gpio-section h3 { font-size:12px; color:var(--text2); text-transform:uppercase;
+                   letter-spacing:1px; margin-bottom:10px; }
+.gpio-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:8px; }
+.gpio-pin { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius);
+            padding:10px; display:flex; align-items:center; gap:10px; }
+.gpio-pin.active { border-color:var(--green); background:#0d2010; }
+.gpio-indicator { width:12px; height:12px; border-radius:50%;
+                  background:var(--bg3); border:1px solid var(--border); flex-shrink:0;
+                  transition:all .15s; }
+.gpio-pin.active .gpio-indicator { background:var(--green); box-shadow:0 0 6px var(--green); }
+.gpio-info { flex:1; min-width:0; }
+.gpio-pname { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gpio-bcm   { font-size:10px; color:var(--purple); }
+.gpio-toggle { background:var(--bg3); border:1px solid var(--border); color:var(--text);
+               padding:3px 8px; border-radius:4px; cursor:pointer; font-size:10px;
+               font-family:var(--font); }
+.gpio-toggle:hover { border-color:var(--accent); }
+
+/* ── PLC STATUS ── */
+.plc-status { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:10px; }
+.stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:12px; }
+.stat-label { font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
+.stat-value { font-size:20px; font-weight:700; color:var(--accent); margin-top:4px; }
+.stat-value.ok  { color:var(--green); }
+.stat-value.err { color:var(--red); }
+
+/* ── ERREUR ── */
+.error-banner { background:#2a1515; border:1px solid var(--red); border-radius:var(--radius);
+                padding:10px 14px; margin-bottom:12px; color:var(--red); font-size:12px; display:none; }
+.error-banner.show { display:block; }
+
+/* ── RESPONSIVE ── */
+@media(max-width:600px) {
+  .sonde-grid { grid-template-columns:1fr 1fr; }
+  .gpio-grid  { grid-template-columns:1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">RPi<span>-PLC</span></div>
+  <div class="dot" id="dot"></div>
+  <div class="status-label" id="statusLabel">Connexion…</div>
+  <div class="spacer"></div>
+  <span class="cycle" id="cycleLabel">cycle —</span>
+  <button class="btn green" onclick="plcStart()">▶ Start</button>
+  <button class="btn red"   onclick="plcStop()">■ Stop</button>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('sondes',this)">🌡 Sondes NTC 10k</div>
+  <div class="tab"        onclick="showTab('graph',this)">📈 Historique</div>
+  <div class="tab"        onclick="showTab('gpio',this)">⚡ GPIO</div>
+  <div class="tab"        onclick="showTab('plc',this)">⚙ PLC</div>
+</div>
+
+<!-- PAGE : SONDES -->
+<div class="page active" id="page-sondes">
+  <div class="error-banner" id="errBanner"></div>
+  <div class="sonde-grid" id="sondeGrid"></div>
+</div>
+
+<!-- PAGE : GRAPHIQUE -->
+<div class="page" id="page-graph">
+  <div class="chart-container">
+    <div class="chart-toolbar">
+      <label style="font-size:11px;color:var(--text2)">Canal :</label>
+      <select id="chartChannel" onchange="reloadChart()"></select>
+      <label style="font-size:11px;color:var(--text2)">Durée :</label>
+      <select id="chartHours" onchange="reloadChart()">
+        <option value="1">1 h</option>
+        <option value="6">6 h</option>
+        <option value="24" selected>24 h</option>
+        <option value="72">3 j</option>
+        <option value="168">7 j</option>
+      </select>
+      <button class="btn" onclick="reloadChart()">⟳ Actualiser</button>
+      <span id="chartStatus" style="font-size:11px;color:var(--text2)"></span>
+    </div>
+    <canvas id="mainChart"></canvas>
+  </div>
+  <!-- Mini graphes temps réel -->
+  <div class="sonde-grid" id="miniChartGrid"></div>
+</div>
+
+<!-- PAGE : GPIO -->
+<div class="page" id="page-gpio">
+  <div class="gpio-section">
+    <h3>Entrées TOR (8)</h3>
+    <div class="gpio-grid" id="gpioInputs"></div>
+  </div>
+  <div class="gpio-section">
+    <h3>Sorties relais (16)</h3>
+    <div class="gpio-grid" id="gpioOutputs"></div>
+  </div>
+</div>
+
+<!-- PAGE : PLC -->
+<div class="page" id="page-plc">
+  <div class="plc-status" id="plcStatus"></div>
+  <div style="margin-top:16px;">
+    <h3 style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">
+      Registres RF0–RF15</h3>
+    <div class="gpio-grid" id="rfGrid"></div>
+  </div>
+  <div style="margin-top:16px;">
+    <h3 style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">
+      Mémoires M0–M31</h3>
+    <div id="memGrid" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const ADS_LABELS = { ANA0:'0x48 CH0', ANA1:'0x48 CH1', ANA2:'0x48 CH2', ANA3:'0x48 CH3',
+                     ANA4:'0x49 CH0', ANA5:'0x49 CH1', ANA6:'0x49 CH2', ANA7:'0x49 CH3',
+                     ANA8:'0x4A CH0', ANA9:'0x4A CH1', ANA10:'0x4A CH2', ANA11:'0x4A CH3' };
+
+const CHART_COLORS = [
+  '#58a6ff','#3fb950','#f85149','#d29922','#bc8cff','#39d353',
+  '#ff7b72','#ffa657','#79c0ff','#56d364','#d2a8ff','#ffd700'
+];
+
+// ── ÉTAT ──────────────────────────────────────────────────────────────────────
+let state      = {};
+let mainChart  = null;
+let miniCharts = {};
+let rtBuffers  = {};   // ANA0..ANA11 → [{x,y}] buffer temps réel (dernier 5 min)
+const RT_MAX   = 300;  // 300 points = 5 min à 1 pt/s
+
+// ── SOCKET.IO ─────────────────────────────────────────────────────────────────
+const socket = io();
+
+socket.on('connect',    () => setConnected(true));
+socket.on('disconnect', () => setConnected(false));
+socket.on('plc_update', (s) => { state = s; renderAll(s); });
+
+function setConnected(ok) {
+  document.getElementById('dot').className = 'dot' + (ok ? ' on' : '');
+  document.getElementById('statusLabel').textContent = ok ? 'Connecté' : 'Déconnecté';
+}
+
+// ── RENDER PRINCIPAL ──────────────────────────────────────────────────────────
+function renderAll(s) {
+  renderSondes(s.analog || {});
+  renderGpio(s.gpio || {});
+  renderPlc(s);
+  updateRtBuffers(s.analog || {});
+  updateMiniCharts();
+  document.getElementById('cycleLabel').textContent = `cycle ${s.cycle||0}`;
+  const err = s.error || '';
+  const banner = document.getElementById('errBanner');
+  banner.textContent = err;
+  banner.className = 'error-banner' + (err ? ' show' : '');
+}
+
+// ── SONDES ────────────────────────────────────────────────────────────────────
+function renderSondes(analog) {
+  const grid = document.getElementById('sondeGrid');
+  const ids  = Object.keys(analog).sort((a,b) => parseInt(a.slice(3)) - parseInt(b.slice(3)));
+
+  // Créer les cartes si pas encore là
+  if (grid.children.length === 0) {
+    ids.forEach(id => {
+      const card = document.createElement('div');
+      card.className = 'sonde-card';
+      card.id = 'card-' + id;
+      card.innerHTML = `
+        <div class="sonde-header">
+          <span class="sonde-name" id="sname-${id}"></span>
+          <span class="sonde-addr">${ADS_LABELS[id]||id}</span>
+        </div>
+        <div class="sonde-temp" id="stemp-${id}">—</div>
+        <div class="sonde-volt" id="svolt-${id}"></div>
+        <div class="sonde-bar"><div class="sonde-bar-fill" id="sbar-${id}" style="width:0%"></div></div>
+        <div class="sonde-sim">
+          <label>Sim tension (V) <span id="ssimv-${id}">0.55</span>V</label>
+          <input type="range" min="0.05" max="3.20" step="0.01" value="0.55"
+                 oninput="simVoltage('${id}',this.value)"
+                 id="sslider-${id}">
+        </div>`;
+      grid.appendChild(card);
+    });
+
+    // Remplir le sélecteur du graphique
+    const sel = document.getElementById('chartChannel');
+    ids.forEach(id => {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = id;
+      sel.appendChild(opt);
+    });
+
+    // Mini charts
+    buildMiniCharts(ids);
+  }
+
+  ids.forEach(id => {
+    const info = analog[id];
+    if (!info) return;
+    const t   = info.celsius;
+    const v   = info.voltage;
+    const name = info.name || id;
+    const card = document.getElementById('card-' + id);
+
+    document.getElementById('sname-' + id).textContent = name;
+    document.getElementById('svolt-' + id).textContent =
+      v != null ? `${v.toFixed(3)} V — ${info.probe||'NTC 10k'} — ${info.sim?'SIM':'HW'}` : 'N/C';
+
+    const el = document.getElementById('stemp-' + id);
+    if (t == null || isNaN(t)) {
+      el.textContent = 'N/C'; el.className = 'sonde-temp err';
+      card.classList.remove('alarm');
+    } else {
+      el.textContent = t.toFixed(1) + ' °C';
+      el.className   = 'sonde-temp' + (t > 80 ? ' hot' : t > 40 ? ' warm' : t < 5 ? ' cold' : '');
+      card.classList.toggle('alarm', t > 100);
+    }
+
+    // Barre : -50°C..+200°C → 0..100%
+    const pct = t != null && !isNaN(t) ? Math.min(100, Math.max(0, (t + 50) / 250 * 100)) : 0;
+    const bar = document.getElementById('sbar-' + id);
+    bar.style.width = pct + '%';
+    bar.style.background = t > 80 ? 'var(--red)' : t > 40 ? 'var(--amber)' : 'var(--accent)';
+  });
+}
+
+// ── SIMULATION ────────────────────────────────────────────────────────────────
+function simVoltage(ref, val) {
+  document.getElementById('ssimv-' + ref).textContent = parseFloat(val).toFixed(2);
+  fetch('/api/analog/sim', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ref, value: parseFloat(val)})
+  });
+}
+
+// ── TEMPS RÉEL BUFFERS ────────────────────────────────────────────────────────
+function updateRtBuffers(analog) {
+  const now = Date.now();
+  Object.entries(analog).forEach(([id, info]) => {
+    if (!rtBuffers[id]) rtBuffers[id] = [];
+    const buf = rtBuffers[id];
+    const t = info.celsius;
+    if (t != null && !isNaN(t)) {
+      buf.push({x: now, y: t});
+      if (buf.length > RT_MAX) buf.shift();
+    }
+  });
+}
+
+// ── MINI CHARTS ───────────────────────────────────────────────────────────────
+function buildMiniCharts(ids) {
+  const grid = document.getElementById('miniChartGrid');
+  ids.forEach((id, i) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;';
+    card.innerHTML = `<div style="font-size:11px;color:var(--text2);margin-bottom:6px">${id}</div>
+                      <canvas id="mini-${id}" height="60"></canvas>`;
+    grid.appendChild(card);
+
+    const ctx = card.querySelector('canvas').getContext('2d');
+    const existingMini = Chart.getChart(ctx.canvas || ctx);
+    if (existingMini) existingMini.destroy();
+    miniCharts[id] = new Chart(ctx, {
+      type: 'line',
+      data: { datasets: [{ data:[], borderColor: CHART_COLORS[i%12],
+                           borderWidth:1.5, pointRadius:0, tension:0.3,
+                           fill:{ target:'origin', above: CHART_COLORS[i%12]+'18' } }] },
+      options: {
+        animation:false, parsing:false,
+        scales: {
+          x: { type:'time', display:false },
+          y: { display:true, ticks:{ font:{size:9}, color:'#8b949e', maxTicksLimit:3 },
+               grid:{color:'#21262d'} }
+        },
+        plugins:{ legend:{display:false}, tooltip:{enabled:false} }
+      }
+    });
+  });
+}
+
+function updateMiniCharts() {
+  Object.entries(miniCharts).forEach(([id, chart]) => {
+    chart.data.datasets[0].data = (rtBuffers[id]||[]).map(p=>({x:p.x, y:p.y}));
+    chart.update('none');
+  });
+}
+
+// ── GRAPHIQUE HISTORIQUE ──────────────────────────────────────────────────────
+async function reloadChart() {
+  const ch    = document.getElementById('chartChannel').value;
+  const hours = document.getElementById('chartHours').value;
+  const stat  = document.getElementById('chartStatus');
+  stat.textContent = 'Chargement…';
+
+  try {
+    const resp = await fetch(`/api/analog/history?channel=${ch}&hours=${hours}`);
+    const data = await resp.json();
+
+    const labels = data.map(p => new Date(p.ts * 1000));
+    const values = data.map(p => p.t);
+
+    // Détruire le chart existant si canvas déjà utilisé (Chart.js v3+)
+    const chartCanvas = document.getElementById('mainChart');
+    const existingChart = Chart.getChart(chartCanvas);
+    if (existingChart) { existingChart.destroy(); mainChart = null; }
+
+    if (!mainChart) {
+      const ctx = chartCanvas.getContext('2d');
+      mainChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{
+          label: ch,
+          data: values,
+          borderColor: CHART_COLORS[0],
+          backgroundColor: CHART_COLORS[0] + '20',
+          borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true
+        }]},
+        options: {
+          responsive:true, animation:false,
+          scales: {
+            x: { type:'time',
+                 time:{ tooltipFormat:'HH:mm dd/MM' },
+                 ticks:{ color:'#8b949e', maxTicksLimit:8 },
+                 grid:{color:'#21262d'} },
+            y: { title:{ display:true, text:'°C', color:'#8b949e' },
+                 ticks:{ color:'#8b949e' }, grid:{color:'#21262d'} }
+          },
+          plugins: {
+            legend:{ labels:{ color:'#e6edf3', font:{size:11} } },
+            tooltip:{ mode:'index', intersect:false }
+          }
+        }
+      });
+    } else {
+      mainChart.data.labels = labels;
+      mainChart.data.datasets[0].data = values;
+      mainChart.data.datasets[0].label = ch;
+      mainChart.update();
+    }
+
+    const min = values.length ? Math.min(...values).toFixed(1) : '—';
+    const max = values.length ? Math.max(...values).toFixed(1) : '—';
+    const avg = values.length ? (values.reduce((a,b)=>a+b,0)/values.length).toFixed(1) : '—';
+    stat.textContent = `${data.length} pts — min ${min}°C max ${max}°C moy ${avg}°C`;
+  } catch(e) {
+    stat.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ── GPIO ──────────────────────────────────────────────────────────────────────
+let gpioRendered = false;
+function renderGpio(gpio) {
+  const inputs  = document.getElementById('gpioInputs');
+  const outputs = document.getElementById('gpioOutputs');
+
+  // Rebuild si la config GPIO a changé (nouveau déploiement)
+  const _gpioCount = Object.keys(gpio).length;
+  if (gpioRendered && inputs.children.length + outputs.children.length !== _gpioCount) {
+    inputs.innerHTML = '';
+    outputs.innerHTML = '';
+    gpioRendered = false;
+  }
+  if (!gpioRendered) {
+    gpioRendered = true;
+    // Trier : sorties par Kx, entrées par TORx, sinon par pin
+    Object.entries(gpio).sort((a,b)=>{
+      const pa=parseInt(a[0]), pb=parseInt(b[0]);
+      const ca=gpio[a[0]]||{}, cb_=gpio[b[0]]||{};
+      const na=ca.name||'', nb=cb_.name||'';
+      // Outputs first (sorted by Kx), then inputs (sorted by TORx)
+      if(ca.mode===cb_.mode){
+        if(ca.mode==='output'){
+          const ma=na.match(/K(\d+)/i), mb=nb.match(/K(\d+)/i);
+          if(ma&&mb) return parseInt(ma[1])-parseInt(mb[1]);
+          if(ma) return -1; if(mb) return 1;
+        } else {
+          const ma=na.match(/TOR\s*(\d+)/i), mb=nb.match(/TOR\s*(\d+)/i);
+          if(ma&&mb) return parseInt(ma[1])-parseInt(mb[1]);
+        }
+        return pa-pb;
+      }
+      return ca.mode==='output'?-1:1;
+    }).forEach(([pin, cfg]) => {
+      const el   = document.createElement('div');
+      el.id      = 'gpio-' + pin;
+      el.className = 'gpio-pin';
+      const isOut = cfg.mode === 'output';
+      el.innerHTML = `
+        <div class="gpio-indicator"></div>
+        <div class="gpio-info">
+          <div class="gpio-pname">${cfg.name}</div>
+          <div class="gpio-bcm">GPIO${pin}</div>
+        </div>
+        ${isOut
+          ? `<button class="gpio-toggle" onclick="toggleOut(${pin})">⊙</button>`
+          : `<button class="gpio-toggle" onclick="simToggle(${pin})">SIM</button>`
+        }`;
+      (isOut ? outputs : inputs).appendChild(el);
+    });
+  }
+
+  Object.entries(gpio).forEach(([pin, cfg]) => {
+    const el = document.getElementById('gpio-' + pin);
+    if (el) el.classList.toggle('active', !!cfg.value);
+  });
+}
+
+function toggleOut(pin) {
+  const cur = (state.gpio||{})[pin];
+  const val = cur ? !cur.value : true;
+  fetch('/api/gpio/write',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pin,value:val})});
+}
+function simToggle(pin) {
+  socket.emit('toggle_input', {pin});
+}
+
+// ── PLC STATUS ────────────────────────────────────────────────────────────────
+function renderPlc(s) {
+  const div = document.getElementById('plcStatus');
+  const running = s.running;
+  div.innerHTML = `
+    <div class="stat-card"><div class="stat-label">État</div>
+      <div class="stat-value ${running?'ok':'err'}">${running?'RUN':'STOP'}</div></div>
+    <div class="stat-card"><div class="stat-label">Cycles</div>
+      <div class="stat-value">${(s.cycle||0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">Erreurs</div>
+      <div class="stat-value ${s.error_count?'err':'ok'}">${s.error_count||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Mode</div>
+      <div class="stat-value">${s.on_rpi?'HW':'SIM'}</div></div>
+    <div class="stat-card"><div class="stat-label">Sondes OK</div>
+      <div class="stat-value ok">${Object.values(s.analog||{}).filter(v=>v.celsius!=null).length}/12</div></div>`;
+
+  // Registres RF
+  const rfg = document.getElementById('rfGrid');
+  if (rfg) {
+    rfg.innerHTML = '';
+    Object.entries(s.registers||{}).sort((a,b)=>parseInt(a[0].slice(2))-parseInt(b[0].slice(2)))
+      .forEach(([k,v]) => {
+        const d = document.createElement('div');
+        d.className = 'stat-card';
+        d.innerHTML = `<div class="stat-label">${k}</div>
+          <div class="stat-value" style="font-size:15px">${parseFloat(v).toFixed(2)}</div>`;
+        rfg.appendChild(d);
+      });
+  }
+
+  // Mémoires M
+  const mg = document.getElementById('memGrid');
+  if (mg) {
+    mg.innerHTML = '';
+    Object.entries(s.memory||{}).forEach(([k,v]) => {
+      const b = document.createElement('div');
+      b.style.cssText = `padding:4px 8px;border-radius:4px;font-size:11px;
+        background:${v?'#1a4a1a':'var(--bg2)'};border:1px solid ${v?'var(--green)':'var(--border)'};
+        color:${v?'var(--green)':'var(--text2)'}`;
+      b.textContent = k;
+      mg.appendChild(b);
+    });
+  }
+}
+
+// ── COMMANDES PLC ─────────────────────────────────────────────────────────────
+function plcStart() {
+  fetch('/api/plc/start', {method:'POST'}).then(()=>fetch('/api/state').then(r=>r.json()).then(s=>{state=s;renderAll(s);}));
+}
+function plcStop() {
+  fetch('/api/plc/stop',  {method:'POST'}).then(()=>fetch('/api/state').then(r=>r.json()).then(s=>{state=s;renderAll(s);}));
+}
+
+// ── NAVIGATION TABS ───────────────────────────────────────────────────────────
+function showTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('page-'+name).classList.add('active');
+  if (name === 'graph') reloadChart();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+// Charger l'état initial via REST (au cas où Socket.IO est lent)
+fetch('/api/state').then(r=>r.json()).then(s=>{state=s;renderAll(s);}).catch(()=>{});
+
+// Rafraîchissement périodique de sécurité
+setInterval(() => {
+  if (!socket.connected) {
+    fetch('/api/state').then(r=>r.json()).then(s=>{state=s;renderAll(s);}).catch(()=>{});
+  }
+}, 5000);
+</script>
+</body>
+</html>

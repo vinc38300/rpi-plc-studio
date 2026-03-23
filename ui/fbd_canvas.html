@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FBD Editor</title>
+<style>
+:root{
+  --fbd-bg:#0d1117; --fbd-bg2:#161b22; --fbd-bg3:#1c2128; --fbd-bg4:#21262d;
+  --fbd-border:#30363d; --fbd-border2:#484f58;
+  --fbd-text:#e6edf3; --fbd-text2:#8b949e; --fbd-text3:#484f58;
+  --fbd-accent:#58a6ff; --fbd-grid:#1c2128;
+}
+:root.theme-light{
+  --fbd-bg:#f0f2f5; --fbd-bg2:#ffffff; --fbd-bg3:#f1f5f9; --fbd-bg4:#e2e8f0;
+  --fbd-border:#d1d9e0; --fbd-border2:#94a3b8;
+  --fbd-text:#1a1f2e; --fbd-text2:#475569; --fbd-text3:#94a3b8;
+  --fbd-accent:#2563eb; --fbd-grid:#e8ecf0;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--fbd-bg);
+  font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;color:var(--fbd-text);}
+
+/* ── Layout ─────────────────────────────── */
+#app{display:flex;flex-direction:column;width:100%;height:100%;}
+
+/* ── Barre de navigation pages ──────────── */
+#nav-bar{
+  display:flex;align-items:center;background:var(--fbd-bg);
+  border-bottom:1px solid var(--fbd-border);height:38px;padding:0 8px;
+  gap:6px;flex-shrink:0;
+}
+#nav-pages-label{
+  color:var(--fbd-text2);font-size:10px;min-width:90px;text-align:center;letter-spacing:.5px;
+}
+.nav-arrow{
+  width:28px;height:26px;border-radius:4px;cursor:pointer;
+  background:var(--fbd-bg3);border:1px solid var(--fbd-border);color:var(--fbd-text2);
+  font-size:14px;display:flex;align-items:center;justify-content:center;
+  user-select:none;flex-shrink:0;
+}
+.nav-arrow:hover:not(.disabled){border-color:#58a6ff;color:#58a6ff;background:#0d1f35;}
+.nav-arrow.disabled{opacity:.3;cursor:default;}
+#nav-page-name{
+  color:var(--fbd-text);font-size:11px;font-weight:bold;cursor:pointer;
+  padding:3px 8px;border-radius:4px;border:1px solid transparent;
+  min-width:120px;text-align:center;
+}
+#nav-page-name:hover{border-color:var(--fbd-border);background:var(--fbd-bg3);}
+#nav-page-dots{display:flex;gap:4px;align-items:center;}
+.page-dot{
+  width:8px;height:8px;border-radius:50%;background:#30363d;
+  cursor:pointer;transition:background .15s;
+}
+.page-dot.active{background:#58a6ff;}
+.page-dot:hover:not(.active){background:#8b949e;}
+#nav-add{
+  margin-left:4px;width:26px;height:26px;border-radius:4px;cursor:pointer;
+  background:transparent;border:1px dashed #30363d;color:var(--fbd-text2);
+  font-size:16px;display:flex;align-items:center;justify-content:center;
+}
+#nav-add:hover{border-color:#3fb950;color:#3fb950;}
+#nav-del{
+  width:26px;height:26px;border-radius:4px;cursor:pointer;
+  background:transparent;border:1px solid var(--fbd-border);color:var(--fbd-text3);
+  font-size:13px;display:flex;align-items:center;justify-content:center;
+}
+#nav-del:hover{border-color:#f85149;color:#f85149;}
+#nav-sep{width:1px;height:20px;background:#30363d;margin:0 4px;}
+#nav-crosspage-badge{
+  display:none;background:#0d2a2a;border:1px solid #39d353;
+  border-radius:4px;padding:2px 8px;color:#39d353;font-size:9px;
+  letter-spacing:.5px;
+}
+#nav-fit{
+  margin-left:auto;padding:3px 10px;border-radius:4px;cursor:pointer;
+  background:transparent;border:1px solid var(--fbd-border);color:var(--fbd-text2);font-size:10px;
+}
+#nav-fit:hover{border-color:#58a6ff;color:#58a6ff;}
+#btn-undo,#btn-redo{
+  width:28px;height:26px;border-radius:4px;cursor:pointer;
+  background:transparent;border:1px solid var(--fbd-border);
+  color:var(--fbd-text2);font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;flex-shrink:0;opacity:0.35;
+  transition:all .15s;
+}
+#btn-undo:hover,#btn-redo:hover{border-color:#58a6ff;color:#58a6ff;}
+#btn-undo.active,#btn-redo.active{opacity:1;}
+/* Contrôles grille */
+#nav-grid-group{display:flex;align-items:center;gap:4px;margin-left:8px;}
+#nav-grid-label{font-size:9px;color:var(--fbd-text3);letter-spacing:.4px;white-space:nowrap;}
+#nav-grid-select{
+  height:24px;border-radius:4px;border:1px solid var(--fbd-border);
+  background:var(--fbd-bg3);color:var(--fbd-text2);font-size:10px;
+  padding:0 4px;cursor:pointer;outline:none;
+  font-family:inherit;
+}
+#nav-grid-select:hover,#nav-grid-select:focus{border-color:#58a6ff;color:#58a6ff;}
+#nav-snap-toggle{
+  height:24px;padding:0 8px;border-radius:4px;cursor:pointer;
+  border:1px solid var(--fbd-border);background:var(--fbd-bg3);
+  color:var(--fbd-text2);font-size:10px;white-space:nowrap;
+  transition:all .15s;
+}
+#nav-snap-toggle:hover{border-color:#58a6ff;color:#58a6ff;}
+#nav-snap-toggle.snap-on{border-color:#3fb950;color:#3fb950;background:rgba(63,185,80,.1);}
+
+/* ── Corps ───────────────────────────────── */
+#body{display:flex;flex:1;overflow:hidden;min-height:0;}
+
+/* ── Palette gauche ─────────────────────── */
+#palette{
+  width:162px;flex-shrink:0;background:var(--fbd-bg);
+  border-right:1px solid #30363d;overflow-y:auto;overflow-x:hidden;
+}
+#palette::-webkit-scrollbar{width:3px;}
+#palette::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px;}
+.pal-hdr{
+  padding:5px 8px 3px;font-size:9px;text-transform:uppercase;
+  letter-spacing:1px;color:var(--fbd-text3);
+  border-top:1px solid var(--fbd-border);margin-top:1px;user-select:none;
+}
+.pal-item{
+  display:flex;align-items:center;gap:6px;padding:4px 7px;
+  cursor:grab;border-radius:4px;margin:1px 3px;
+}
+.pal-item:hover{background:var(--fbd-bg3);}
+.pal-badge{
+  font-size:9px;font-weight:bold;padding:1px 4px;border-radius:3px;
+  border:1px solid;min-width:38px;text-align:center;flex-shrink:0;line-height:1.4;
+}
+.pal-desc{color:var(--fbd-text2);font-size:9px;line-height:1.3;}
+
+/* ── Canvas ──────────────────────────────── */
+#canvas-area{position:relative;flex:1;overflow:hidden;}
+canvas{position:absolute;top:0;left:0;}
+
+/* ── Propriétés ──────────────────────────── */
+#props{
+  width:206px;flex-shrink:0;background:var(--fbd-bg2);
+  border-left:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden;
+}
+#props-title{
+  padding:6px 10px;font-size:9px;text-transform:uppercase;
+  letter-spacing:1px;color:var(--fbd-text2);border-bottom:1px solid var(--fbd-border);flex-shrink:0;
+}
+#props-body{padding:8px;overflow-y:auto;flex:1;}
+#props-body::-webkit-scrollbar{width:3px;}
+#props-body::-webkit-scrollbar-thumb{background:#30363d;}
+.pr{margin-bottom:7px;}
+.pl{font-size:9px;color:var(--fbd-text2);margin-bottom:2px;display:block;text-transform:uppercase;letter-spacing:.5px;}
+.pi,.ps{
+  width:100%;background:var(--fbd-bg);border:1px solid var(--fbd-border);border-radius:4px;
+  color:var(--fbd-text);padding:3px 6px;font:10px 'JetBrains Mono',monospace;
+}
+.pi:focus,.ps:focus{outline:none;border-color:#58a6ff;}
+.pb{
+  width:100%;margin-top:3px;padding:4px;background:var(--fbd-bg3);
+  border:1px solid var(--fbd-border);border-radius:4px;color:var(--fbd-text);
+  cursor:pointer;font:10px 'JetBrains Mono',monospace;
+}
+.pb:hover{border-color:#58a6ff;color:#58a6ff;}
+.pb.danger{border-color:#f85149;color:#f85149;}
+.pb.danger:hover{background:#2a0a0a;}
+.psep{border:none;border-top:1px solid #30363d;margin:7px 0;}
+#phint{padding:14px 8px;color:var(--fbd-text3);font-size:10px;text-align:center;line-height:1.8;}
+.conn-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:2px 5px;background:var(--fbd-bg);border-radius:3px;margin:2px 0;
+  font-size:9px;cursor:pointer;
+}
+.conn-row:hover{background:var(--fbd-bg3);}
+.conn-chip{font-size:8px;padding:1px 4px;border-radius:2px;}
+.conn-jump{color:#39d353;font-size:9px;margin-left:4px;}
+
+/* ── Tooltip ─────────────────────────────── */
+#tt{
+  position:fixed;background:var(--fbd-bg2);border:1px solid var(--fbd-border);
+  color:var(--fbd-text);font:9px 'JetBrains Mono',monospace;
+  padding:3px 7px;border-radius:4px;pointer-events:none;
+  display:none;z-index:500;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- Barre de navigation pages -->
+<div id="nav-bar">
+  <div class="nav-arrow" id="nav-prev" title="Page précédente">◀</div>
+  <div id="nav-page-name" title="Double-clic pour renommer"></div>
+  <div class="nav-arrow" id="nav-next" title="Page suivante">▶</div>
+  <div id="nav-sep"></div>
+  <div id="nav-page-dots"></div>
+  <div id="nav-add" title="Ajouter une page">+</div>
+  <div id="nav-del" title="Supprimer cette page">✕</div>
+  <div id="nav-sep" style="width:1px;height:20px;background:#30363d;margin:0 4px;"></div>
+  <div id="btn-undo" onclick="undo()" title="Annuler (Ctrl+Z)">↩</div>
+  <div id="btn-redo" onclick="redo()" title="Rétablir (Ctrl+Y)">↪</div>
+  <div style="width:1px;height:20px;background:#30363d;margin:0 4px;"></div>
+  <div id="btn-copy" onclick="copyBlock()" title="Copier le bloc sélectionné (Ctrl+C)" style="font-size:11px;padding:2px 7px;">⎘ Copier</div>
+  <div id="btn-paste" onclick="pasteBlock()" title="Coller le bloc copié (Ctrl+V)" style="font-size:11px;padding:2px 7px;">⎗ Coller</div>
+  <span id="fbd-copy-flash" style="font-size:10px;color:#3fb950;opacity:0;transition:opacity 0.4s;margin-left:4px;pointer-events:none;"></span>
+  <div id="nav-sep2" style="width:1px;height:20px;background:#30363d;margin:0 4px;"></div>
+  <div id="grp-breadcrumb" style="display:none;align-items:center;gap:4px;font-size:11px;font-family:'JetBrains Mono',monospace;background:#1a0a35;border:1px solid #7c3aed;border-radius:4px;padding:2px 8px;margin-right:4px;"></div>
+<div id="nav-crosspage-badge">↔ CONNEXIONS INTER-PAGES</div>
+  <div id="nav-fit" onclick="fitView()">⊡ Ajuster</div>
+  <button onclick="groupSelected()" title="Grouper sélection (Ctrl+G)" style="padding:3px 9px;border-radius:4px;border:1px solid #7c3aed;background:#1a0a35;color:#bc8cff;font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;">⊞ Grouper</button>
+<button onclick="exitGroup()" title="Sortir du groupe (Échap)" id="btn-exit-group" style="display:none;padding:3px 9px;border-radius:4px;border:1px solid #bc8cff;background:#2a1050;color:#bc8cff;font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;">← Sortir</button>
+<div id="nav-grid-group">
+    <span id="nav-grid-label">GRILLE</span>
+    <select id="nav-grid-select" title="Pas de la grille d'accroche" onchange="setGridSize(parseInt(this.value))">
+      <option value="5">5 px</option>
+      <option value="10">10 px</option>
+      <option value="20" selected>20 px</option>
+      <option value="40">40 px</option>
+    </select>
+    <div id="nav-snap-toggle" class="snap-on" onclick="toggleSnap()" title="Activer/désactiver l'accroche">⊞ Snap</div>
+  </div>
+</div>
+
+<div id="body">
+  <div id="palette"></div>
+  <div id="canvas-area">
+    <div id="fbd-search-bar" style="display:none;position:absolute;top:4px;left:50%;
+      transform:translateX(-50%);z-index:100;align-items:center;gap:6px;padding:4px 10px;
+      background:#161b22;border:1px solid #7c3aed;border-radius:8px;
+      box-shadow:0 4px 20px rgba(0,0,0,0.6);">
+      <input id="fbd-search-input" type="text" placeholder="🔍 Nom, type, ID…"
+        style="background:#0d1117;border:1px solid #7c3aed;border-radius:5px;
+               color:#e6edf3;padding:4px 10px;font:11px monospace;width:260px;outline:none;"
+        oninput="_fbdSearch(this.value)"
+        onkeydown="if(event.key==='Escape')_fbdSearchClose();if(event.key==='Enter')_fbdSearchNext();">
+      <span id="fbd-search-count" style="font-size:10px;color:#8b949e;min-width:50px;"></span>
+      <button onclick="_fbdSearchNext()" style="background:#1a0a35;border:1px solid #7c3aed;
+        border-radius:4px;color:#bc8cff;padding:2px 8px;cursor:pointer;font-size:11px;">↓</button>
+      <button onclick="_fbdSearchPrev()" style="background:#1a0a35;border:1px solid #7c3aed;
+        border-radius:4px;color:#bc8cff;padding:2px 8px;cursor:pointer;font-size:11px;">↑</button>
+      <button onclick="_fbdSearchClose()" style="background:#2a0a0a;border:1px solid #f85149;
+        border-radius:4px;color:#f85149;padding:2px 6px;cursor:pointer;">✕</button>
+    </div>
+    <canvas id="bg"></canvas>
+    <canvas id="main"></canvas>
+  </div>
+  <div id="props">
+    <div id="props-title">Propriétés</div>
+    <div id="props-body"><div id="phint">Cliquer sur un bloc<br>pour éditer.<br><br>Double-clic canvas<br>pour ajouter.<br><br>Glisser depuis<br>la palette.</div></div>
+  </div>
+</div>
+</div>
+<div id="tt"></div>
+
+<script src="fbd_canvas.js"></script>
+</body>
+</html>

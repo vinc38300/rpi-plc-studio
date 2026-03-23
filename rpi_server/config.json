@@ -1,0 +1,235 @@
+{
+  "scan_time_ms": 100,
+  "web_port": 5000,
+  "web_enabled": true,
+  "watchdog_sec": 10,
+  "auto_start": true,
+  "security": {
+    "enabled": false,
+    "https": false,
+    "username": "admin",
+    "password": "plc1234",
+    "_comment": "Mettre enabled:true pour activer le login. https:true pour TLS auto-signé."
+  },
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chat_ids": [],
+    "alarm_high": 85.0,
+    "alarm_low": 3.0,
+    "report_hour": 8,
+    "report_enabled": true,
+    "_comment": "Créer un bot via @BotFather sur Telegram pour obtenir le token."
+  },
+  "analog": {
+    "enabled": true,
+    "sample_rate": 860,
+    "r_ref_ohm": 10000,
+    "vcc": 3.3,
+    "probe_type": "NTC10K",
+    "ads": [
+      {
+        "id": "ADS0",
+        "address": "0x48",
+        "channels": [
+          {
+            "id": "ANA0",
+            "name": "Sonde 1",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA1",
+            "name": "Sonde 2",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA2",
+            "name": "Sonde 3",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA3",
+            "name": "Sonde 4",
+            "probe": "NTC10K"
+          }
+        ]
+      },
+      {
+        "id": "ADS1",
+        "address": "0x49",
+        "channels": [
+          {
+            "id": "ANA4",
+            "name": "Sonde 5",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA5",
+            "name": "Sonde 6",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA6",
+            "name": "Sonde 7",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA7",
+            "name": "Sonde 8",
+            "probe": "NTC10K"
+          }
+        ]
+      },
+      {
+        "id": "ADS2",
+        "address": "0x4A",
+        "channels": [
+          {
+            "id": "ANA8",
+            "name": "Sonde 9",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA9",
+            "name": "Sonde 10",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA10",
+            "name": "Sonde 11",
+            "probe": "NTC10K"
+          },
+          {
+            "id": "ANA11",
+            "name": "Sonde 12",
+            "probe": "NTC10K"
+          }
+        ]
+      }
+    ],
+    "ntc_beta": 3950,
+    "ntc_r0": 10000
+  },
+  "gpio": {
+    "5": {
+      "name": "Sortie K1",
+      "mode": "output",
+      "active_low": true
+    },
+    "6": {
+      "name": "Sortie K2",
+      "mode": "output",
+      "active_low": true
+    },
+    "11": {
+      "name": "Sortie K3",
+      "mode": "output",
+      "active_low": true
+    },
+    "13": {
+      "name": "Sortie K4",
+      "mode": "output",
+      "active_low": true
+    },
+    "9": {
+      "name": "Sortie K5",
+      "mode": "output",
+      "active_low": true
+    },
+    "19": {
+      "name": "Sortie K6",
+      "mode": "output",
+      "active_low": true
+    },
+    "10": {
+      "name": "Sortie K7",
+      "mode": "output",
+      "active_low": true
+    },
+    "26": {
+      "name": "Sortie K8",
+      "mode": "output",
+      "active_low": true
+    },
+    "22": {
+      "name": "Sortie K9",
+      "mode": "output",
+      "active_low": true
+    },
+    "21": {
+      "name": "Sortie K10",
+      "mode": "output",
+      "active_low": true
+    },
+    "27": {
+      "name": "Sortie K11",
+      "mode": "output",
+      "active_low": true
+    },
+    "20": {
+      "name": "Sortie K12",
+      "mode": "output",
+      "active_low": true
+    },
+    "17": {
+      "name": "Sortie K13",
+      "mode": "output",
+      "active_low": true
+    },
+    "16": {
+      "name": "Sortie K14",
+      "mode": "output",
+      "active_low": true
+    },
+    "4": {
+      "name": "Sortie K15",
+      "mode": "output",
+      "active_low": true
+    },
+    "12": {
+      "name": "Sortie K16",
+      "mode": "output",
+      "active_low": true
+    },
+    "14": {
+      "name": "Entrée TOR 1",
+      "mode": "input",
+      "pull": "down"
+    },
+    "15": {
+      "name": "Entrée TOR 2",
+      "mode": "input",
+      "pull": "up"
+    },
+    "18": {
+      "name": "Entrée TOR 3",
+      "mode": "input",
+      "pull": "up"
+    },
+    "23": {
+      "name": "Entrée TOR 4",
+      "mode": "input",
+      "pull": "up"
+    },
+    "24": {
+      "name": "Entrée TOR 5",
+      "mode": "input",
+      "pull": "up"
+    },
+    "25": {
+      "name": "Entrée TOR 6",
+      "mode": "input",
+      "pull": "up"
+    },
+    "8": {
+      "name": "Entrée TOR 7",
+      "mode": "input",
+      "pull": "up"
+    },
+    "7": {
+      "name": "Entrée TOR 8",
+      "mode": "input",
+      "pull": "up"
+    }
+  }
+}

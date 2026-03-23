@@ -1,0 +1,1800 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RPi-PLC">
+<link rel="manifest" href="/manifest.json">
+<title>SCADA — RPi-PLC</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── Adaptateur de dates minimal pour Chart.js 4 (pas de dépendance externe) ──
+(function() {
+  const FORMATS = {
+    datetime: 'dd/MM HH:mm',
+    millisecond: 'HH:mm:ss.SSS',
+    second: 'HH:mm:ss',
+    minute: 'HH:mm',
+    hour: 'HH:mm',
+    day: 'dd/MM',
+    week: 'dd/MM',
+    month: 'MM/yyyy',
+    quarter: 'MM/yyyy',
+    year: 'yyyy'
+  };
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function fmt(ts, f) {
+    const d = new Date(ts);
+    return f
+      .replace('yyyy', d.getFullYear())
+      .replace('MM',   pad(d.getMonth()+1))
+      .replace('dd',   pad(d.getDate()))
+      .replace('HH',   pad(d.getHours()))
+      .replace('mm',   pad(d.getMinutes()))
+      .replace('ss',   pad(d.getSeconds()))
+      .replace('SSS',  String(d.getMilliseconds()).padStart(3,'0'));
+  }
+  Chart._adapters._date.override({
+    init()        {},
+    formats()     { return FORMATS; },
+    parse(v)      { if(v===null||v===undefined)return null; if(typeof v==='number')return v; const t=new Date(v).getTime(); return isNaN(t)?null:t; },
+    format(ts,f)  { return fmt(ts, FORMATS[f]||f); },
+    add(ts,a,u)   {
+      const d=new Date(ts);
+      if(u==='year')  d.setFullYear(d.getFullYear()+a);
+      else if(u==='month') d.setMonth(d.getMonth()+a);
+      else if(u==='week')  d.setDate(d.getDate()+a*7);
+      else if(u==='day')   d.setDate(d.getDate()+a);
+      else if(u==='hour')  d.setHours(d.getHours()+a);
+      else if(u==='minute')d.setMinutes(d.getMinutes()+a);
+      else if(u==='second')d.setSeconds(d.getSeconds()+a);
+      else d.setTime(d.getTime()+a);
+      return d.getTime();
+    },
+    diff(a,b,u) {
+      const ms=a-b;
+      if(u==='year')  return new Date(a).getFullYear()-new Date(b).getFullYear();
+      if(u==='month') return (new Date(a).getFullYear()-new Date(b).getFullYear())*12+(new Date(a).getMonth()-new Date(b).getMonth());
+      if(u==='week')  return Math.round(ms/604800000);
+      if(u==='day')   return Math.round(ms/86400000);
+      if(u==='hour')  return Math.round(ms/3600000);
+      if(u==='minute')return Math.round(ms/60000);
+      if(u==='second')return Math.round(ms/1000);
+      return ms;
+    },
+    startOf(ts,u,w) {
+      const d=new Date(ts);
+      if(u==='year')  { d.setMonth(0,1); d.setHours(0,0,0,0); }
+      else if(u==='month'){ d.setDate(1); d.setHours(0,0,0,0); }
+      else if(u==='day')  d.setHours(0,0,0,0);
+      else if(u==='hour') { d.setMinutes(0,0,0); }
+      else if(u==='minute'){ d.setSeconds(0,0); }
+      else if(u==='second') d.setMilliseconds(0);
+      return d.getTime();
+    },
+    endOf(ts,u) {
+      const d=new Date(ts);
+      if(u==='year')  { d.setMonth(11,31); d.setHours(23,59,59,999); }
+      else if(u==='month'){ d.setDate(new Date(d.getFullYear(),d.getMonth()+1,0).getDate()); d.setHours(23,59,59,999); }
+      else if(u==='day')  d.setHours(23,59,59,999);
+      else if(u==='hour') d.setMinutes(59,59,999);
+      else if(u==='minute')d.setSeconds(59,999);
+      else if(u==='second')d.setMilliseconds(999);
+      return d.getTime();
+    }
+  });
+})();
+</script>
+<style>
+/* ── RESET & VARS ── */
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#1c2128; --bg4:#21262d;
+  --border:#30363d; --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  --purple:#bc8cff; --teal:#39d353; --cyan:#00d4ff;
+  --r:10px; --r2:6px; --font:'Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);
+     min-height:100vh;font-size:14px;}
+a{color:var(--accent);text-decoration:none;}
+
+/* ── HEADER ── */
+header{
+  display:flex;align-items:center;gap:14px;padding:10px 20px;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:200;
+}
+.logo{font-size:18px;font-weight:700;color:var(--accent);letter-spacing:-0.5px;}
+.logo span{color:var(--green);}
+.conn-dot{width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0;}
+.conn-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.status-txt{font-size:12px;color:var(--text2);}
+header .sp{flex:1;}
+.mode-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
+  background:#1a2f45;color:var(--accent);border:1px solid var(--accent)30;}
+.hbtn{padding:6px 16px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--bg3);color:var(--text);cursor:pointer;font-size:13px;
+  transition:all .15s;}
+.hbtn:hover{border-color:var(--accent);color:var(--accent);}
+.hbtn.run{background:#1a4a1a;border-color:var(--green);color:var(--green);}
+.hbtn.stop{background:#4a1a1a;border-color:var(--red);color:var(--red);}
+.hbtn.run:hover{background:#204a20;}
+.hbtn.stop:hover{background:#5a1a1a;}
+
+/* ── TABS ── */
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 20px;gap:2px;overflow-x:auto;}
+.tab{padding:10px 18px;cursor:pointer;font-size:13px;color:var(--text2);
+  border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab:hover:not(.active){color:var(--text);}
+
+/* ── PAGES ── */
+.page{display:none;padding:20px;max-width:1400px;margin:0 auto;}
+.page.active{display:block;}
+
+/* ── GRID LAYOUTS ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.grid-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+@media(max-width:768px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr 1fr;}
+  .grid-auto{grid-template-columns:1fr 1fr;}.page{padding:12px;}}
+@media(max-width:480px){.grid-2,.grid-3,.grid-4,.grid-auto{grid-template-columns:1fr;}}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;}
+.card-title{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;
+  margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.card-title::before{content:'';display:block;width:3px;height:12px;
+  background:var(--accent);border-radius:2px;}
+
+/* ── TEMP WIDGETS ── */
+.temp-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.temp-card:hover{border-color:var(--accent)30;transform:translateY(-1px);}
+.temp-card.alarm{border-color:var(--red);animation:alarm-blink 1.2s ease-in-out infinite;}
+.temp-card.selected{border-color:var(--accent);background:#0d1f35;}
+@keyframes alarm-blink{0%,100%{border-color:var(--red)}50%{border-color:#3a1010}}
+.temp-name{font-size:11px;color:var(--text2);margin-bottom:6px;
+  display:flex;justify-content:space-between;align-items:center;}
+.temp-addr{font-size:10px;color:var(--purple);background:#1a1035;
+  padding:1px 6px;border-radius:10px;}
+.temp-val{font-size:32px;font-weight:700;line-height:1;margin-bottom:8px;}
+.temp-val.hot{color:var(--red);}
+.temp-val.warm{color:var(--amber);}
+.temp-val.ok{color:var(--cyan);}
+.temp-val.cold{color:var(--accent);}
+.temp-val.nc{color:var(--text3);font-size:18px;}
+.temp-bar{height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;}
+.temp-bar-fill{height:100%;border-radius:3px;transition:width .5s,background .5s;}
+.temp-meta{font-size:10px;color:var(--text3);margin-top:6px;
+  display:flex;justify-content:space-between;}
+.temp-alarm-badge{position:absolute;top:8px;right:8px;background:var(--red);
+  color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;
+  display:none;}
+.temp-card.alarm .temp-alarm-badge{display:block;}
+
+/* ── SORTIE RELAIS ── */
+.relay-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;display:flex;align-items:center;gap:14px;
+  transition:border-color .15s,background .15s;user-select:none;}
+.relay-card.active{background:#0d2010;border-color:var(--green);}
+.relay-led{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);
+  flex-shrink:0;transition:all .2s;}
+.relay-card.active .relay-led{background:var(--green);border-color:var(--green);
+  box-shadow:0 0 10px var(--green)50;}
+.relay-card:not(.active) .relay-led{background:#1a1a1a;}
+.relay-info{flex:1;min-width:0;}
+.relay-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.relay-sub{font-size:10px;color:var(--text2);margin-top:2px;}
+.relay-toggle{background:var(--bg4);border:1px solid var(--border);
+  color:var(--text);padding:10px 18px;border-radius:var(--r2);
+  font-size:13px;font-weight:600;cursor:pointer;
+  min-height:44px;min-width:90px;touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .1s,border-color .1s,transform .05s;}
+.relay-toggle:hover{border-color:var(--accent);}
+.relay-toggle:active{transform:scale(0.97);}
+
+/* ── ENTRÉES TOR ── */
+.input-grid{display:flex;flex-wrap:wrap;gap:10px;}
+.input-pill{display:flex;align-items:center;gap:8px;padding:8px 14px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:20px;
+  font-size:12px;transition:all .2s;}
+.input-pill.active{background:#0d2010;border-color:var(--green);color:var(--green);}
+.input-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);}
+.input-pill.active .input-dot{background:var(--green);box-shadow:0 0 6px var(--green);}
+
+/* ── CONSIGNES ── */
+.setpoint-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;}
+.sp-label{font-size:11px;color:var(--text2);margin-bottom:6px;}
+.sp-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.sp-val{font-size:22px;font-weight:700;color:var(--amber);min-width:80px;}
+.sp-unit{font-size:13px;color:var(--text2);}
+.sp-slider{flex:1;accent-color:var(--amber);cursor:pointer;height:6px;}
+.sp-btns{display:flex;gap:6px;justify-content:flex-end;}
+.sp-btn{background:var(--bg4);border:1px solid var(--border);
+  color:var(--text);padding:10px 18px;border-radius:var(--r2);
+  cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;
+  min-height:44px;touch-action:manipulation;}
+.sp-btn:hover{border-color:var(--amber);color:var(--amber);}
+.sp-btn.apply{background:#35290a;border-color:var(--amber);color:var(--amber);}
+.sp-btn.apply:hover{background:#453510;}
+
+/* ── STAT BOXES ── */
+.stat-box{background:var(--bg3);border-radius:var(--r2);padding:12px;text-align:center;}
+.stat-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
+.stat-val{font-size:22px;font-weight:700;color:var(--accent);margin-top:4px;}
+.stat-val.ok{color:var(--green);}
+.stat-val.warn{color:var(--amber);}
+.stat-val.err{color:var(--red);}
+
+/* ── CHART ── */
+.chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;}
+.chart-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.chart-toolbar select,.chart-toolbar input{
+  background:var(--bg3);border:1px solid var(--border);color:var(--text);
+  padding:5px 10px;border-radius:var(--r2);font-size:12px;font-family:var(--font);}
+.chart-info{font-size:11px;color:var(--text2);}
+.chart-multi{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px;}
+.mini-chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;}
+.mini-chart-name{font-size:11px;color:var(--text2);margin-bottom:8px;
+  display:flex;justify-content:space-between;}
+.mini-chart-temp{font-size:16px;font-weight:700;color:var(--cyan);}
+
+/* ── BOUTONS UTILS ── */
+.btn{padding:10px 18px;border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--bg3);color:var(--text);cursor:pointer;font-size:13px;
+  font-family:var(--font);transition:all .15s;min-height:44px;
+  touch-action:manipulation;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.primary{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
+.btn.success{background:#1a4a1a;border-color:var(--green);color:var(--green);}
+.btn.danger{background:#4a1a1a;border-color:var(--red);color:var(--red);}
+
+/* ── ALARM BANNER ── */
+.alarm-banner{background:#2a1010;border:1px solid var(--red);border-radius:var(--r);
+  padding:12px 16px;margin-bottom:16px;display:none;
+  display:flex;align-items:center;gap:12px;}
+.alarm-banner.show{display:flex;}
+.alarm-icon{font-size:20px;}
+.alarm-text{flex:1;font-size:13px;color:var(--red);}
+.alarm-ack{background:var(--bg3);border:1px solid var(--red);color:var(--red);
+  padding:5px 12px;border-radius:var(--r2);cursor:pointer;font-size:12px;}
+
+/* ── GAUGE SVG ── */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;padding:8px 0;}
+.gauge-label{font-size:11px;color:var(--text2);margin-top:6px;text-align:center;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;right:24px;z-index:999;
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:12px 20px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;}
+#toast.show{opacity:1;}
+#toast.ok{border-color:var(--green);color:var(--green);}
+#toast.err{border-color:var(--red);color:var(--red);}
+
+/* ── SEPARATOR ── */
+hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">RPi<span>-PLC</span> <span style="font-size:12px;color:var(--text2);font-weight:400">SCADA</span></div>
+  <div class="conn-dot" id="connDot"></div>
+  <div class="status-txt" id="connTxt">Connexion…</div>
+  <div class="sp"></div>
+  <div class="mode-badge" id="modeBadge">SIM</div>
+  <div style="font-size:12px;color:var(--text2)" id="cycleInfo">—</div>
+  <button class="hbtn run"  onclick="api('/api/plc/start','POST')">▶ Démarrer</button>
+  <button class="hbtn stop" onclick="api('/api/plc/stop','POST')">■ Arrêter</button>
+  <a href="/synoptic" class="hbtn primary" style="font-size:12px" title="Synoptique personnalisé">🗺 Synoptique</a>
+  <a href="/" class="hbtn" style="font-size:12px">⚙ PLC</a>
+  <button class="hbtn" onclick="logout()" style="font-size:12px">⏻ Déconnexion</button>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active"   onclick="showTab('synoptique',this)">🗺 Synoptique</div>
+  <div class="tab"          onclick="showTab('temperatures',this)">🌡 Températures</div>
+  <div class="tab"          onclick="showTab('historique',this)">📈 Historique</div>
+  <div class="tab"          onclick="showTab('commandes',this)">🎛 Commandes</div>
+  <div class="tab"          onclick="showTab('alarmes',this)">🔔 Alarmes</div>
+  <div class="tab"          onclick="showTab('systeme',this)">⚙ Système</div>
+  <div class="tab"          onclick="showTab('recettes',this)">📋 Recettes</div>
+  <div class="tab"          onclick="showTab('sauvegardes',this)">💾 Sauvegardes</div>
+  <div class="tab"          onclick="showTab('telegram',this)">✈ Telegram</div>
+  <div class="tab"          onclick="showTab('securite',this)">🔒 Sécurité</div>
+  <div class="tab"          onclick="showTab('calibration',this)">🔧 Calibration</div>
+</div>
+
+<!-- ══ PAGE SYNOPTIQUE ══ -->
+<div class="page active" id="page-synoptique">
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+    <!-- Colonne principale -->
+    <div>
+      <!-- Stat bar -->
+      <div class="grid-4" style="margin-bottom:16px;">
+        <div class="stat-box">
+          <div class="stat-label">PLC</div>
+          <div class="stat-val" id="syn-plc-state">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Sondes OK</div>
+          <div class="stat-val ok" id="syn-sondes-ok">0/12</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Relais actifs</div>
+          <div class="stat-val" id="syn-relais-on">0/16</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Alarmes</div>
+          <div class="stat-val ok" id="syn-alarms">0</div>
+        </div>
+      </div>
+
+      <!-- Sondes résumé (4 premières + bouton voir tout) -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">🌡 Températures principales</div>
+        <div class="grid-4" id="syn-temps-grid"></div>
+        <div style="margin-top:12px;text-align:right;">
+          <button class="btn" onclick="showTab('temperatures',document.querySelectorAll('.tab')[1])">
+            Voir toutes les sondes →
+          </button>
+        </div>
+      </div>
+
+      <!-- Relais -->
+      <div class="card">
+        <div class="card-title">⚡ Sorties relais K1–K16</div>
+        <div id="syn-relais-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;"></div>
+      </div>
+    </div>
+
+    <!-- Colonne droite -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- Entrées TOR -->
+      <div class="card">
+        <div class="card-title">📥 Entrées TOR</div>
+        <div id="syn-inputs-list" class="input-grid"></div>
+      </div>
+
+      <!-- Consignes rapides -->
+      <div class="card">
+        <div class="card-title">🎯 Consignes rapides</div>
+        <div id="syn-setpoints"></div>
+      </div>
+
+      <!-- Graphique mini temps réel (sonde sélectionnée) -->
+      <div class="card" style="flex:1;">
+        <div class="card-title">📊 Tendance <span id="syn-chart-label" style="color:var(--cyan);font-weight:600;text-transform:none;font-size:12px">ANA0</span></div>
+        <canvas id="synChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE TEMPÉRATURES ══ -->
+<div class="page" id="page-temperatures">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="font-size:13px;color:var(--text2)">
+      Seuil alarme :
+      <input type="number" id="alarm-threshold" value="85" min="0" max="200" step="1"
+        style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);
+               padding:4px 8px;border-radius:var(--r2);font-size:13px;text-align:center;">
+      °C
+    </div>
+    <div style="font-size:13px;color:var(--text2)">
+      Seuil bas :
+      <input type="number" id="alarm-low" value="5" min="-50" max="100" step="1"
+        style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);
+               padding:4px 8px;border-radius:var(--r2);font-size:13px;text-align:center;">
+      °C
+    </div>
+    <button class="btn primary" onclick="showTab('historique',document.querySelectorAll('.tab')[2])">
+      📈 Voir historique
+    </button>
+  </div>
+  <div class="grid-auto" id="temps-grid"></div>
+</div>
+
+<!-- ══ PAGE HISTORIQUE ══ -->
+<div class="page" id="page-historique">
+  <div class="chart-wrap" style="margin-bottom:16px;">
+    <div class="chart-toolbar">
+      <label style="font-size:12px;color:var(--text2)">Canal :</label>
+      <select id="hist-channel" onchange="loadHistory()"></select>
+      <label style="font-size:12px;color:var(--text2)">Durée :</label>
+      <select id="hist-hours" onchange="loadHistory()">
+        <option value="1">1 heure</option>
+        <option value="6">6 heures</option>
+        <option value="24" selected>24 heures</option>
+        <option value="72">3 jours</option>
+        <option value="168">7 jours</option>
+      </select>
+      <button class="btn" onclick="loadHistory()">⟳ Actualiser</button>
+      <button class="btn" onclick="exportCSV()">⬇ CSV</button>
+      <span class="chart-info" id="hist-info"></span>
+    </div>
+    <canvas id="histChart"></canvas>
+  </div>
+  <!-- Stats -->
+  <div class="grid-4" id="hist-stats" style="margin-bottom:16px;"></div>
+  <!-- Mini charts toutes sondes -->
+  <div class="card">
+    <div class="card-title">📊 Vue ensemble — toutes les sondes (1h temps réel)</div>
+    <div class="chart-multi" id="mini-charts-grid"></div>
+  </div>
+</div>
+
+<!-- ══ PAGE COMMANDES ══ -->
+<div class="page" id="page-commandes">
+  <div class="grid-2" style="gap:20px;">
+    <!-- Consignes analogiques -->
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">🎯 Consignes (Registres RF)</div>
+      <div id="setpoints-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    </div>
+
+    <!-- Contrôle sorties manuelles -->
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">⚡ Sorties manuelles</div>
+      <div style="background:var(--bg3);border:1px solid var(--amber);border-radius:var(--r);
+                  padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--amber);">
+        ⚠ Mode manuel — le programme PLC continue d'écrire les sorties.
+        Utilisez pour test / forçage temporaire.
+      </div>
+      <div id="manual-outputs" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+      <hr class="sep">
+      <div class="card-title" style="margin-bottom:12px;">🧠 Bits mémoire M0–M15</div>
+      <div id="mem-bits" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE ALARMES ══ -->
+<div class="page" id="page-alarmes">
+  <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
+    <button class="btn danger" onclick="clearAlarms()">✕ Acquitter tout</button>
+    <span style="font-size:12px;color:var(--text2)" id="alarm-count-txt">Aucune alarme active</span>
+  </div>
+  <div id="alarm-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <div id="alarm-history" style="margin-top:20px;">
+    <div class="card-title" style="margin-bottom:10px;">📋 Journal</div>
+    <div id="alarm-log" style="font-size:12px;font-family:monospace;
+      background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+      padding:12px;max-height:300px;overflow-y:auto;color:var(--text2);"></div>
+  </div>
+</div>
+
+<!-- ══ PAGE SYSTÈME ══ -->
+<div class="page" id="page-systeme">
+  <div class="grid-2">
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">📡 État PLC</div>
+      <div id="sys-plc-info" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+      <hr class="sep">
+      <div class="card-title" style="margin-bottom:12px;">⏱ Scan PLC</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <input type="range" id="scan-slider" min="50" max="2000" step="50" value="100"
+          style="flex:1;accent-color:var(--accent);" oninput="document.getElementById('scan-val').textContent=this.value+'ms'">
+        <span id="scan-val" style="color:var(--accent);min-width:60px;font-weight:600;">100ms</span>
+        <button class="btn primary" onclick="setScanTime()">Appliquer</button>
+      </div>
+
+      <hr class="sep">
+      <div class="card-title" style="margin-bottom:12px;">🔌 Adresses I²C ADS1115</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div class="stat-box" style="border:1px solid var(--purple);">
+          <div class="stat-label">ADS0</div>
+          <div class="stat-val" style="color:var(--purple);">0x48</div>
+          <div style="font-size:10px;color:var(--text2);">Sondes 1–4</div>
+        </div>
+        <div class="stat-box" style="border:1px solid var(--purple);">
+          <div class="stat-label">ADS1</div>
+          <div class="stat-val" style="color:var(--purple);">0x49</div>
+          <div style="font-size:10px;color:var(--text2);">Sondes 5–8</div>
+        </div>
+        <div class="stat-box" style="border:1px solid var(--purple);">
+          <div class="stat-label">ADS2</div>
+          <div class="stat-val" style="color:var(--purple);">0x4A</div>
+          <div style="font-size:10px;color:var(--text2);">Sondes 9–12</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">📊 Registres RF0–RF15</div>
+      <div id="sys-registers" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+
+      <hr class="sep">
+      <div class="card-title" style="margin-bottom:12px;">💾 Historique SQLite</div>
+      <div id="sys-db-info" style="font-size:12px;color:var(--text2);"></div>
+
+      <hr class="sep">
+      <div class="card-title" style="margin-bottom:12px;">🔗 Accès rapide</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <a href="/api/state" target="_blank" class="btn">GET /api/state</a>
+        <a href="/api/analog" target="_blank" class="btn">GET /api/analog</a>
+        <a href="/api/analog/latest" target="_blank" class="btn">GET /api/analog/latest</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE RECETTES ══ -->
+<div class="page" id="page-recettes">
+  <div class="grid-2" style="gap:20px;align-items:start;">
+    <!-- Liste des recettes -->
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0">📋 Recettes enregistrées</div>
+        <button class="btn primary" onclick="showNewRecipeForm()">+ Nouvelle recette</button>
+      </div>
+      <div id="recipes-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+    <!-- Formulaire nouvelle recette / snapshot -->
+    <div id="recipe-form-wrap">
+      <div class="card-title" style="margin-bottom:12px;">💡 Créer une recette</div>
+      <div class="setpoint-card" style="margin-bottom:12px;">
+        <div class="sp-label">Nom de la recette</div>
+        <input id="rcp-name" type="text" placeholder="Ex: Mode été" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:14px;margin-bottom:8px;">
+        <div class="sp-label">Description (optionnel)</div>
+        <input id="rcp-desc" type="text" placeholder="Ex: Consignes basses saison chaude" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:14px;margin-bottom:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn success" onclick="saveSnapshot()">📸 Capturer état actuel</button>
+          <button class="btn primary" onclick="openManualRecipe()">✎ Saisie manuelle</button>
+        </div>
+      </div>
+      <!-- Saisie manuelle des consignes -->
+      <div id="manual-recipe-form" style="display:none;">
+        <div class="card-title" style="margin-bottom:10px;">Consignes RF0–RF15</div>
+        <div id="manual-sp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;"></div>
+        <button class="btn success" onclick="saveManualRecipe()">💾 Sauvegarder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE SAUVEGARDES ══ -->
+<div class="page" id="page-sauvegardes">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+    <button class="btn success" onclick="saveBackup()">💾 Sauvegarder maintenant</button>
+    <div>
+      <input id="backup-label" type="text" placeholder="Label optionnel..." style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:var(--r2);font-size:13px;width:220px;">
+    </div>
+    <span style="font-size:12px;color:var(--text2)" id="backup-info">Les 20 dernières versions sont conservées.</span>
+  </div>
+  <div id="backup-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+</div>
+
+<!-- ══ PAGE TELEGRAM ══ -->
+<div class="page" id="page-telegram">
+  <div class="grid-2" style="gap:20px;align-items:start;">
+    <!-- Config -->
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">✈ Configuration Telegram</div>
+      <div class="setpoint-card" style="margin-bottom:16px;">
+        <div class="sp-label">Token du bot</div>
+        <input id="tg-token" type="password" placeholder="123456:ABC-DefGhi..." style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:13px;font-family:monospace;margin-bottom:8px;">
+        <div class="sp-label">Chat IDs autorisés (un par ligne)</div>
+        <textarea id="tg-chatids" rows="3" placeholder="123456789&#10;987654321" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:13px;font-family:monospace;resize:vertical;margin-bottom:8px;"></textarea>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="tg-enabled" style="accent-color:var(--green);width:16px;height:16px;">
+            Activer le bot
+          </label>
+        </div>
+        <div id="tg-status" style="font-size:12px;color:var(--text2);padding:4px 0;">
+          ⚪ Chargement...
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          <button class="btn primary"  onclick="saveTgConfig()">💾 Sauvegarder</button>
+          <button class="btn"          onclick="testTelegram()">🧪 Envoyer test</button>
+          <button class="btn"          onclick="loadTgConfig()" style="padding:6px 10px;">↻</button>
+        </div>
+      </div>
+      <div class="setpoint-card">
+        <div class="card-title" style="margin-bottom:10px;">🔔 Seuils d'alarme</div>
+        <div class="sp-label">Alarme haute (°C)</div>
+        <input id="tg-high" type="number" value="85" min="0" max="200" step="1" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--red);padding:8px 12px;border-radius:var(--r2);font-size:14px;font-weight:700;margin-bottom:8px;">
+        <div class="sp-label">Alarme basse (°C)</div>
+        <input id="tg-low" type="number" value="3" min="-50" max="50" step="1" style="width:100%;background:var(--bg3);border:1px solid var(--accent);color:var(--accent);padding:8px 12px;border-radius:var(--r2);font-size:14px;font-weight:700;margin-bottom:8px;">
+        <div class="sp-label">Rapport quotidien à</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <input id="tg-hour" type="number" value="8" min="0" max="23" style="width:80px;background:var(--bg3);border:1px solid var(--border);color:var(--amber);padding:8px;border-radius:var(--r2);font-size:14px;font-weight:700;text-align:center;">
+          <span style="color:var(--text2);font-size:13px;">h00</span>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="tg-report" checked style="accent-color:var(--amber);width:14px;height:14px;">
+            Rapport activé
+          </label>
+        </div>
+        <button class="btn success" onclick="saveTgAlarms()">💾 Appliquer</button>
+      </div>
+    </div>
+    <!-- Guide -->
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">📖 Comment configurer</div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-size:13px;line-height:1.8;color:var(--text2);">
+        <p style="color:var(--accent);font-weight:600;margin-bottom:8px;">Étape 1 — Créer le bot</p>
+        <p>Ouvrir Telegram et chercher <code>@BotFather</code>.<br>Taper <code>/newbot</code>, choisir un nom.<br>Copier le token fourni.</p>
+        <p style="color:var(--accent);font-weight:600;margin:12px 0 8px;">Étape 2 — Trouver votre Chat ID</p>
+        <p>Démarrer une conversation avec votre bot, puis visiter :<br><code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br>Votre chat_id apparaît dans la réponse JSON.</p>
+        <p style="color:var(--accent);font-weight:600;margin:12px 0 8px;">Étape 3 — Tester</p>
+        <p>Sauvegarder la config, cliquer "Envoyer test".<br>Vous devez recevoir un message Telegram.</p>
+        <hr style="border-color:var(--border);margin:12px 0;">
+        <p style="color:var(--green);font-weight:600;margin-bottom:6px;">Commandes disponibles</p>
+        <code style="display:block;background:var(--bg3);padding:8px;border-radius:4px;font-size:11px;line-height:1.7;">/temp — Températures<br>/relais — État relais<br>/on K1 — Activer relais<br>/off K1 — Désactiver<br>/consigne RF0 75 — Écrire consigne<br>/recette Mode_été — Appliquer recette<br>/status — État PLC<br>/rapport — Rapport immédiat</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE SÉCURITÉ ══ -->
+<div class="page" id="page-securite">
+  <div class="grid-2" style="gap:20px;align-items:start;">
+    <!-- Authentification -->
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">🔒 Authentification</div>
+      <div class="setpoint-card" style="margin-bottom:16px;">
+        <div style="background:var(--bg3);border:1px solid var(--amber);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--amber);">
+          ⚠ Redémarrer le service RPi-PLC après modification pour appliquer.
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin-bottom:14px;">
+          <input type="checkbox" id="sec-enabled" style="accent-color:var(--green);width:18px;height:18px;">
+          <span>Activer le login (page de connexion)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin-bottom:16px;">
+          <input type="checkbox" id="sec-https" style="accent-color:var(--purple);width:18px;height:18px;">
+          <span>Activer HTTPS (certificat auto-signé)</span>
+        </label>
+        <div class="sp-label">Nom d'utilisateur</div>
+        <input id="sec-user" type="text" value="admin" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:14px;margin-bottom:8px;">
+        <div class="sp-label">Nouveau mot de passe (laisser vide pour ne pas changer)</div>
+        <input id="sec-pass" type="password" placeholder="••••••••" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:14px;margin-bottom:12px;">
+        <input id="sec-pass2" type="password" placeholder="Confirmer le mot de passe" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--r2);font-size:14px;margin-bottom:12px;">
+        <button class="btn success" onclick="saveSecConfig()">💾 Sauvegarder</button>
+      </div>
+    </div>
+    <!-- Accès à distance + guide -->
+    <div>
+      <div class="card-title" style="margin-bottom:12px;">🌐 Accès à distance (Tailscale)</div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;font-size:13px;line-height:1.9;color:var(--text2);">
+        <p style="color:var(--accent);font-weight:600;margin-bottom:8px;">La solution recommandée : Tailscale</p>
+        <p>Tailscale crée un VPN mesh privé. Votre RPi obtient une IP fixe accessible depuis n'importe où, sans ouvrir de port sur votre box.</p>
+        <hr style="border-color:var(--border);margin:12px 0;">
+        <p style="color:var(--accent);font-weight:600;margin-bottom:6px;">Installation sur le RPi</p>
+        <code style="display:block;background:var(--bg3);padding:10px;border-radius:6px;font-size:11px;line-height:1.8;color:var(--cyan);">curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+# → Scanner le QR code avec l'app Tailscale
+# Votre RPi reçoit une IP 100.x.x.x
+</code>
+        <hr style="border-color:var(--border);margin:12px 0;">
+        <p style="color:var(--accent);font-weight:600;margin-bottom:6px;">Accès depuis votre téléphone</p>
+        <p>1. Installer Tailscale sur votre téléphone<br>
+           2. Se connecter avec le même compte<br>
+           3. Accéder à <code>http://100.x.x.x:5000/scada</code></p>
+        <hr style="border-color:var(--border);margin:12px 0;">
+        <p style="color:var(--green);font-weight:600;margin-bottom:6px;">✓ Avantages Tailscale</p>
+        <p>• Gratuit jusqu'à 100 appareils<br>
+           • Chiffrement WireGuard (militaire)<br>
+           • Aucun port à ouvrir sur la box<br>
+           • Fonctionne derrière CGNAT<br>
+           • iOS / Android / Windows / Linux</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE CALIBRATION ══ -->
+<div class="page" id="page-calibration">
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="font-size:13px;color:var(--text2)">
+      Corriger les écarts de mesure de chaque sonde NTC10K.
+      Offset = valeur ajoutée. Gain = facteur multiplicatif (défaut 1.0).
+    </div>
+    <button class="btn primary" onclick="loadCalibration()">⟳ Actualiser</button>
+    <a href="/api/report/html?hours=24" target="_blank" class="btn success">📄 Rapport 24h</a>
+    <a href="/api/report/html?hours=168" target="_blank" class="btn success">📄 Rapport 7j</a>
+    <a href="/api/report/csv?hours=24"  download class="btn">⬇ CSV 24h</a>
+  </div>
+  <div id="cal-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const ADS_LABEL = {
+  ANA0:'0x48·CH0', ANA1:'0x48·CH1', ANA2:'0x48·CH2', ANA3:'0x48·CH3',
+  ANA4:'0x49·CH0', ANA5:'0x49·CH1', ANA6:'0x49·CH2', ANA7:'0x49·CH3',
+  ANA8:'0x4A·CH0', ANA9:'0x4A·CH1', ANA10:'0x4A·CH2', ANA11:'0x4A·CH3',
+};
+// GPIO dynamiques — reconstruits depuis /api/state à chaque cycle
+// Fallback hardcodé K1→K16 pour compatibilité carte relais standard
+let RELAY_GPIO = [5, 11, 9, 10, 22, 27, 17, 4, 6, 13, 19, 26, 21, 20, 16, 12];
+let RELAY_NAMES = ['Sortie K1', 'Sortie K2', 'Sortie K3', 'Sortie K4', 'Sortie K5', 'Sortie K6', 'Sortie K7', 'Sortie K8', 'Sortie K9', 'Sortie K10', 'Sortie K11', 'Sortie K12', 'Sortie K13', 'Sortie K14', 'Sortie K15', 'Sortie K16'];
+let INPUT_GPIO  = [14,15,18,23,24,25,8,7];
+let INPUT_NAMES = ['TOR1','TOR2','TOR3','TOR4','TOR5','TOR6','TOR7','TOR8'];
+let _gpioListsBuilt = false;
+
+// Reconstruit RELAY_GPIO / INPUT_GPIO triés depuis les données reçues du serveur
+function _rebuildGpioLists(gpio) {
+  if (!gpio || !Object.keys(gpio).length) return;
+  const outs = [], ins = [];
+  Object.entries(gpio).forEach(([pin, cfg]) => {
+    if (cfg.mode === 'output') outs.push(parseInt(pin));
+    else ins.push(parseInt(pin));
+  });
+  // Trier sorties par numéro Kx dans le nom, sinon par pin
+  outs.sort((a,b) => {
+    const na = (gpio[a]||{}).name||'', nb = (gpio[b]||{}).name||'';
+    const ma = na.match(/K(\d+)/i), mb = nb.match(/K(\d+)/i);
+    if (ma && mb) return parseInt(ma[1]) - parseInt(mb[1]);
+    if (ma) return -1; if (mb) return 1;
+    return a - b;
+  });
+  // Trier entrées par numéro TORx dans le nom, sinon par pin
+  ins.sort((a,b) => {
+    const na = (gpio[a]||{}).name||'', nb = (gpio[b]||{}).name||'';
+    const ma = na.match(/TOR\s*(\d+)/i), mb = nb.match(/TOR\s*(\d+)/i);
+    if (ma && mb) return parseInt(ma[1]) - parseInt(mb[1]);
+    return a - b;
+  });
+  RELAY_GPIO = outs;
+  RELAY_NAMES = outs.map(p => (gpio[p]||{}).name || ('GPIO'+p));
+  INPUT_GPIO  = ins;
+  INPUT_NAMES = ins.map(p => (gpio[p]||{}).name || ('GPIO'+p));
+}
+const CHART_COLORS = ['#58a6ff','#3fb950','#f85149','#d29922','#bc8cff','#39d353',
+                       '#ff7b72','#ffa657','#79c0ff','#56d364','#d2a8ff','#ffd700'];
+
+// Consignes configurables (ref RF → label, min, max, unité)
+const SETPOINTS = [
+  { ref:'RF0', label:'Consigne chauffe',    min:0,   max:100,  step:0.5,  unit:'°C' },
+  { ref:'RF1', label:'Seuil alarme haut',   min:50,  max:200,  step:1,    unit:'°C' },
+  { ref:'RF2', label:'Seuil alarme bas',    min:-20, max:50,   step:1,    unit:'°C' },
+  { ref:'RF3', label:'Consigne ECS',        min:30,  max:90,   step:1,    unit:'°C' },
+  { ref:'RF4', label:'Consigne départ V3V', min:20,  max:80,   step:0.5,  unit:'°C' },
+];
+
+// ═══════════════════════════════════════════════════════════
+// ÉTAT
+// ═══════════════════════════════════════════════════════════
+let state = {};
+let alarms = [];       // {id, ch, msg, ts, acked}
+let alarmLog = [];
+let rtBuffers = {};    // ANA0..11 → [{x,y}]
+const RT_MAX = 120;    // 2 min
+let histChart = null;
+let synChart  = null;
+let miniCharts = {};
+let selectedSonde = 'ANA0';
+let firstBuild = true;
+let alarmThreshold = 85;
+let alarmLow = 5;
+
+// ═══════════════════════════════════════════════════════════
+// SOCKET.IO
+// ═══════════════════════════════════════════════════════════
+const socket = io();
+socket.on('connect',    ()=>setConnected(true));
+socket.on('disconnect', ()=>setConnected(false));
+socket.on('plc_update', s=>{ state=s; renderAll(s); });
+
+function setConnected(ok){
+  document.getElementById('connDot').className='conn-dot'+(ok?' on':'');
+  document.getElementById('connTxt').textContent=ok?'Connecté':'Déconnecté';
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER PRINCIPAL
+// ═══════════════════════════════════════════════════════════
+function renderAll(s){
+  const analog  = s.analog  || {};
+  const gpio    = s.gpio    || {};
+  const regs    = s.registers || {};
+  const mem     = s.memory  || {};
+  // Reconstruire les listes GPIO triées depuis les données serveur
+  _rebuildGpioLists(gpio);
+
+  // Header
+  document.getElementById('modeBadge').textContent = s.on_rpi ? 'MATÉRIEL' : 'SIMULATION';
+  document.getElementById('cycleLabel') && (document.getElementById('cycleLabel').textContent='');
+  const ci = document.getElementById('cycleInfo');
+  if(ci) ci.textContent = `cycle ${(s.cycle||0).toLocaleString()}`;
+
+  updateAlarms(analog, s);
+  updateRtBuffers(analog);
+
+  renderSynoptique(s, analog, gpio, regs, mem);
+  renderTemperatures(analog);
+  renderCommandes(gpio, regs, mem);
+  renderSysteme(s, regs);
+  updateMiniCharts();
+}
+
+// ═══════════════════════════════════════════════════════════
+// SYNOPTIQUE
+// ═══════════════════════════════════════════════════════════
+function renderSynoptique(s, analog, gpio, regs, mem){
+  // Stats bar
+  const running = s.running;
+  const el = id=>document.getElementById(id);
+  el('syn-plc-state').textContent = running ? 'RUN' : 'STOP';
+  el('syn-plc-state').className = 'stat-val '+(running?'ok':'err');
+
+  const anaList = Object.entries(analog).sort((a,b)=>parseInt(a[0].slice(3))-parseInt(b[0].slice(3)));
+  const okCount = anaList.filter(([,v])=>v.celsius!=null&&!isNaN(v.celsius)).length;
+  el('syn-sondes-ok').textContent = `${okCount}/12`;
+  el('syn-sondes-ok').className = 'stat-val '+(okCount>=10?'ok':okCount>=6?'warn':'err');
+
+  const relaisOn = RELAY_GPIO.filter(p=>gpio[p]&&gpio[p].value).length;
+  el('syn-relais-on').textContent = `${relaisOn}/16`;
+
+  const alarmActive = alarms.filter(a=>!a.acked).length;
+  el('syn-alarms').textContent = alarmActive;
+  el('syn-alarms').className = 'stat-val '+(alarmActive?'err':'ok');
+
+  // Sondes top 4 dans synoptique
+  const grid = el('syn-temps-grid');
+  if(grid){
+    grid.innerHTML='';
+    anaList.slice(0,8).forEach(([id,v])=>{
+      const t = v.celsius;
+      const card = mkTempMini(id, v.name||id, t);
+      card.onclick = ()=>{ selectedSonde=id; document.getElementById('syn-chart-label').textContent=v.name||id; };
+      grid.appendChild(card);
+    });
+  }
+
+  // Relais — rebuild si le nombre de relais a changé (config GPIO mise à jour)
+  const rg = el('syn-relais-grid');
+  if(rg){
+    if(rg.children.length !== RELAY_GPIO.length){
+      rg.innerHTML = '';  // forcer rebuild si config a changé
+    }
+    if(rg.children.length === 0){
+      RELAY_GPIO.forEach((pin,i)=>{
+        const info = gpio[pin]||{};
+        const on = !!info.value;
+        const d = document.createElement('div');
+        d.id = `rc-${pin}`;
+        d.className = 'relay-card'+(on?' active':'');
+        d.innerHTML = `<div class="relay-led" id="rled-${pin}"></div>
+          <div class="relay-info">
+            <div class="relay-name">${info.name||RELAY_NAMES[i]}</div>
+            <div id="rsub-${pin}" class="relay-sub">GPIO ${pin} — ${on?'ACTIF':'inactif'}</div>
+          </div>
+          <button class="relay-toggle" id="rtog-${pin}" data-pin="${pin}">
+            ${on?'Éteindre':'Allumer'}
+          </button>`;
+        // Listener unique sur le bouton seulement (pas sur la card entière)
+        d.querySelector('button').addEventListener('click', function(ev){
+          ev.stopPropagation();
+          const p = parseInt(this.dataset.pin);
+          const curOn = !!(state.gpio && state.gpio[p] && state.gpio[p].value);
+          _setRelayOptimistic(p, !curOn);
+        });
+        rg.appendChild(d);
+      });
+    } else {
+      // Mise à jour légère : juste classes + textes
+      RELAY_GPIO.forEach((pin,i)=>{
+        const info = gpio[pin]||{};
+        const on = !!info.value;
+        const card = document.getElementById(`rc-${pin}`);
+        if(!card) return;
+        card.className = 'relay-card'+(on?' active':'');
+        const sub  = document.getElementById(`rsub-${pin}`);
+        const tog  = document.getElementById(`rtog-${pin}`);
+        if(sub) sub.textContent = `GPIO ${pin} — ${on?'ACTIF':'inactif'}`;
+        if(tog && document.activeElement !== tog) tog.textContent = on?'Éteindre':'Allumer';
+      });
+    }
+  }
+
+  // Entrées TOR
+  const il = el('syn-inputs-list');
+  if(il){
+    il.innerHTML='';
+    INPUT_GPIO.forEach((pin,i)=>{
+      const info = gpio[pin]||{};
+      const on = !!info.value;
+      const d = document.createElement('div');
+      d.className = 'input-pill'+(on?' active':'');
+      d.innerHTML = `<div class="input-dot"></div>
+        <span>${info.name||INPUT_NAMES[i]}</span>`;
+      il.appendChild(d);
+    });
+  }
+
+  // Consignes rapides
+  const sp = el('syn-setpoints');
+  if(sp && firstBuild){
+    sp.innerHTML='';
+    SETPOINTS.slice(0,3).forEach(cfg=>{
+      const val = regs[cfg.ref]||0;
+      const d = document.createElement('div');
+      d.style.cssText='margin-bottom:12px;';
+      d.innerHTML=`<div class="sp-label">${cfg.label} <span style="color:var(--text3);font-size:10px">${cfg.ref}</span></div>
+        <div class="sp-row">
+          <span class="sp-val" id="spv-${cfg.ref}">${val.toFixed(1)}</span>
+          <span class="sp-unit">${cfg.unit}</span>
+          <input type="range" class="sp-slider" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}"
+            value="${val}" id="sps-${cfg.ref}"
+            oninput="document.getElementById('spv-${cfg.ref}').textContent=parseFloat(this.value).toFixed(1)">
+        </div>
+        <div class="sp-btns">
+          <button class="sp-btn apply" onclick="applySetpoint('${cfg.ref}')">✓ Appliquer</button>
+        </div>`;
+      sp.appendChild(d);
+    });
+    firstBuild=false;
+  } else {
+    // Mise à jour valeurs seulement
+    SETPOINTS.slice(0,3).forEach(cfg=>{
+      const val = regs[cfg.ref]||0;
+      const spv = document.getElementById(`spv-${cfg.ref}`);
+      const sps = document.getElementById(`sps-${cfg.ref}`);
+      if(spv && document.activeElement!==sps) spv.textContent=val.toFixed(1);
+      if(sps && document.activeElement!==sps) sps.value=val;
+    });
+  }
+
+  // Synoptique mini chart
+  updateSynChart();
+}
+
+function mkTempMini(id, name, t){
+  const pct = t!=null&&!isNaN(t) ? Math.min(100,Math.max(0,(t+50)/250*100)) : 0;
+  const cls  = t==null||isNaN(t)?'nc':t>alarmThreshold?'hot':t>50?'warm':t<alarmLow?'cold':'ok';
+  const barColor = t>alarmThreshold?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+  const d = document.createElement('div');
+  d.className='temp-card'+(t!=null&&t>alarmThreshold?' alarm':'');
+  d.id=`mini-tc-${id}`;
+  d.innerHTML=`<div class="temp-alarm-badge">ALARME</div>
+    <div class="temp-name"><span>${name}</span>
+    <span class="temp-addr">${ADS_LABEL[id]||id}</span></div>
+    <div class="temp-val ${cls}" id="mtv-${id}">${t!=null&&!isNaN(t)?t.toFixed(1)+'°C':'N/C'}</div>
+    <div class="temp-bar"><div class="temp-bar-fill" id="mtb-${id}"
+      style="width:${pct}%;background:${barColor}"></div></div>`;
+  return d;
+}
+
+function updateSynChart(){
+  const buf = rtBuffers[selectedSonde]||[];
+  if(!synChart){
+    const ctx = document.getElementById('synChart');
+    if(!ctx) return;
+    const existingSyn = Chart.getChart(ctx);
+    if (existingSyn) existingSyn.destroy();
+    synChart = new Chart(ctx.getContext('2d'), {
+      type:'line',
+      data:{datasets:[{data:[],borderColor:CHART_COLORS[0],borderWidth:2,
+        pointRadius:0,tension:0.3,fill:{target:'origin',above:CHART_COLORS[0]+'15'}}]},
+      options:{animation:false,parsing:false,
+        scales:{
+          x:{type:'time',display:true,ticks:{color:'#484f58',maxTicksLimit:4,font:{size:10}},
+             grid:{color:'#21262d'}},
+          y:{ticks:{color:'#8b949e',font:{size:10},callback:v=>v.toFixed(0)+'°'},
+             grid:{color:'#21262d'}}
+        },
+        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}}}
+    });
+  }
+  synChart.data.datasets[0].data = buf.map(p=>({x:p.x,y:p.y}));
+  synChart.update('none');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TEMPÉRATURES
+// ═══════════════════════════════════════════════════════════
+let tempsBuilt = false;
+
+function renderTemperatures(analog){
+  alarmThreshold = parseFloat(document.getElementById('alarm-threshold')?.value||85);
+  alarmLow       = parseFloat(document.getElementById('alarm-low')?.value||5);
+
+  const grid = document.getElementById('temps-grid');
+  if(!grid) return;
+
+  const list = Object.entries(analog).sort((a,b)=>parseInt(a[0].slice(3))-parseInt(b[0].slice(3)));
+
+  if(!tempsBuilt){
+    tempsBuilt = true;
+    grid.innerHTML='';
+    list.forEach(([id,v])=>{
+      const card = document.createElement('div');
+      card.className='temp-card';
+      card.id=`tc-${id}`;
+      const t = v.celsius;
+      const pct = t!=null&&!isNaN(t)?Math.min(100,Math.max(0,(t+50)/250*100)):0;
+      const barColor = t>alarmThreshold?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+      card.innerHTML=`
+        <div class="temp-alarm-badge">ALARME</div>
+        <div class="temp-name">
+          <span>${v.name||id}</span>
+          <span class="temp-addr">${ADS_LABEL[id]||id}</span>
+        </div>
+        <div class="temp-val" id="tv-${id}">${t!=null&&!isNaN(t)?t.toFixed(1)+'°C':'N/C'}</div>
+        <div class="temp-bar"><div class="temp-bar-fill" id="tb-${id}" style="width:${pct}%;background:${barColor}"></div></div>
+        <div class="temp-meta">
+          <span id="tmeta-${id}">${v.voltage!=null?(v.voltage.toFixed(3)+'V'):'—'} ${v.sim?'SIM':'HW'}</span>
+          <span>${v.probe||'NTC10K'}</span>
+        </div>`;
+      card.onclick = ()=>{ selectedSonde=id; document.getElementById('syn-chart-label').textContent=v.name||id; };
+      grid.appendChild(card);
+    });
+  } else {
+    list.forEach(([id,v])=>{
+      const t = v.celsius;
+      const pct = t!=null&&!isNaN(t)?Math.min(100,Math.max(0,(t+50)/250*100)):0;
+      const barColor = t>alarmThreshold?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+      const cls = t==null||isNaN(t)?'nc':t>alarmThreshold?'hot':t>50?'warm':t<alarmLow?'cold':'ok';
+      const tvEl = document.getElementById(`tv-${id}`);
+      if(tvEl){ tvEl.textContent=t!=null&&!isNaN(t)?t.toFixed(1)+'°C':'N/C'; tvEl.className=`temp-val ${cls}`; }
+      const tbEl = document.getElementById(`tb-${id}`);
+      if(tbEl){ tbEl.style.width=pct+'%'; tbEl.style.background=barColor; }
+      const tmEl = document.getElementById(`tmeta-${id}`);
+      if(tmEl) tmEl.textContent=`${v.voltage!=null?(v.voltage.toFixed(3)+'V'):'—'} ${v.sim?'SIM':'HW'}`;
+      const card = document.getElementById(`tc-${id}`);
+      if(card) card.className='temp-card'+(t!=null&&t>alarmThreshold?' alarm':'');
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMMANDES
+// ═══════════════════════════════════════════════════════════
+let cmdBuilt = false;
+
+function renderCommandes(gpio, regs, mem){
+  if(!cmdBuilt){
+    cmdBuilt=true;
+    buildSetpointsList();
+    buildManualOutputs(gpio);
+  }
+  // Update valeurs consignes (seulement si l'utilisateur n'est pas en train d'éditer)
+  SETPOINTS.forEach(cfg=>{
+    const sps=document.getElementById(`sp-range-${cfg.ref}`);
+    const spv=document.getElementById(`sp-num-${cfg.ref}`);
+    const val=regs[cfg.ref]!==undefined ? regs[cfg.ref] : 0;
+    const editing = document.activeElement===sps || document.activeElement===spv;
+    if(!editing){
+      const cur = parseFloat(spv?.value||0);
+      // Ne mettre à jour que si la valeur a changé (évite reset intempestif)
+      if(Math.abs(cur - val) > 0.05){
+        if(sps) sps.value = val;
+        if(spv) spv.value = val.toFixed(1);
+      }
+    }
+  });
+  // Update boutons relais
+  RELAY_GPIO.forEach((pin,i)=>{
+    const btn=document.getElementById(`out-btn-${pin}`);
+    const info=gpio[pin]||{};
+    if(btn){
+      const on=!!info.value;
+      btn.textContent=on?'■ Éteindre':'▶ Allumer';
+      btn.className='btn '+(on?'danger':'success');
+      // data-pin déjà dans le HTML - pas besoin de mettre à jour onclick
+      const lbl=document.getElementById(`out-lbl-${pin}`);
+      if(lbl) lbl.textContent=on?'ACTIF':'inactif';
+      const led=document.getElementById(`out-led-${pin}`);
+      if(led) led.style.background=on?'var(--green)':'var(--text3)';
+    }
+  });
+  // Bits mémoire
+  const mg=document.getElementById('mem-bits');
+  if(mg){
+    const bits=Object.entries(mem).slice(0,16);
+    if(mg.children.length===0){
+      bits.forEach(([k,v])=>{
+        const b=document.createElement('button');
+        b.id=`mem-${k}`;
+        b.style.cssText=`padding:6px 12px;border-radius:var(--r2);font-size:12px;
+          cursor:pointer;font-family:var(--font);transition:all .15s;`;
+        b.onclick=()=>writeMem(k,!state.memory?.[k]);
+        mg.appendChild(b);
+      });
+    }
+    bits.forEach(([k,v])=>{
+      const b=document.getElementById(`mem-${k}`);
+      if(b){
+        b.textContent=k;
+        b.style.background=v?'#1a4a1a':'var(--bg3)';
+        b.style.border=`1px solid ${v?'var(--green)':'var(--border)'}`;
+        b.style.color=v?'var(--green)':'var(--text2)';
+      }
+    });
+  }
+}
+
+function buildSetpointsList(){
+  const el=document.getElementById('setpoints-list');
+  if(!el) return;
+  SETPOINTS.forEach(cfg=>{
+    const val=((state.registers||{})[cfg.ref]||0);
+    const d=document.createElement('div');
+    d.className='setpoint-card';
+    d.innerHTML=`
+      <div class="sp-label">${cfg.label}
+        <span style="color:var(--text3);font-size:10px;margin-left:6px">${cfg.ref}</span>
+      </div>
+      <div class="sp-row">
+        <input type="number" class="sp-val" id="sp-num-${cfg.ref}"
+          min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${val.toFixed(1)}"
+          style="background:var(--bg3);border:1px solid var(--amber);border-radius:var(--r2);
+                 color:var(--amber);font-size:20px;font-weight:700;width:90px;padding:4px 8px;text-align:center;"
+          oninput="document.getElementById('sp-range-${cfg.ref}').value=this.value">
+        <span class="sp-unit">${cfg.unit}</span>
+        <input type="range" class="sp-slider" id="sp-range-${cfg.ref}"
+          min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${val}"
+          oninput="document.getElementById('sp-num-${cfg.ref}').value=parseFloat(this.value).toFixed(1)">
+      </div>
+      <div class="sp-btns">
+        <button class="sp-btn" onclick="resetSetpoint('${cfg.ref}',${val})">Annuler</button>
+        <button class="sp-btn apply" onclick="applySetpoint('${cfg.ref}')">✓ Appliquer</button>
+      </div>`;
+    el.appendChild(d);
+  });
+}
+
+function buildManualOutputs(gpio){
+  const el=document.getElementById('manual-outputs');
+  if(!el) return;
+  // Rebuild si config GPIO a changé (taille différente)
+  if(el.children.length > 0 && el.children.length !== RELAY_GPIO.length) el.innerHTML='';
+  if(el.children.length > 0) return;
+  RELAY_GPIO.forEach((pin,i)=>{
+    const info=gpio[pin]||{};
+    const on=!!info.value;
+    const d=document.createElement('div');
+    d.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 14px;'+
+      'background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);';
+    d.innerHTML=`
+      <div style="width:10px;height:10px;border-radius:50%;
+        background:${on?'var(--green)':'var(--text3)'};flex-shrink:0;" id="out-led-${pin}"></div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${info.name||RELAY_NAMES[i]}</div>
+        <div style="font-size:10px;color:var(--text2);" id="out-lbl-${pin}">${on?'ACTIF':'inactif'}</div>
+      </div>
+      <button id="out-btn-${pin}" class="btn ${on?'danger':'success'}" data-pin="${pin}">
+        ${on?'■ Éteindre':'▶ Allumer'}
+      </button>`;
+    // Listener unique, pas d'inline onclick
+    d.querySelector('button').addEventListener('click', function(ev){
+      ev.stopPropagation();
+      const p = parseInt(this.dataset.pin);
+      const curOn = !!(state.gpio && state.gpio[p] && state.gpio[p].value);
+      _setRelayOptimistic(p, !curOn);
+    });
+    el.appendChild(d);
+  });
+}
+
+// Toggle relay en lisant l'état COURANT du bouton (pas la valeur capturée au render)
+function toggleRelayBtn(btn, ev){
+  if(ev) ev.stopPropagation();
+  const pin = parseInt(btn.dataset.pin);
+  const currentOn = !!(state.gpio && state.gpio[pin] && state.gpio[pin].value);
+  _setRelayOptimistic(pin, !currentOn);
+}
+
+// Mise à jour optimiste : UI immédiate + envoi API en arrière-plan
+function _setRelayOptimistic(pin, newVal){
+  // 1. Mettre à jour l'état local immédiatement (avant réponse API)
+  if(!state.gpio) state.gpio = {};
+  if(!state.gpio[pin]) state.gpio[pin] = {};
+  state.gpio[pin].value = newVal;
+
+  // 2. Mettre à jour uniquement les éléments visuels concernés (pas renderAll)
+  _updateRelayUI(pin, newVal);
+
+  // 3. Envoyer la commande API sans bloquer l'UI
+  api('/api/gpio/write','POST',{pin,value:newVal}).then(r=>{
+    if(r?.ok){
+      toast(`${state.gpio[pin]?.name||'K?'} ${newVal?'ON':'OFF'}`,'ok');
+    } else {
+      // Rollback si erreur
+      state.gpio[pin].value = !newVal;
+      _updateRelayUI(pin, !newVal);
+      toast('Erreur commande relais','err');
+    }
+  });
+}
+
+// Met à jour uniquement les éléments visuels d'un relais (sans rerecréer le DOM)
+function _updateRelayUI(pin, on){
+  // Synoptique
+  const card = document.getElementById(`rc-${pin}`);
+  if(card){
+    card.className = 'relay-card'+(on?' active':'');
+    const sub = document.getElementById(`rsub-${pin}`);
+    const tog = document.getElementById(`rtog-${pin}`);
+    if(sub) sub.textContent = `GPIO ${pin} — ${on?'ACTIF':'inactif'}`;
+    if(tog) tog.textContent = on?'Éteindre':'Allumer';
+  }
+  // Commandes
+  const btn = document.getElementById(`out-btn-${pin}`);
+  const lbl = document.getElementById(`out-lbl-${pin}`);
+  const led = document.getElementById(`out-led-${pin}`);
+  if(btn){ btn.textContent=on?'■ Éteindre':'▶ Allumer'; btn.className='btn '+(on?'danger':'success'); }
+  if(lbl) lbl.textContent=on?'ACTIF':'inactif';
+  if(led) led.style.background=on?'var(--green)':'var(--text3)';
+  // Stat bar relaisOn
+  const ro = document.getElementById('syn-relais-on');
+  if(ro){
+    const cnt = RELAY_GPIO.filter(p=>state.gpio&&state.gpio[p]&&state.gpio[p].value).length;
+    ro.textContent = `${cnt}/16`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SYSTÈME
+// ═══════════════════════════════════════════════════════════
+function renderSysteme(s, regs){
+  const si=document.getElementById('sys-plc-info');
+  if(si){
+    si.innerHTML=`
+      <div class="stat-box"><div class="stat-label">État</div>
+        <div class="stat-val ${s.running?'ok':'err'}">${s.running?'RUN':'STOP'}</div></div>
+      <div class="stat-box"><div class="stat-label">Cycles</div>
+        <div class="stat-val">${(s.cycle||0).toLocaleString()}</div></div>
+      <div class="stat-box"><div class="stat-label">Erreurs</div>
+        <div class="stat-val ${s.error_count?'err':'ok'}">${s.error_count||0}</div></div>
+      <div class="stat-box"><div class="stat-label">Mode</div>
+        <div class="stat-val">${s.on_rpi?'HW':'SIM'}</div></div>`;
+  }
+  const rg=document.getElementById('sys-registers');
+  if(rg){
+    rg.innerHTML='';
+    Object.entries(regs).sort((a,b)=>parseInt(a[0].slice(2))-parseInt(b[0].slice(2))).forEach(([k,v])=>{
+      const d=document.createElement('div');
+      d.className='stat-box';
+      d.innerHTML=`<div class="stat-label">${k}</div>
+        <div class="stat-val" style="font-size:14px">${parseFloat(v).toFixed(2)}</div>`;
+      rg.appendChild(d);
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// HISTORIQUE
+// ═══════════════════════════════════════════════════════════
+async function loadHistory(){
+  const ch    = document.getElementById('hist-channel')?.value||'ANA0';
+  const hours = document.getElementById('hist-hours')?.value||24;
+  const infoEl= document.getElementById('hist-info');
+  if(infoEl) infoEl.textContent='Chargement…';
+  try{
+    const [histResp, statsResp] = await Promise.all([
+      fetch(`/api/analog/history?channel=${ch}&hours=${hours}`),
+      fetch(`/api/analog/stats?channel=${ch}&hours=${hours}`)
+    ]);
+    const data  = await histResp.json();
+    const stats = await statsResp.json();
+
+    const labels = data.map(p=>new Date(p.ts*1000));
+    const values = data.map(p=>p.t);
+
+    if(!histChart){
+      const ctx=document.getElementById('histChart').getContext('2d');
+      const existingHist = Chart.getChart(ctx);
+      if (existingHist) existingHist.destroy();
+      histChart=new Chart(ctx,{
+        type:'line',
+        data:{labels,datasets:[{label:ch,data:values,borderColor:CHART_COLORS[0],
+          backgroundColor:CHART_COLORS[0]+'20',borderWidth:2,pointRadius:0,tension:0.3,fill:true}]},
+        options:{responsive:true,animation:false,
+          scales:{
+            x:{type:'time',time:{tooltipFormat:'HH:mm dd/MM'},
+               ticks:{color:'#8b949e',maxTicksLimit:10},grid:{color:'#21262d'}},
+            y:{title:{display:true,text:'°C',color:'#8b949e'},
+               ticks:{color:'#8b949e'},grid:{color:'#21262d'}}
+          },
+          plugins:{legend:{labels:{color:'#e6edf3',font:{size:12}}},
+            tooltip:{mode:'index',intersect:false}}}
+      });
+    } else {
+      histChart.data.labels=labels;
+      histChart.data.datasets[0].data=values;
+      histChart.data.datasets[0].label=ch;
+      histChart.data.datasets[0].borderColor=CHART_COLORS[Object.keys(ADS_LABEL).indexOf(ch)%12];
+      histChart.update();
+    }
+
+    // Stats
+    const sg=document.getElementById('hist-stats');
+    if(sg&&stats.count>0){
+      sg.innerHTML=`
+        <div class="stat-box"><div class="stat-label">Dernière</div>
+          <div class="stat-val" style="color:var(--cyan)">${stats.last}°C</div></div>
+        <div class="stat-box"><div class="stat-label">Minimum</div>
+          <div class="stat-val" style="color:var(--accent)">${stats.min}°C</div></div>
+        <div class="stat-box"><div class="stat-label">Maximum</div>
+          <div class="stat-val" style="color:var(--red)">${stats.max}°C</div></div>
+        <div class="stat-box"><div class="stat-label">Moyenne</div>
+          <div class="stat-val" style="color:var(--amber)">${stats.avg}°C</div></div>`;
+    }
+    if(infoEl) infoEl.textContent=`${data.length} points · min ${stats.min||'—'}°C max ${stats.max||'—'}°C`;
+  } catch(e){ if(infoEl) infoEl.textContent='Erreur : '+e.message; }
+}
+
+function exportCSV(){
+  const ch=document.getElementById('hist-channel')?.value||'ANA0';
+  const h=document.getElementById('hist-hours')?.value||24;
+  window.open(`/api/analog/history/csv?channel=${ch}&hours=${h}`,'_blank');
+}
+
+// ═══════════════════════════════════════════════════════════
+// MINI CHARTS TEMPS RÉEL
+// ═══════════════════════════════════════════════════════════
+function buildMiniCharts(analog){
+  const grid=document.getElementById('mini-charts-grid');
+  if(!grid||grid.children.length>0) return;
+  const list=Object.entries(analog).sort((a,b)=>parseInt(a[0].slice(3))-parseInt(b[0].slice(3)));
+  list.forEach(([id,v],i)=>{
+    const card=document.createElement('div');
+    card.className='mini-chart-card';
+    card.innerHTML=`<div class="mini-chart-name">
+        <span>${v.name||id}</span>
+        <span class="mini-chart-temp" id="mc-val-${id}">—</span>
+      </div>
+      <canvas id="mc-${id}" height="55"></canvas>`;
+    grid.appendChild(card);
+    const miniCtx = card.querySelector('canvas').getContext('2d');
+    const existingMiniS = Chart.getChart(miniCtx.canvas);
+    if (existingMiniS) existingMiniS.destroy();
+    miniCharts[id]=new Chart(miniCtx,{
+      type:'line',
+      data:{datasets:[{data:[],borderColor:CHART_COLORS[i%12],borderWidth:1.5,
+        pointRadius:0,tension:0.3,fill:{target:'origin',above:CHART_COLORS[i%12]+'18'}}]},
+      options:{animation:false,parsing:false,
+        scales:{x:{type:'time',display:false},
+          y:{ticks:{color:'#484f58',font:{size:9},maxTicksLimit:3},grid:{color:'#21262d'}}},
+        plugins:{legend:{display:false},tooltip:{enabled:false}}}
+    });
+  });
+
+  // Remplir selector historique
+  const sel=document.getElementById('hist-channel');
+  if(sel&&sel.children.length===0){
+    list.forEach(([id,v])=>{
+      const o=document.createElement('option');
+      o.value=id; o.textContent=v.name||id;
+      sel.appendChild(o);
+    });
+  }
+}
+
+function updateRtBuffers(analog){
+  const now=Date.now();
+  Object.entries(analog).forEach(([id,v])=>{
+    if(!rtBuffers[id]) rtBuffers[id]=[];
+    const t=v.celsius;
+    if(t!=null&&!isNaN(t)){ rtBuffers[id].push({x:now,y:t}); if(rtBuffers[id].length>RT_MAX) rtBuffers[id].shift(); }
+  });
+  buildMiniCharts(analog);
+}
+
+function updateMiniCharts(){
+  Object.entries(miniCharts).forEach(([id,ch])=>{
+    ch.data.datasets[0].data=(rtBuffers[id]||[]).map(p=>({x:p.x,y:p.y}));
+    ch.update('none');
+    const t=(rtBuffers[id]||[]).at(-1)?.y;
+    const el=document.getElementById(`mc-val-${id}`);
+    if(el) el.textContent=t!=null?t.toFixed(1)+'°C':'—';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// ALARMES
+// ═══════════════════════════════════════════════════════════
+function updateAlarms(analog, s){
+  alarmThreshold=parseFloat(document.getElementById('alarm-threshold')?.value||85);
+  alarmLow=parseFloat(document.getElementById('alarm-low')?.value||5);
+  const now=Date.now();
+  Object.entries(analog).forEach(([id,v])=>{
+    const t=v.celsius;
+    if(t==null||isNaN(t)) return;
+    if(t>alarmThreshold){
+      addAlarm(id,'high',`${v.name||id} : ${t.toFixed(1)}°C > seuil ${alarmThreshold}°C`,now);
+    } else if(t<alarmLow){
+      addAlarm(id,'low',`${v.name||id} : ${t.toFixed(1)}°C < seuil bas ${alarmLow}°C`,now);
+    } else {
+      clearAlarmFor(id);
+    }
+  });
+  renderAlarms();
+}
+
+function addAlarm(id,type,msg,ts){
+  const key=`${id}-${type}`;
+  if(!alarms.find(a=>a.id===key)){
+    alarms.push({id:key,ch:id,type,msg,ts,acked:false});
+    alarmLog.unshift({ts,msg});
+    if(alarmLog.length>100) alarmLog.pop();
+  }
+}
+
+function clearAlarmFor(id){
+  ['high','low'].forEach(t=>{
+    const key=`${id}-${t}`;
+    alarms=alarms.filter(a=>a.id!==key);
+  });
+}
+
+function renderAlarms(){
+  const list=document.getElementById('alarm-list');
+  const cnt=document.getElementById('alarm-count-txt');
+  const active=alarms.filter(a=>!a.acked);
+  if(cnt) cnt.textContent=active.length?`${active.length} alarme(s) active(s)`:'Aucune alarme active';
+  if(!list) return;
+  list.innerHTML='';
+  alarms.forEach(a=>{
+    const d=document.createElement('div');
+    d.style.cssText=`display:flex;align-items:center;gap:12px;padding:12px 16px;
+      background:${a.acked?'var(--bg3)':'#2a1010'};
+      border:1px solid ${a.acked?'var(--border)':'var(--red)'};border-radius:var(--r);`;
+    const dt=new Date(a.ts).toLocaleTimeString('fr');
+    d.innerHTML=`<span style="font-size:18px">${a.type==='high'?'🔴':'🔵'}</span>
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${a.msg}</div>
+        <div style="font-size:11px;color:var(--text2)">${dt}</div></div>
+      ${a.acked?'<span style="color:var(--text3);font-size:11px">Acquitté</span>':
+        `<button class="alarm-ack" onclick="ackAlarm('${a.id}')">Acquitter</button>`}`;
+    list.appendChild(d);
+  });
+  const log=document.getElementById('alarm-log');
+  if(log) log.innerHTML=alarmLog.slice(0,50).map(e=>{
+    const dt=new Date(e.ts).toLocaleString('fr');
+    return `<div>[${dt}] ${e.msg}</div>`;
+  }).join('');
+}
+
+function ackAlarm(id){ const a=alarms.find(x=>x.id===id); if(a) a.acked=true; renderAlarms(); }
+function clearAlarms(){ alarms=[]; renderAlarms(); }
+
+// ═══════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════
+async function api(url, method='GET', body=null){
+  try{
+    const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},
+      body:body?JSON.stringify(body):null});
+    return await r.json();
+  } catch(e){ toast('Erreur réseau','err'); return null; }
+}
+
+function toggleRelay(pin, val, ev){
+  if(ev) ev.stopPropagation();
+  _setRelayOptimistic(pin, val);
+}
+
+async function applySetpoint(ref){
+  const sps=document.getElementById(`sp-range-${ref}`)||document.getElementById(`sp-num-${ref}`);
+  const val=parseFloat(sps?.value||0);
+  const r=await api('/api/register/write','POST',{ref,value:val});
+  if(r?.ok) toast(`${ref} = ${val}`,'ok');
+  else toast('Erreur écriture','err');
+}
+
+function resetSetpoint(ref, orig){
+  const sps=document.getElementById(`sp-range-${ref}`);
+  const spn=document.getElementById(`sp-num-${ref}`);
+  if(sps) sps.value=orig;
+  if(spn) spn.value=orig;
+}
+
+async function writeMem(ref,val){
+  const r=await api('/api/memory/write','POST',{ref,value:val});
+  if(r?.ok) toast(`${ref} = ${val?'1':'0'}`,'ok');
+}
+
+async function setScanTime(){
+  const ms=parseInt(document.getElementById('scan-slider').value);
+  const r=await api('/api/plc/scan_time','POST',{ms});
+  if(r?.ok) toast(`Scan = ${r.ms}ms`,'ok');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+let toastTimer=null;
+function toast(msg, type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.className='',2500);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function showTab(name, el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.getElementById('page-'+name)?.classList.add('active');
+  if(name==='historique')   setTimeout(loadHistory, 100);
+  if(name==='recettes')     setTimeout(loadRecipes, 100);
+  if(name==='sauvegardes')  setTimeout(loadBackups, 100);
+  if(name==='telegram')     setTimeout(loadTgConfig, 100);
+  if(name==='securite')     setTimeout(loadSecConfig, 100);
+  if(name==='calibration')  setTimeout(loadCalibration, 100);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RECETTES
+// ═══════════════════════════════════════════════════════════
+async function loadRecipes(){
+  const d = await api('/api/recipes');
+  const el = document.getElementById('recipes-list');
+  if(!el) return;
+  el.innerHTML='';
+  const names = Object.keys(d||{}).sort();
+  if(!names.length){
+    el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px">Aucune recette. Créer en capturant l&#39;état actuel.</div>';
+    return;
+  }
+  names.forEach(name=>{
+    const r=d[name];
+    const spCount=Object.keys(r.setpoints||{}).length;
+    const div=document.createElement('div');
+    div.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:12px;';
+    div.innerHTML=`
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600">${name}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${r.description||'—'} · ${spCount} consignes · ${r.created?.slice(0,10)||''}</div>
+      </div>
+      <button class="btn success" onclick="applyRecipe('${name.replace(/'/g,"\'")}')">▶ Appliquer</button>
+      <button class="btn" onclick="deleteRecipe('${name.replace(/'/g,"\'")}')">✕</button>`;
+    el.appendChild(div);
+  });
+}
+
+function showNewRecipeForm(){
+  document.getElementById('recipe-form-wrap').style.display='block';
+  document.getElementById('rcp-name').focus();
+}
+
+async function saveSnapshot(){
+  const name=document.getElementById('rcp-name').value.trim();
+  if(!name){ toast('Nom requis','err'); return; }
+  const desc=document.getElementById('rcp-desc').value.trim();
+  const r=await api('/api/recipes/snapshot','POST',{name,description:desc});
+  if(r?.ok){ toast(`Recette "${name}" sauvegardée`,'ok'); loadRecipes(); }
+  else toast('Erreur','err');
+}
+
+function openManualRecipe(){
+  const grid=document.getElementById('manual-sp-grid');
+  const regs=state.registers||{};
+  grid.innerHTML='';
+  Object.keys(regs).sort((a,b)=>parseInt(a.slice(2))-parseInt(b.slice(2))).forEach(k=>{
+    grid.innerHTML+=`<div>
+      <label style="font-size:11px;color:var(--text2)">${k}</label>
+      <input type="number" id="mrcp-${k}" value="${(regs[k]||0).toFixed(1)}" step="0.1"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--amber);padding:6px 8px;border-radius:var(--r2);font-size:13px;">
+    </div>`;
+  });
+  document.getElementById('manual-recipe-form').style.display='block';
+}
+
+async function saveManualRecipe(){
+  const name=document.getElementById('rcp-name').value.trim();
+  if(!name){ toast('Nom requis','err'); return; }
+  const desc=document.getElementById('rcp-desc').value.trim();
+  const setpoints={};
+  document.querySelectorAll('[id^="mrcp-"]').forEach(el=>{
+    setpoints[el.id.replace('mrcp-','')]=parseFloat(el.value)||0;
+  });
+  const r=await api('/api/recipes/save','POST',{name,description:desc,setpoints});
+  if(r?.ok){ toast(`Recette "${name}" sauvegardée`,'ok'); loadRecipes(); document.getElementById('manual-recipe-form').style.display='none'; }
+  else toast('Erreur','err');
+}
+
+async function applyRecipe(name){
+  const r=await api('/api/recipes/apply','POST',{name});
+  if(r?.ok) toast(`✅ Recette "${name}" appliquée`,'ok');
+  else toast('Erreur application recette','err');
+}
+
+async function deleteRecipe(name){
+  if(!confirm(`Supprimer la recette "${name}" ?`)) return;
+  const r=await api('/api/recipes/delete','POST',{name});
+  if(r?.ok){ toast(`Recette supprimée`,'ok'); loadRecipes(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SAUVEGARDES
+// ═══════════════════════════════════════════════════════════
+async function loadBackups(){
+  const list=await api('/api/backup/list');
+  const el=document.getElementById('backup-list');
+  if(!el) return;
+  el.innerHTML='';
+  if(!list?.length){
+    el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px">Aucune sauvegarde. Cliquer "Sauvegarder maintenant".</div>';
+    return;
+  }
+  list.forEach((b,i)=>{
+    const div=document.createElement('div');
+    div.style.cssText='background:var(--bg2);border:1px solid '+(i===0?'var(--green)':'var(--border)')+';border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:12px;';
+    div.innerHTML=`
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600">${b.label||b.id} ${i===0?'<span style="color:var(--green);font-size:10px;margin-left:6px">RÉCENT</span>':''}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px">${b.date} · ${b.blocks} blocs · ${Math.round(b.size/1024*10)/10} Ko</div>
+      </div>
+      <a href="/api/backup/download/${b.id}" class="btn" download>⬇</a>
+      <button class="btn primary" onclick="restoreBackup('${b.id}','${b.label||b.id}')">↩ Restaurer</button>
+      <button class="btn danger"  onclick="deleteBackup('${b.id}')">✕</button>`;
+    el.appendChild(div);
+  });
+}
+
+async function saveBackup(){
+  const label=document.getElementById('backup-label')?.value.trim()||'';
+  const r=await api('/api/backup/save','POST',{label});
+  if(r?.ok){ toast('💾 Sauvegarde créée','ok'); loadBackups(); }
+  else toast('Erreur sauvegarde','err');
+}
+
+async function restoreBackup(id, label){
+  if(!confirm(`Restaurer la sauvegarde "${label}" ?\nLe programme actuel sera remplacé.`)) return;
+  const r=await api('/api/backup/restore','POST',{id});
+  if(r?.ok) toast(`↩ Programme restauré (${r.blocks} blocs)`,'ok');
+  else toast('Erreur restauration','err');
+}
+
+async function deleteBackup(id){
+  if(!confirm('Supprimer cette sauvegarde ?')) return;
+  const r=await api('/api/backup/delete','POST',{id});
+  if(r?.ok){ toast('Sauvegarde supprimée','ok'); loadBackups(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// TELEGRAM
+// ═══════════════════════════════════════════════════════════
+async function loadTgConfig(){
+  const d=await api('/api/telegram/config');
+  if(!d) return;
+  const ti=document.getElementById('tg-enabled');
+  const tt=document.getElementById('tg-token');
+  const tc=document.getElementById('tg-chatids');
+  const th=document.getElementById('tg-high');
+  const tl=document.getElementById('tg-low');
+  const th2=document.getElementById('tg-hour');
+  const tr=document.getElementById('tg-report');
+  if(ti) ti.checked=d.enabled||false;
+  if(tt&&d.has_token) tt.placeholder='(token configuré ✓)';
+  if(tc) tc.value=(d.chat_ids||[]).join('\n');
+  if(th) th.value=d.alarm_high||85;
+  if(tl) tl.value=d.alarm_low||3;
+  if(th2) th2.value=d.report_hour??8;
+  if(tr) tr.checked=d.report_enabled!==false;
+  // Afficher statut bot
+  const statusEl=document.getElementById('tg-status');
+  if(statusEl){
+    if(d.enabled && d.has_token){
+      statusEl.textContent=d.bot_running?'🟢 Bot actif':'🟡 Bot configuré (redémarrage requis)';
+      statusEl.style.color=d.bot_running?'var(--green)':'var(--amber)';
+    } else if(!d.has_token){
+      statusEl.textContent='⚪ Token non configuré';
+      statusEl.style.color='var(--text2)';
+    } else {
+      statusEl.textContent='⚫ Bot désactivé';
+      statusEl.style.color='var(--text3)';
+    }
+  }
+}
+
+async function saveTgConfig(){
+  const tokenVal=document.getElementById('tg-token')?.value.trim()||'';
+  const payload={
+    enabled: document.getElementById('tg-enabled')?.checked||false,
+    chat_ids:(document.getElementById('tg-chatids')?.value||'').split('\n').map(s=>s.trim()).filter(Boolean),
+  };
+  if(tokenVal) payload.token=tokenVal; // n'envoyer que si rempli (préserver l'existant)
+  const r=await api('/api/telegram/config','POST',payload);
+  if(r?.ok){
+    toast('✅ Config Telegram sauvegardée — bot '+(r.running?'actif':'en cours de démarrage'),'ok');
+    if(tokenVal){ document.getElementById('tg-token').value=''; }
+    setTimeout(loadTgConfig, 1500); // rafraîchir statut
+  } else toast('❌ Erreur sauvegarde','err');
+}
+
+async function saveTgAlarms(){
+  const payload={
+    alarm_high:    parseFloat(document.getElementById('tg-high')?.value||85),
+    alarm_low:     parseFloat(document.getElementById('tg-low')?.value||3),
+    report_hour:   parseInt(document.getElementById('tg-hour')?.value||8),
+    report_enabled:document.getElementById('tg-report')?.checked||false,
+  };
+  const r=await api('/api/telegram/config','POST',payload);
+  if(r?.ok) toast('Seuils alarme mis à jour','ok');
+  else toast('Erreur','err');
+}
+
+async function testTelegram(){
+  toast('Envoi test...','info');
+  const r=await api('/api/telegram/test','POST');
+  if(r?.ok) toast('✅ Message test envoyé !','ok');
+  else toast('❌ '+(r?.error||'Erreur Telegram — vérifier token et chat_id'),'err');
+  loadTgConfig(); // rafraîchir statut
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+fetch('/api/state').then(r=>r.json()).then(s=>{state=s;renderAll(s);}).catch(()=>{});
+setInterval(()=>{ if(!socket.connected) fetch('/api/state').then(r=>r.json()).then(s=>{state=s;renderAll(s);}).catch(()=>{}); },5000);
+
+// ═══════════════════════════════════════════════════════════
+// SÉCURITÉ
+// ═══════════════════════════════════════════════════════════
+async function loadSecConfig(){
+  const d = await api('/api/auth/status');
+  if(!d) return;
+  const se = document.getElementById('sec-enabled');
+  const sh = document.getElementById('sec-https');
+  const su = document.getElementById('sec-user');
+  if(se) se.checked  = d.enabled||false;
+  if(sh) sh.checked  = d.https||false;
+  if(su) su.value    = d.username||'admin';
+}
+
+async function saveSecConfig(){
+  const p1 = document.getElementById('sec-pass')?.value||'';
+  const p2 = document.getElementById('sec-pass2')?.value||'';
+  if(p1 && p1 !== p2){ toast('Mots de passe différents','err'); return; }
+  const payload = {
+    enabled:  document.getElementById('sec-enabled')?.checked||false,
+    https:    document.getElementById('sec-https')?.checked||false,
+    username: document.getElementById('sec-user')?.value||'admin',
+  };
+  if(p1) payload.password = p1;
+  const r = await api('/api/auth/config','POST',payload);
+  if(r?.ok){
+    toast('Config sécurité sauvegardée — redémarrer le service pour appliquer','ok');
+    document.getElementById('sec-pass').value='';
+    document.getElementById('sec-pass2').value='';
+  } else toast('Erreur','err');
+}
+
+async function logout(){
+  await api('/api/logout','POST');
+  window.location.href='/login';
+}
+
+// Mettre à jour showTab
+const _origShowTab = showTab;
+// ═══════════════════════════════════════════════════════════
+// PWA Service Worker
+// ═══════════════════════════════════════════════════════════
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>

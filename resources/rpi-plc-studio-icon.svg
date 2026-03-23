@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Fond arrondi -->
+  <rect width="512" height="512" rx="96" fill="#0d1117"/>
+
+  <!-- Broches HAUT (entrées — bleu) -->
+  <rect x="152" y="56"  width="36" height="60" rx="8" fill="#1a3a5c"/>
+  <rect x="238" y="56"  width="36" height="60" rx="8" fill="#1a3a5c"/>
+  <rect x="324" y="56"  width="36" height="60" rx="8" fill="#1a3a5c"/>
+  <!-- Caps haut -->
+  <rect x="152" y="56"  width="36" height="14" rx="7" fill="#58a6ff"/>
+  <rect x="238" y="56"  width="36" height="14" rx="7" fill="#58a6ff"/>
+  <rect x="324" y="56"  width="36" height="14" rx="7" fill="#58a6ff"/>
+
+  <!-- Broches BAS (sorties — vert) -->
+  <rect x="152" y="396" width="36" height="60" rx="8" fill="#1a3a2a"/>
+  <rect x="238" y="396" width="36" height="60" rx="8" fill="#1a3a2a"/>
+  <rect x="324" y="396" width="36" height="60" rx="8" fill="#1a3a2a"/>
+  <!-- Caps bas -->
+  <rect x="152" y="442" width="36" height="14" rx="7" fill="#3fb950"/>
+  <rect x="238" y="442" width="36" height="14" rx="7" fill="#3fb950"/>
+  <rect x="324" y="442" width="36" height="14" rx="7" fill="#3fb950"/>
+
+  <!-- Broches GAUCHE (analogiques — violet) -->
+  <rect x="56"  y="152" width="60" height="36" rx="8" fill="#2a1a4a"/>
+  <rect x="56"  y="238" width="60" height="36" rx="8" fill="#2a1a4a"/>
+  <rect x="56"  y="324" width="60" height="36" rx="8" fill="#2a1a4a"/>
+  <!-- Caps gauche -->
+  <rect x="56"  y="152" width="14" height="36" rx="7" fill="#bc8cff"/>
+  <rect x="56"  y="238" width="14" height="36" rx="7" fill="#bc8cff"/>
+  <rect x="56"  y="324" width="14" height="36" rx="7" fill="#bc8cff"/>
+
+  <!-- Broches DROITE (alarmes — orange) -->
+  <rect x="396" y="152" width="60" height="36" rx="8" fill="#3a2010"/>
+  <rect x="396" y="238" width="60" height="36" rx="8" fill="#3a2010"/>
+  <rect x="396" y="324" width="60" height="36" rx="8" fill="#3a2010"/>
+  <!-- Caps droite -->
+  <rect x="442" y="152" width="14" height="36" rx="7" fill="#f0883e"/>
+  <rect x="442" y="238" width="14" height="36" rx="7" fill="#f0883e"/>
+  <rect x="442" y="324" width="14" height="36" rx="7" fill="#f0883e"/>
+
+  <!-- Corps du chip -->
+  <rect x="116" y="116" width="280" height="280" rx="24" fill="#161b22" stroke="#21262d" stroke-width="3"/>
+
+  <!-- Repère coin (point de broche 1) -->
+  <circle cx="140" cy="140" r="10" fill="#30363d"/>
+
+  <!-- Texte RPi -->
+  <text x="256" y="224"
+    font-family="'JetBrains Mono', 'Consolas', monospace"
+    font-size="64" font-weight="700"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="#58a6ff">RPi</text>
+
+  <!-- Texte PLC -->
+  <text x="256" y="306"
+    font-family="'JetBrains Mono', 'Consolas', monospace"
+    font-size="72" font-weight="700"
+    text-anchor="middle" dominant-baseline="middle"
+    fill="#3fb950">PLC</text>
+
+  <!-- LED status (coin haut-droit) -->
+  <circle cx="372" cy="140" r="12" fill="#3fb950" opacity="0.9"/>
+  <circle cx="372" cy="140" r="6"  fill="#ffffff" opacity="0.3"/>
+</svg>

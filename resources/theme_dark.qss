@@ -1,0 +1,72 @@
+/* ═══════════════════════════════════════════════
+   RPi-PLC Studio — Thème sombre industriel
+   ═══════════════════════════════════════════════ */
+QWidget{background:#0d1117;color:#e6edf3;font-family:"Segoe UI","Arial",sans-serif;font-size:11px;}
+QMainWindow{background:#0d1117;}
+QMenuBar{background:#161b22;color:#c9d1d9;border-bottom:2px solid #21262d;padding:2px 4px;}
+QMenuBar::item{padding:5px 14px;border-radius:4px;color:#c9d1d9;}
+QMenuBar::item:selected{background:#1f6feb;color:#fff;}
+QMenu{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:4px;color:#e6edf3;}
+QMenu::item{padding:6px 18px;border-radius:4px;color:#c9d1d9;}
+QMenu::item:selected{background:#1c2128;color:#58a6ff;}
+QMenu::separator{height:1px;background:#21262d;margin:4px 8px;}
+QToolBar{background:#161b22;border-bottom:2px solid #21262d;spacing:4px;padding:4px 10px;}
+QToolButton{background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 10px;color:#8b949e;font-size:11px;}
+QToolButton:hover{background:#21262d;border-color:#30363d;color:#e6edf3;}
+QToolButton:pressed{background:#0d1117;border-color:#58a6ff;color:#58a6ff;}
+QToolButton:checked{background:#0d2d0d;border-color:#3fb950;color:#3fb950;}
+QDockWidget::title{background:#161b22;color:#8b949e;padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #21262d;}
+QTabWidget::pane{border:1px solid #21262d;background:#0d1117;border-radius:0 8px 8px 8px;}
+QTabBar::tab{background:#0d1117;border:1px solid #21262d;border-bottom:none;padding:6px 18px;border-radius:7px 7px 0 0;color:#8b949e;font-size:10px;font-weight:600;}
+QTabBar::tab:selected{background:#161b22;color:#58a6ff;border-top:2px solid #58a6ff;}
+QTabBar::tab:hover:!selected{color:#e6edf3;background:#1c2128;}
+QPushButton{background:#21262d;border:1px solid #30363d;border-radius:7px;padding:5px 16px;color:#e6edf3;font-size:11px;font-weight:500;}
+QPushButton:hover{border-color:#58a6ff;color:#58a6ff;background:#0d1f35;}
+QPushButton:pressed{background:#0d1117;}
+QPushButton:disabled{color:#484f58;border-color:#21262d;}
+QPushButton#btn_start{background:#0d2d0d;border-color:#3fb950;color:#3fb950;font-weight:700;}
+QPushButton#btn_start:hover{background:#1a4a1a;}
+QPushButton#btn_stop{background:#2d0d0d;border-color:#f85149;color:#f85149;font-weight:700;}
+QPushButton#btn_stop:hover{background:#4a1a1a;}
+QPushButton#btn_deploy{background:#0d1f3d;border-color:#58a6ff;color:#58a6ff;font-weight:700;}
+QPushButton#btn_deploy:hover{background:#1a2f55;}
+QLineEdit,QSpinBox,QDoubleSpinBox,QComboBox{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:4px 10px;color:#e6edf3;selection-background-color:#0d3a6e;selection-color:#c8e6ff;}
+QLineEdit:focus,QSpinBox:focus,QDoubleSpinBox:focus,QComboBox:focus{border-color:#58a6ff;background:#0d1f35;}
+QLineEdit:hover,QSpinBox:hover,QComboBox:hover{border-color:#4a7fa8;}
+QComboBox::drop-down{border:none;width:22px;background:transparent;}
+QComboBox QAbstractItemView{background:#161b22;border:1px solid #30363d;border-radius:6px;selection-background-color:#1c2128;selection-color:#58a6ff;color:#e6edf3;}
+QCheckBox{spacing:7px;color:#e6edf3;}
+QCheckBox::indicator{width:15px;height:15px;border:2px solid #30363d;border-radius:4px;background:#161b22;}
+QCheckBox::indicator:hover{border-color:#58a6ff;}
+QCheckBox::indicator:checked{background:#1f6feb;border-color:#58a6ff;}
+QSlider::groove:horizontal{height:5px;background:#21262d;border-radius:3px;}
+QSlider::handle:horizontal{width:16px;height:16px;background:#58a6ff;border-radius:8px;margin:-6px 0;border:2px solid #0d1117;}
+QSlider::sub-page:horizontal{background:#1f6feb;border-radius:3px;}
+QListWidget,QTreeWidget,QTableWidget{background:#0d1117;border:1px solid #21262d;border-radius:8px;alternate-background-color:#161b22;gridline-color:#21262d;color:#e6edf3;}
+QListWidget::item,QTreeWidget::item{padding:5px 8px;border-radius:4px;color:#c9d1d9;}
+QListWidget::item:selected,QTreeWidget::item:selected{background:#1f3a5f;color:#58a6ff;}
+QListWidget::item:hover,QTreeWidget::item:hover{background:#1c2128;}
+QHeaderView::section{background:#161b22;color:#8b949e;border:none;border-bottom:1px solid #30363d;padding:6px 10px;font-weight:600;font-size:10px;}
+QSplitter::handle{background:#21262d;width:3px;height:3px;}
+QSplitter::handle:hover{background:#58a6ff;}
+QScrollBar:vertical{background:#0d1117;width:8px;border-radius:4px;}
+QScrollBar::handle:vertical{background:#30363d;border-radius:4px;min-height:24px;}
+QScrollBar::handle:vertical:hover{background:#58a6ff;}
+QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}
+QScrollBar:horizontal{background:#0d1117;height:8px;border-radius:4px;}
+QScrollBar::handle:horizontal{background:#30363d;border-radius:4px;min-width:24px;}
+QScrollBar::handle:horizontal:hover{background:#58a6ff;}
+QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{width:0;}
+QTextEdit{background:#0d1117;border:1px solid #21262d;border-radius:8px;color:#3fb950;font-family:"JetBrains Mono","Fira Code",monospace;font-size:10px;selection-background-color:#0d3a6e;padding:6px;}
+QLabel{color:#8b949e;font-size:11px;background:transparent;}
+QLabel#title_label{color:#e6edf3;font-size:14px;font-weight:700;}
+QLabel#section_label{color:#58a6ff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;}
+QStatusBar{background:#161b22;border-top:1px solid #21262d;color:#8b949e;font-size:10px;}
+QStatusBar::item{border:none;}
+QGroupBox{border:1px solid #21262d;border-radius:8px;margin-top:1.2em;padding:10px 8px 8px 8px;color:#8b949e;font-size:10px;font-weight:700;text-transform:uppercase;background:#0d1117;}
+QGroupBox::title{subcontrol-origin:margin;subcontrol-position:top left;padding:0 8px;left:12px;color:#58a6ff;background:#0d1117;}
+QProgressBar{background:#21262d;border:none;border-radius:4px;height:7px;color:transparent;}
+QProgressBar::chunk{background:#1f6feb;border-radius:4px;}
+QToolTip{background:#161b22;border:1px solid #30363d;border-radius:6px;color:#e6edf3;padding:5px 10px;font-size:10px;}
+QFrame{background:transparent;}
+QToolBar::separator{width:1px;background:#30363d;margin:4px 6px;}

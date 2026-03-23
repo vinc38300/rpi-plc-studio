@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Synoptique — RPi-PLC Studio</title>
+<style>
+:root {
+  --bg:#0d1117; --bg2:#161b22; --bg3:#1c2128; --bg4:#21262d;
+  --border:#30363d; --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
+  --purple:#bc8cff; --cyan:#00d4ff; --orange:#f0883e;
+  --r:8px; --font:'Segoe UI',system-ui,sans-serif;
+  --canvas-default-bg:#0d1117;
+}
+:root.theme-light {
+  --bg:#f0f2f5; --bg2:#ffffff; --bg3:#f1f5f9; --bg4:#e2e8f0;
+  --border:#d1d9e0; --text:#1a1f2e; --text2:#475569; --text3:#94a3b8;
+  --accent:#2563eb; --green:#059669; --red:#e11d48; --amber:#b45309;
+  --purple:#7c3aed; --cyan:#0891b2; --orange:#ea580c;
+  --canvas-default-bg:#f8fafc;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;flex-direction:column;font-size:13px;}
+
+/* TOOLBAR */
+#toolbar{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
+.tbtn{padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font);transition:all .15s;white-space:nowrap;}
+.tbtn:hover{border-color:var(--accent);color:var(--accent);}
+.tbtn.primary{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
+.tbtn.active{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
+/* Contrôles grille synoptique */
+.grid-group{display:flex;align-items:center;gap:4px;}
+.grid-lbl{font-size:9px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
+.grid-sel{height:24px;border-radius:4px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text2);font-size:10px;padding:0 5px;
+  cursor:pointer;outline:none;font-family:var(--font);}
+.grid-sel:hover,.grid-sel:focus{border-color:var(--accent);color:var(--accent);}
+.snap-btn{padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;
+  font-family:var(--font);transition:all .15s;white-space:nowrap;}
+.snap-btn.snap-on{border:1px solid var(--green);color:var(--green);background:rgba(63,185,80,.1);}
+.snap-btn.snap-off{border:1px solid var(--border);color:var(--text3);background:var(--bg3);}
+.mode-badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;}
+.mode-badge.edit{background:#1a2f45;color:var(--accent);border:1px solid var(--accent);}
+.mode-badge.view{background:#0d2010;color:var(--green);border:1px solid var(--green);}
+#tb-sep{flex:1;}
+#sim-badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:#0d2010;color:var(--green);border:1px solid var(--green);}
+#sim-badge.off{background:var(--bg3);color:var(--text3);border-color:var(--border);}
+.tb-div{width:1px;height:16px;background:var(--border);margin:0 2px;}
+
+/* WORKSPACE */
+.workspace{display:flex;flex:1;overflow:hidden;min-height:0;}
+
+/* SIDEBAR ongletée */
+.sidebar{width:205px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar.hidden{width:0;overflow:hidden;border:none;}
+.sb-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.sb-tab{flex:1;padding:5px 2px;text-align:center;cursor:pointer;font-size:14px;line-height:1.2;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s;user-select:none;}
+.sb-tab:hover{color:var(--text2);background:var(--bg3);}
+.sb-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--bg3);}
+.sb-panel{display:none;flex-direction:column;flex:1;overflow-y:auto;min-height:0;}
+.sb-panel.active{display:flex;}
+.sb-panel::-webkit-scrollbar{width:4px;}
+.sb-panel::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* Items widgets */
+.sb-section{padding:6px 10px 3px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
+.sb-item{display:flex;align-items:center;gap:7px;padding:5px 9px;cursor:grab;border-radius:5px;margin:1px 5px;transition:background .1s;font-size:11px;color:var(--text2);}
+.sb-item:hover{background:var(--bg3);color:var(--text);}
+.sb-item:active{cursor:grabbing;}
+.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:10px;flex-shrink:0;}
+
+/* Grille symboles */
+.sym-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:5px;}
+.sym-cell{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 2px;border-radius:5px;cursor:grab;border:1px solid transparent;transition:all .12s;background:var(--bg3);}
+.sym-cell:hover{border-color:var(--accent);background:var(--bg4);}
+.sym-cell:active{cursor:grabbing;}
+.sym-cell svg{width:34px;height:34px;}
+.sym-label{font-size:8px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
+
+/* Images */
+.img-bar{padding:5px 6px;flex-shrink:0;}
+.img-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;padding:0 6px 6px;}
+.img-thumb{position:relative;border-radius:5px;overflow:hidden;cursor:grab;border:1px solid var(--border);aspect-ratio:1;background:var(--bg3);}
+.img-thumb:hover{border-color:var(--accent);}
+.img-thumb img{width:100%;height:100%;object-fit:contain;}
+.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:10px;opacity:0;transition:opacity .15s;}
+.img-thumb:hover .img-del{opacity:1;}
+.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:8px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
+.img-empty{padding:18px;text-align:center;color:var(--text3);font-size:11px;line-height:1.9;}
+
+/* CANVAS */
+.canvas-wrap{flex:1;position:relative;overflow:hidden;}
+#syn-canvas{position:absolute;inset:0;display:block;}
+#widgets-html{position:absolute;inset:0;pointer-events:none;}
+
+/* PROPS */
+.props-panel{width:220px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+.props-panel.hidden{width:0;overflow:hidden;border:none;}
+.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
+.props-scroll{flex:1;overflow-y:auto;padding:8px;}
+.props-scroll::-webkit-scrollbar{width:4px;}
+.props-scroll::-webkit-scrollbar-thumb{background:var(--border);}
+.prop-section{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
+.prop-row{margin-bottom:6px;}
+.prop-label{font-size:10px;color:var(--text2);margin-bottom:2px;}
+.prop-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:5px;font-size:11px;font-family:var(--font);}
+.prop-input:focus{outline:none;border-color:var(--accent);}
+select.prop-input{cursor:pointer;}
+.prop-color{height:26px;padding:2px;border-radius:5px;cursor:pointer;}
+.delete-btn{width:100%;margin-top:10px;padding:6px;background:#2a1010;border:1px solid var(--red);color:var(--red);border-radius:var(--r);cursor:pointer;font-size:11px;font-family:var(--font);}
+.delete-btn:hover{background:#3a1515;}
+.no-sel{padding:16px;text-align:center;color:var(--text3);font-size:11px;line-height:1.9;}
+.chk-row{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--text2);margin-bottom:6px;}
+.chk-row input{accent-color:var(--accent);}
+
+/* ═══ SYMBOLES ANIMÉS ═══ */
+.anim-wrap{position:absolute;overflow:hidden;pointer-events:none;}
+.anim-wrap.edit-mode{outline:1px dashed #30363d;}
+
+/* Chaudière granulés */
+@keyframes flame1{0%,100%{d:path("M20 38 Q14 30 16 22 Q18 28 20 24 Q22 28 24 22 Q26 30 20 38Z");opacity:1;}50%{d:path("M20 38 Q13 28 17 20 Q19 27 20 23 Q21 27 23 20 Q27 28 20 38Z");opacity:.85;}}
+@keyframes flame2{0%,100%{d:path("M20 36 Q16 30 18 24 Q20 28 22 24 Q24 30 20 36Z");opacity:.7;}50%{d:path("M20 36 Q15 29 18 23 Q20 27 22 23 Q25 29 20 36Z");opacity:.5;}}
+@keyframes granule-move{0%{transform:translateY(0);}100%{transform:translateY(20px);}}
+@keyframes vis-rotate{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+@keyframes smoke{0%{transform:translateY(0) scale(1);opacity:.5;}100%{transform:translateY(-18px) scale(1.8);opacity:0;}}
+
+/* Circulateur */
+@keyframes circ-spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+@keyframes flow-dash{0%{stroke-dashoffset:24;}100%{stroke-dashoffset:0;}}
+
+/* Vanne 3 voies */
+@keyframes valve3-open{0%,100%{transform:rotate(-45deg);}50%{transform:rotate(0deg);}}
+@keyframes valve3-close{0%,100%{transform:rotate(0deg);}50%{transform:rotate(-45deg);}}
+
+/* Flux tuyau animé */
+@keyframes pipe-flow{0%{stroke-dashoffset:30;}100%{stroke-dashoffset:0;}}
+
+/* TOAST */
+#toast{position:fixed;bottom:40px;right:12px;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 14px;font-size:11px;opacity:0;transition:opacity .3s;pointer-events:none;}
+#toast.show{opacity:1;}
+#toast.ok{border-color:var(--green);color:var(--green);}
+#toast.err{border-color:var(--red);color:var(--red);}
+#toast.info{border-color:var(--accent);color:var(--accent);}
+#img-file-input{display:none;}
+
+/* ═══ BARRE DE PAGES (bas du canvas) ═══ */
+#pages-bar{
+  display:flex;align-items:center;gap:4px;padding:3px 8px;
+  background:var(--bg2);border-top:1px solid var(--border);
+  flex-shrink:0;min-height:30px;flex-wrap:nowrap;overflow-x:auto;
+}
+.page-tab{
+  padding:3px 12px;border-radius:5px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg3);
+  color:var(--text2);font-size:10px;font-weight:600;
+  white-space:nowrap;transition:all .15s;user-select:none;
+}
+.page-tab:hover{border-color:var(--accent);color:var(--accent);}
+.page-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.page-tab.edit-mode-tab{border-style:dashed;}
+.page-tab-add{
+  padding:2px 8px;border-radius:5px;cursor:pointer;
+  border:1px dashed var(--border);background:transparent;
+  color:var(--text3);font-size:14px;line-height:1;
+  transition:all .15s;flex-shrink:0;
+}
+.page-tab-add:hover{border-color:var(--green);color:var(--green);}
+.page-tab-del{
+  padding:1px 5px;border-radius:3px;cursor:pointer;
+  background:transparent;border:none;color:var(--text3);
+  font-size:10px;margin-left:2px;
+}
+.page-tab-del:hover{color:var(--red);}
+.page-tab.popup-tab{border-style:dashed !important;}
+#pages-bar-sep{width:1px;height:16px;background:var(--border);margin:0 4px;flex-shrink:0;}
+
+/* ═══ POPUP OVERLAY ═══ */
+#popup-overlay{
+  display:none;position:absolute;inset:0;z-index:900;
+  background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);
+  align-items:center;justify-content:center;
+}
+#popup-overlay.visible{display:flex;}
+#popup-frame{
+  position:relative;border-radius:12px;overflow:hidden;
+  box-shadow:0 8px 40px rgba(0,0,0,0.5);
+  border:1.5px solid var(--border);
+  min-width:300px;min-height:200px;
+  background:var(--bg);
+}
+#popup-canvas{display:block;}
+#popup-widgets-html{position:absolute;inset:0;pointer-events:none;}
+#popup-close-btn{
+  position:absolute;top:6px;right:8px;z-index:10;
+  width:24px;height:24px;border-radius:50%;
+  background:var(--bg3);border:1px solid var(--border);
+  color:var(--text2);font-size:13px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;line-height:1;
+}
+#popup-close-btn:hover{background:var(--red);border-color:var(--red);color:#fff;}
+#popup-title-bar{
+  position:absolute;top:0;left:0;right:32px;
+  padding:5px 10px;font-size:11px;font-weight:700;
+  color:var(--text2);letter-spacing:.3px;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  pointer-events:none;
+}
+
+/* ═══ BARRE DE NAVIGATION FIXE (top du canvas) ═══ */
+#nav-fixed-bar{
+  display:none; /* activé si showNavBar=true */
+  align-items:center;gap:6px;padding:4px 10px;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  flex-shrink:0;min-height:32px;
+}
+#nav-fixed-bar.visible{display:flex;}
+.nav-fixed-btn{
+  padding:3px 12px;border-radius:5px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg3);
+  color:var(--text2);font-size:10px;font-weight:600;
+  white-space:nowrap;transition:all .15s;
+}
+.nav-fixed-btn:hover{border-color:var(--accent);color:var(--accent);}
+.nav-fixed-btn.home{border-color:var(--accent);color:var(--accent);}
+.nav-breadcrumb{
+  display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3);
+  flex:1;overflow:hidden;
+}
+.nav-breadcrumb-sep{color:var(--border);}
+.nav-breadcrumb-item{color:var(--text2);cursor:pointer;}
+.nav-breadcrumb-item:hover{color:var(--accent);}
+.nav-breadcrumb-item.current{color:var(--text);font-weight:600;cursor:default;}
+.nav-back-btn{
+  padding:3px 10px;border-radius:5px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg3);
+  color:var(--text2);font-size:10px;
+  transition:all .15s;flex-shrink:0;
+}
+.nav-back-btn:hover{border-color:var(--accent);color:var(--accent);}
+.nav-back-btn:disabled{opacity:0.35;cursor:default;}
+#nav-bar-toggle{
+  padding:3px 8px;border-radius:5px;cursor:pointer;font-size:10px;
+  border:1px solid var(--border);background:var(--bg3);color:var(--text2);
+}
+#nav-bar-toggle.on{border-color:var(--green);color:var(--green);}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <span id="editBadge" class="mode-badge edit" onclick="toggleMode()" title="Tab">✏ Édition</span>
+  <div class="tb-div"></div>
+  <button class="tbtn primary" onclick="saveSynoptic()" title="Ctrl+S">💾 Sauvegarder</button>
+  <button class="tbtn" onclick="toggleGrid()" id="gridBtn">⊞ Grille</button>
+  <div class="grid-group">
+    <span class="grid-lbl">PAS</span>
+    <select class="grid-sel" id="syn-grid-select" title="Pas de la grille d'accroche" onchange="setSynGrid(parseInt(this.value))">
+      <option value="5">5 px</option>
+      <option value="10">10 px</option>
+      <option value="20" selected>20 px</option>
+      <option value="40">40 px</option>
+    </select>
+    <div class="snap-btn snap-on" id="syn-snap-btn" onclick="toggleSynSnap()" title="Activer/désactiver l'accroche">⊞ Snap</div>
+  </div>
+  <button class="tbtn" onclick="clearCanvas()">🗑 Effacer</button>
+  <div class="tb-div"></div>
+  <button class="tbtn" onclick="duplicateSelected()" title="Ctrl+D">⊕ Dupliquer</button>
+  <button class="tbtn" id="lock-btn" onclick="if(selected){selected.locked=!selected.locked;renderAll();_dirty=true;toast(selected.locked?'🔒 Verrouillé':'🔓 Déverrouillé','ok');}" title="Verrouiller / déverrouiller le widget sélectionné (Ctrl+L)">🔒</button>
+  <button class="tbtn" onclick="copySel()" title="Copier le widget (Ctrl+C)">⎘ Copier</button>
+  <button class="tbtn" onclick="pasteSel()" title="Coller le widget copié (Ctrl+V)">⎗ Coller</button>
+  <span id="syn-copy-flash" style="font-size:10px;color:#3fb950;opacity:0;transition:opacity 0.4s;margin:0 4px;pointer-events:none;"></span>
+  <button class="tbtn" onclick="bringToFront()">▲ Avant</button>
+  <button class="tbtn" onclick="sendToBack()">▼ Arrière</button>
+  <div class="tb-div"></div>
+  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (widget sélectionné comme référence)">⬤⟵</button>
+  <button class="tbtn" onclick="alignVCenter()" title="Centrer verticalement">⬤⟷</button>
+  <button class="tbtn" onclick="alignTop()"    title="Aligner en haut">⟰</button>
+  <div class="tb-div"></div>
+  <button class="tbtn" id="nav-bar-toggle" onclick="toggleNavBar()" title="Barre de navigation fixe">⊟ Nav</button>
+  <div id="tb-sep"></div>
+  <span id="sim-badge" class="off">◎ Simulation</span>
+  <button class="tbtn" onclick="_exportSynopticPNG()" title="Exporter le synoptique en image PNG"
+    style="background:#161b22;border-color:#d29922;color:#d29922;">📷 Export PNG</button>
+  <button class="tbtn" id="bg-img-btn" onclick="_openBgImagePicker()" title="Image de fond de cette page (JPG/PNG)" style="background:#1a1f0a;border-color:#7c3aed;color:#bc8cff;">🖼 Fond</button>
+  <button class="tbtn" onclick="openSimPanel()" style="margin-left:4px;background:#1a2f45;border-color:#58a6ff;color:#58a6ff;" title="Panneau simulation — saisir valeurs sondes, registres et bits mémoire">🧪 Sim. valeurs</button>
+  <span id="cycle-badge" style="font-size:10px;color:var(--text3);margin-left:4px;"></span>
+  <span id="rpi-conn-badge" style="display:none;font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid #f85149;color:#f85149;margin-left:6px;cursor:pointer;" onclick="showPageProps()" title="Cliquer pour configurer l'IP RPI">🔴 RPI</span>
+</div>
+
+<div id="nav-fixed-bar">
+  <button class="nav-back-btn" id="nav-back-btn" onclick="navBack()" title="Page précédente">← Retour</button>
+  <div class="nav-breadcrumb" id="nav-breadcrumb"></div>
+  <button class="nav-fixed-btn home" onclick="switchPage(0)" title="Page d'accueil">⌂</button>
+</div>
+
+<div class="workspace">
+  <!-- SIDEBAR ONGLETÉE -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-tabs">
+      <div class="sb-tab active" id="tab-widgets" onclick="switchTab('widgets')" title="Widgets PLC">📊<br><span style="font-size:8px;">Widgets</span></div>
+      <div class="sb-tab"        id="tab-symbols" onclick="switchTab('symbols')" title="Symboles P&ID">🏭<br><span style="font-size:8px;">P&amp;ID</span></div>
+      <div class="sb-tab"        id="tab-images"  onclick="switchTab('images')"  title="Images importées">🖼<br><span style="font-size:8px;">Images</span></div>
+    </div>
+    <div class="sb-tab" style="display:none" id="tab-label-row">
+      <span id="tab-label" style="font-size:9px;color:var(--text3);padding:2px 8px;display:block;border-bottom:1px solid var(--border);">Widgets PLC</span>
+    </div>
+
+    <!-- WIDGETS PLC -->
+    <div class="sb-panel active" id="panel-widgets" style="display:flex;flex-direction:column;">
+      <div class="sb-section">Mesures</div>
+      <div class="sb-item" draggable="true" data-type="temperature"><div class="sb-icon" style="background:color-mix(in srgb,var(--cyan) 15%,var(--bg3));color:var(--cyan)">🌡</div>Thermomètre</div>
+      <div class="sb-item" draggable="true" data-type="gauge"><div class="sb-icon" style="background:color-mix(in srgb,var(--purple) 15%,var(--bg3));color:var(--purple)">◎</div>Jauge circulaire</div>
+      <div class="sb-item" draggable="true" data-type="bar"><div class="sb-icon" style="background:color-mix(in srgb,var(--green) 15%,var(--bg3));color:var(--green)">▮</div>Barre de niveau</div>
+      <div class="sb-item" draggable="true" data-type="trend"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 15%,var(--bg3));color:var(--accent)">📈</div>Courbe tendance</div>
+      <div class="sb-item" draggable="true" data-type="value"><div class="sb-icon" style="background:var(--bg4);color:var(--text)">123</div>Valeur numérique</div>
+      <div class="sb-section">Commande</div>
+      <div class="sb-item" draggable="true" data-type="relay"><div class="sb-icon" style="background:color-mix(in srgb,var(--green) 15%,var(--bg3));color:var(--green)">⚡</div>Relais ON/OFF</div>
+      <div class="sb-item" draggable="true" data-type="setpoint"><div class="sb-icon" style="background:color-mix(in srgb,var(--amber) 15%,var(--bg3));color:var(--amber)">🎯</div>Consigne</div>
+      <div class="sb-item" draggable="true" data-type="numentry"><div class="sb-icon" style="background:color-mix(in srgb,#e06c75 15%,var(--bg3));color:#e06c75">✎</div>Saisie num.</div>
+      <div class="sb-item" draggable="true" data-type="button"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 15%,var(--bg3));color:var(--accent)">▶</div>Bouton action</div>
+      <div class="sb-item" draggable="true" data-type="toggle"><div class="sb-icon" style="background:color-mix(in srgb,var(--purple) 15%,var(--bg3));color:var(--purple)">⊙</div>Interrupteur M</div>
+      <div class="sb-item" draggable="true" data-type="dv_push"><div class="sb-icon" style="background:color-mix(in srgb,#f0883e 15%,var(--bg3));color:#f0883e">⏻</div>BP DV (poussoir)</div>
+      <div class="sb-item" draggable="true" data-type="cntdisplay"><div class="sb-icon" style="background:color-mix(in srgb,#50ff50 15%,var(--bg3));color:#50ff50">⏱</div>Compteur marche</div>
+      <div class="sb-item" draggable="true" data-type="dv_toggle"><div class="sb-icon" style="background:color-mix(in srgb,#56d364 15%,var(--bg3));color:#56d364">⇌</div>Interrupteur DV</div>
+      <div class="sb-section">Décoration</div>
+      <div class="sb-item" draggable="true" data-type="label"><div class="sb-icon" style="background:var(--bg4);color:var(--text2)">T</div>Texte libre</div>
+      <div class="sb-item" draggable="true" data-type="nav_back"><div class="sb-icon" style="background:color-mix(in srgb,var(--text2) 15%,var(--bg3));color:var(--text2)">←</div>Bouton Retour</div>
+      <div class="sb-item" draggable="true" data-type="nav_page"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 20%,var(--bg3));color:var(--accent)">→</div>Naviguer page</div>
+      <div class="sb-item" draggable="true" data-type="rect"><div class="sb-icon" style="background:var(--bg4);color:var(--text3)">□</div>Rectangle</div>
+      <div class="sb-item" draggable="true" data-type="pipe"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 15%,var(--bg3));color:var(--accent)">━</div>Tuyauterie</div>
+      <div class="sb-item" draggable="true" data-type="alarm_light"><div class="sb-icon" style="background:color-mix(in srgb,var(--red) 15%,var(--bg3));color:var(--red)">⬤</div>Voyant alarme</div>
+      <div class="sb-section" style="color:#bc8cff;">✏ Formes de dessin</div>
+      <div class="sb-item" draggable="true" data-type="draw_circle"><div class="sb-icon" style="background:color-mix(in srgb,#58a6ff 15%,var(--bg3));color:#58a6ff">●</div>Cercle / Ovale</div>
+      <div class="sb-item" draggable="true" data-type="draw_ellipse"><div class="sb-icon" style="background:color-mix(in srgb,#3fb950 15%,var(--bg3));color:#3fb950">⬭</div>Ellipse</div>
+      <div class="sb-item" draggable="true" data-type="draw_triangle"><div class="sb-icon" style="background:color-mix(in srgb,#bc8cff 15%,var(--bg3));color:#bc8cff">▲</div>Triangle</div>
+      <div class="sb-item" draggable="true" data-type="draw_line"><div class="sb-icon" style="background:color-mix(in srgb,#f0883e 15%,var(--bg3));color:#f0883e">╱</div>Ligne / Flèche</div>
+    </div>
+
+    <!-- SYMBOLES P&ID -->
+    <div class="sb-panel" id="panel-symbols" style="display:none;flex-direction:column;">
+      <div class="sb-section">Vannes</div>
+      <div class="sym-grid" id="sg-vannes"></div>
+      <div class="sb-section">Pompes / Moteurs</div>
+      <div class="sym-grid" id="sg-pompes"></div>
+      <div class="sb-section">Capteurs</div>
+      <div class="sym-grid" id="sg-capteurs"></div>
+      <div class="sb-section">Réservoirs</div>
+      <div class="sym-grid" id="sg-reservoirs"></div>
+      <div class="sb-section">Échangeurs</div>
+      <div class="sym-grid" id="sg-echangeurs"></div>
+      <div class="sb-section">Électrique</div>
+      <div class="sym-grid" id="sg-elec"></div>
+      <div class="sb-section" style="color:#f0883e;">⚡ Animés</div>
+      <div class="sym-grid" id="sg-anim"></div>
+    </div>
+
+    <!-- IMAGES -->
+    <div class="sb-panel" id="panel-images" style="display:none;flex-direction:column;">
+      <div class="img-bar">
+        <button class="tbtn primary" style="width:100%;font-size:11px;" onclick="document.getElementById('img-file-input').click()">＋ Importer image(s)</button>
+      </div>
+      <div id="img-grid" class="img-grid"></div>
+      <div id="img-empty" class="img-empty">Aucune image.<br><br>PNG · JPG · SVG · GIF · WebP<br><br>Intégrée en base64<br>dans le projet.</div>
+    </div>
+  </div>
+
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="syn-canvas"></canvas>
+    <div id="widgets-html"></div>
+    <!-- POPUP OVERLAY -->
+    <div id="popup-overlay" onclick="_popupOverlayClick(event)">
+      <div id="popup-frame">
+        <div id="popup-title-bar"></div>
+        <button id="popup-close-btn" onclick="closePopup()" title="Fermer">✕</button>
+        <canvas id="popup-canvas"></canvas>
+        <div id="popup-widgets-html"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="props-panel" id="propsPanel">
+    <div class="props-hdr">PROPRIÉTÉS</div>
+    <div class="props-scroll" id="propsBody">
+      <div class="no-sel" id="no-sel-hint">Cliquer sur un widget pour éditer ses propriétés.<br><br>Glisser depuis la palette pour ajouter.</div>
+      <div id="page-props-area" style="display:none;padding:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="pages-bar">
+  <!-- Rempli dynamiquement par renderPagesBar() -->
+</div>
+
+<div id="toast"></div>
+<input type="file" id="img-file-input" accept="image/*" multiple>
+
+<script src="synoptic_canvas.js"></script>
+
+<div id="sim-panel-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(3px);align-items:center;justify-content:center;">
+  <div style="background:#0d1117;border:1.5px solid #30363d;border-radius:14px;width:min(96vw,820px);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.8);overflow:hidden;">
+    <div style="display:flex;align-items:center;padding:10px 16px;background:#161b22;border-bottom:1px solid #30363d;flex-shrink:0;">
+      <span style="font-size:14px;font-weight:700;color:#58a6ff;">🧪 Simulation — Saisie directe des valeurs</span>
+      <div style="flex:1;"></div>
+      <button onclick="closeSimPanel()" style="background:#f85149;border:none;border-radius:6px;color:#fff;font-size:12px;padding:3px 10px;cursor:pointer;">✕ Fermer</button>
+    </div>
+    <div style="display:flex;gap:4px;padding:6px 12px;background:#0d1117;border-bottom:1px solid #21262d;flex-shrink:0;">
+      <button id="simtab-sondes" onclick="switchSimTab('sondes')" style="padding:4px 12px;border-radius:6px;border:1px solid #58a6ff;background:#1a2f45;color:#58a6ff;font-size:11px;cursor:pointer;">🌡 Sondes</button>
+      <button id="simtab-registres" onclick="switchSimTab('registres')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#8b949e;font-size:11px;cursor:pointer;">📊 Registres RF</button>
+      <button id="simtab-bits" onclick="switchSimTab('bits')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#8b949e;font-size:11px;cursor:pointer;">⚡ Bits M / GPIO</button>
+    </div>
+    <div id="sim-panel-body" style="overflow-y:auto;flex:1;padding:12px 16px;"></div>
+    <div style="padding:6px 16px;background:#161b22;border-top:1px solid #30363d;font-size:9px;color:#484f58;flex-shrink:0;">
+      Démarrer ▶ la simulation, puis utiliser ce panneau. Sondes : slider ou saisie directe en °C. Registres RF4/5/6/7/8/9/12 modifiables.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
