@@ -1,0 +1,7 @@
+
+# Fichiers cache système à ne jamais committer
+$~
+~
+.cache/
+*.kcache
+mesa_shader_cache/
