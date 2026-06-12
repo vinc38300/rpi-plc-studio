@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chaudière Maison — Documentation Utilisateur</title>
+<style>
+:root {
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;--bg4:#21262d;
+  --border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+  --accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922;
+  --purple:#bc8cff;--cyan:#00d4ff;--orange:#f0883e;
+  --r:8px;--font:'Segoe UI',system-ui,sans-serif;
+  --mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:15px;line-height:1.7;}
+
+nav{background:var(--bg2);border-right:1px solid var(--border);position:fixed;left:0;top:0;width:250px;height:100vh;overflow-y:auto;padding:0 0 40px;z-index:200;}
+nav::-webkit-scrollbar{width:4px;}
+nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.nav-logo{padding:18px 18px 14px;border-bottom:1px solid var(--border);}
+.nav-logo h1{font-size:16px;font-weight:800;color:var(--amber);}
+.nav-logo h1 span{color:var(--green);}
+.nav-logo p{font-size:11px;color:#6e7681;margin-top:2px;}
+.nav-section{padding:12px 18px 4px;font-size:10px;font-weight:700;color:#6e7681;text-transform:uppercase;letter-spacing:1.5px;}
+nav a{display:block;padding:5px 18px 5px 26px;font-size:13px;color:#c9d1d9;text-decoration:none;border-left:2px solid transparent;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+nav a:hover{color:#e6edf3;background:var(--bg3);}
+nav a.active{color:var(--accent);border-left-color:var(--accent);background:#0d1f35;}
+nav a.sub{padding-left:34px;font-size:12px;color:#aab4c0;}
+
+main{margin-left:250px;max-width:940px;padding:36px 44px 80px;}
+@media(max-width:860px){nav{display:none;}main{margin-left:0;padding:20px 16px;}}
+
+h1{font-size:30px;font-weight:800;color:var(--text);margin-bottom:12px;line-height:1.2;}
+h2{font-size:21px;font-weight:700;color:var(--text);margin-top:48px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:10px;}
+h2 .icon{font-size:19px;}
+h3{font-size:16px;font-weight:700;color:var(--accent);margin-top:26px;margin-bottom:8px;}
+h4{font-size:13px;font-weight:700;color:var(--amber);margin-top:18px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}
+p{margin-bottom:12px;}
+ul,ol{padding-left:20px;margin-bottom:12px;}
+li{margin-bottom:4px;}
+li::marker{color:var(--text3);}
+strong{font-weight:600;}
+em{color:var(--text2);font-style:italic;}
+hr{border:none;border-top:1px solid var(--border);margin:32px 0;}
+
+code{font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);padding:1px 5px;border-radius:4px;color:var(--cyan);}
+pre{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;overflow-x:auto;margin:14px 0;}
+pre code{background:none;border:none;padding:0;color:var(--text);font-size:12.5px;line-height:1.65;}
+
+.note,.tip,.warn,.danger{border-radius:var(--r);padding:13px 16px;margin:14px 0;display:flex;gap:10px;align-items:flex-start;font-size:13.5px;}
+.note  {background:#0d1f35;border:1px solid #58a6ff40;}
+.tip   {background:#0d2010;border:1px solid #3fb95040;}
+.warn  {background:#2a1f0a;border:1px solid #d2992240;}
+.danger{background:#2a1010;border:1px solid #f8514940;}
+.note  .ci{color:var(--accent);font-size:17px;flex-shrink:0;margin-top:1px;}
+.tip   .ci{color:var(--green); font-size:17px;flex-shrink:0;margin-top:1px;}
+.warn  .ci{color:var(--amber); font-size:17px;flex-shrink:0;margin-top:1px;}
+.danger .ci{color:var(--red);  font-size:17px;flex-shrink:0;margin-top:1px;}
+.note p,.tip p,.warn p,.danger p{margin:0;}
+
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;}
+th{background:var(--bg3);color:var(--text2);font-weight:600;padding:9px 13px;text-align:left;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+td{padding:8px 13px;border-bottom:1px solid var(--bg4);vertical-align:top;}
+tr:hover td{background:var(--bg2);}
+td code{font-size:11.5px;}
+td.val-green{color:var(--green);font-weight:600;}
+td.val-red{color:var(--red);font-weight:600;}
+td.val-amber{color:var(--amber);font-weight:600;}
+
+.section-intro{background:var(--bg2);border-left:4px solid var(--accent);border-radius:0 var(--r) var(--r) 0;padding:14px 18px;margin-bottom:24px;font-size:14px;color:var(--text2);}
+.steps{counter-reset:step;}
+.step{display:flex;gap:14px;margin-bottom:18px;align-items:flex-start;}
+.step-num{width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--bg);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-body{flex:1;}
+.step-body strong{display:block;font-size:14px;margin-bottom:3px;}
+
+.cover{background:linear-gradient(135deg,#0d1117 0%,#1a1500 50%,#0d1117 100%);border:1px solid var(--border);border-radius:12px;padding:40px 36px;margin-bottom:40px;position:relative;overflow:hidden;}
+.cover::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 80% 20%,#d2992210 0%,transparent 60%),radial-gradient(ellipse at 20% 80%,#3fb95008 0%,transparent 60%);}
+.cover h1{font-size:34px;position:relative;color:var(--amber);}
+.cover .subtitle{font-size:15px;color:var(--text2);margin-bottom:20px;position:relative;}
+.cover-meta{display:flex;gap:16px;flex-wrap:wrap;position:relative;}
+.cover-badge{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--text2);}
+.cover-badge span{color:var(--amber);font-weight:600;}
+
+/* Schéma hydraulique */
+.schema{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0;font-family:var(--mono);font-size:12px;line-height:1.9;overflow-x:auto;}
+.s-chaud{color:#f85149;font-weight:700;}
+.s-froid{color:#58a6ff;font-weight:700;}
+.s-sol{color:#d29922;font-weight:700;}
+.s-elec{color:#3fb950;}
+.s-comment{color:var(--text3);}
+
+/* Indicateur état */
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;font-family:var(--mono);}
+.badge-on {background:#0d2010;color:var(--green); border:1px solid #3fb95040;}
+.badge-off{background:#2a1010;color:var(--red);   border:1px solid #f8514940;}
+.badge-auto{background:#0d1f35;color:var(--accent);border:1px solid #58a6ff40;}
+.badge-warn{background:#2a1f0a;color:var(--amber); border:1px solid #d2992240;}
+
+/* Grid de cartes */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:14px 0;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;}
+.card:hover{border-color:var(--amber)50;}
+.card-title{font-size:13px;font-weight:700;color:var(--amber);margin-bottom:6px;}
+.card-body{font-size:12.5px;color:var(--text2);line-height:1.55;}
+.card-body strong{color:var(--text);}
+
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);text-align:center;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SIDEBAR ══════════════ -->
+<nav>
+  <div class="nav-logo">
+    <h1>🔥 Chaudière<span> Maison</span></h1>
+    <p>Documentation Utilisateur v1.0</p>
+  </div>
+
+  <div class="nav-section">Vue d'ensemble</div>
+  <a href="#intro">Introduction</a>
+  <a href="#architecture">Architecture du système</a>
+  <a href="#capteurs">Sondes et capteurs</a>
+  <a href="#sorties">Sorties — Relais</a>
+
+  <div class="nav-section">Interface synoptique</div>
+  <a href="#synoptique">Accès au synoptique</a>
+  <a href="#vue-principale">Vue principale</a>
+  <a href="#page-horaires">Horaires</a>
+  <a href="#page-consignes">Consignes</a>
+  <a href="#page-compteurs">Compteurs</a>
+  <a href="#page-offsets">Offsets CTN</a>
+  <a href="#page-chauffage">Chauffage Maison</a>
+  <a href="#page-forcage">Forçage manuel</a>
+
+  <div class="nav-section">Régulations</div>
+  <a href="#reg-planning">Planning Jours/Nuits</a>
+  <a href="#reg-solaire">Solaire thermique</a>
+  <a href="#reg-ecs">Gestion ECS</a>
+  <a href="#reg-loi-eau">Loi d'eau — Plancher</a>
+  <a href="#reg-chaudiere">Chaudière</a>
+
+  <div class="nav-section">Réglages</div>
+  <a href="#consignes-ecs">Consignes ECS & Ballons</a>
+  <a href="#consignes-solaire">Consignes Solaire</a>
+  <a href="#consignes-chaudiere">Consignes Chaudière</a>
+  <a href="#consignes-loi-eau">Paramètres Loi d'eau</a>
+  <a href="#calibration-ctn">Calibration sondes CTN</a>
+
+  <div class="nav-section">Exploitation</div>
+  <a href="#demarrage">Démarrage système</a>
+  <a href="#arret">Arrêt système</a>
+  <a href="#forcage-detail">Forçages manuels</a>
+  <a href="#alarmes">Alarmes et sécurités</a>
+  <a href="#depannage">Dépannage</a>
+  <a href="#registres">Registres RF — Index</a>
+</nav>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<main>
+
+<!-- ── COVER ── -->
+<div class="cover">
+  <h1>🔥 Chaudière Maison</h1>
+  <p class="subtitle">Régulation solaire thermique + chaudière + plancher chauffant — Documentation Utilisateur</p>
+  <div class="cover-meta">
+    <div class="cover-badge">Version <span>v2 — Juin 2026</span></div>
+    <div class="cover-badge">Scan <span>100 ms</span></div>
+    <div class="cover-badge">9 sondes NTC10K</div>
+    <div class="cover-badge">9 relais + 2 entrées TOR</div>
+    <div class="cover-badge">5 blocs Python</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="intro"><span class="icon">📋</span> Introduction</h2>
+
+<div class="section-intro">
+  Ce document décrit le fonctionnement et la configuration du système de régulation
+  thermique de la maison. Il est destiné à l'utilisateur final qui souhaite
+  comprendre les automatismes, ajuster les consignes et intervenir en cas de dysfonctionnement.
+</div>
+
+<p>
+  Le système gère de façon automatique et coordonnée trois sources d'énergie :
+</p>
+
+<div class="card-grid">
+  <div class="card">
+    <div class="card-title">☀ Solaire thermique</div>
+    <div class="card-body">Capteurs solaires sur la toiture. Quand les panneaux sont plus chauds que le bas du ballon,
+    la pompe K2 (V3V Chaudière/Solaire) s'active et transfère la chaleur vers les ballons ECS.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">🔥 Chaudière</div>
+    <div class="card-body">Chaudière à granulés. Elle prend le relai du solaire quand les ballons
+    sont insuffisamment chauds ou quand le plancher chauffant demande de la chaleur.
+    Autorisation K1, circulateur réhausse K4.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">🏠 Plancher chauffant</div>
+    <div class="card-body">Régulation par loi d'eau : la consigne de départ est calculée
+    automatiquement en fonction de la température extérieure, de la consigne d'ambiance
+    et d'une correction jour/nuit. Circulateur K9, V3V K7/K8.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="architecture"><span class="icon">🗺</span> Architecture du système</h2>
+
+<h3>Schéma hydraulique simplifié</h3>
+<div class="schema">
+<span class="s-sol">☀ PANNEAUX SOLAIRES</span>
+  │ (T° capteurs = ANA6 → Sonde 3)
+  ▼
+<span class="s-chaud">K2 (V3V Chaudière/Solaire)</span> ──── K10 (V3V Solaire)
+  │                                         │
+  ▼                                         ▼
+<span class="s-chaud">BALLON HAUT</span>                          <span class="s-chaud">BALLON BAS</span>
+(T° = ANA0 → Sonde 5)              (T° = ANA1 → Sonde 6)
+  │                                         │
+  └─────────── ECS (eau chaude sanitaire) ──┘
+  │
+<span class="s-chaud">K5 Circ.ECS Sol.</span>    <span class="s-chaud">K6 Circ.ECS Chaud.</span>
+  │
+<span class="s-chaud">──── CIRCUIT CHAUDIÈRE ────</span>
+  │
+<span class="s-chaud">🔥 CHAUDIÈRE</span>                          <span class="s-comment">T° chaudière = ANA7 → Sonde 4</span>
+  │ K1 Autorisation
+  │ K4 Cir.Réhausse
+  ▼
+<span class="s-chaud">T° Départ (ANA2 → Sonde 7)</span>
+  │
+<span class="s-chaud">K7/K8 V3V Plancher  ──►  K9 Circ.Plancher</span>
+  │                               │
+  ▼                               ▼
+<span class="s-froid">🏠 PLANCHER CHAUFFANT</span>       <span class="s-froid">T° Retour (ANA3 → Sonde 8)</span>
+                                  │
+                            <span class="s-froid">T° Bouclage (ANA8 → Sonde 9)</span>
+
+<span class="s-comment">── Sonde extérieure : ANA5 (Sonde 2)</span>
+<span class="s-comment">── Sonde ambiante  : ANA4 (Sonde 1)</span>
+</div>
+
+<h3>Chaîne de traitement</h3>
+<p>
+  Chaque sonde brute est corrigée par un <strong>offset CTN réglable</strong> (page Offsets),
+  puis le résultat corrigé est utilisé par les modules de régulation :
+</p>
+<div class="schema">
+Sonde brute (ANA*)
+  │  ADD(sonde + offset CTN)
+  ▼
+Température corrigée (RF*)
+  │
+  ├──► P5_JOURS  → Planning Jour/Nuit (période confort, correction J/N)
+  ├──► P6_SOL    → Solaire thermique (K2, K10)
+  ├──► P7_ECS    → Gestion ballons ECS (K5, K6)
+  ├──► P8_LOI    → Loi d'eau plancher (K7, K8, K9)
+  └──► P9_CH     → Chaudière (K1, K4)
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="capteurs"><span class="icon">🌡</span> Sondes et capteurs</h2>
+
+<div class="section-intro">
+  9 sondes NTC10K sont connectées sur 3 modules ADS1115 (I²C). Chaque sonde est
+  corrigée par un offset individuel réglable (page <em>Offsets CTN</em>).
+  Les températures affichées dans le synoptique sont les valeurs <strong>après correction</strong>.
+</div>
+
+<table>
+  <thead><tr><th>Sonde</th><th>Canal ADS</th><th>Mesure</th><th>RF brute</th><th>RF corrigée</th><th>Utilisée par</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Sonde 1</strong></td><td>ANA4</td><td>Température ambiante</td><td>RF250</td><td>RF266</td><td>P8_LOI (correction ambiance)</td></tr>
+    <tr><td><strong>Sonde 2</strong></td><td>ANA5</td><td>Température extérieure</td><td>RF103</td><td>RF255</td><td>P8_LOI (loi d'eau), P9_CH</td></tr>
+    <tr><td><strong>Sonde 3</strong></td><td>ANA6</td><td>Température capteurs solaires</td><td>RF106</td><td>RF108</td><td>P6_SOL, P7_ECS</td></tr>
+    <tr><td><strong>Sonde 4</strong></td><td>ANA7</td><td>Température chaudière</td><td>RF109</td><td>RF247</td><td>P7_ECS, P9_CH</td></tr>
+    <tr><td><strong>Sonde 5</strong></td><td>ANA0</td><td>Température ballon haut</td><td>RF112</td><td>RF114</td><td>P7_ECS (sécurité max)</td></tr>
+    <tr><td><strong>Sonde 6</strong></td><td>ANA1</td><td>Température ballon bas</td><td>RF115</td><td>RF268</td><td>P6_SOL (ΔT), P7_ECS</td></tr>
+    <tr><td><strong>Sonde 7</strong></td><td>ANA2</td><td>Température départ plancher</td><td>RF118</td><td>RF257</td><td>P8_LOI</td></tr>
+    <tr><td><strong>Sonde 8</strong></td><td>ANA3</td><td>Température retour plancher</td><td>RF121</td><td>RF123</td><td>P8_LOI, P9_CH</td></tr>
+    <tr><td><strong>Sonde 9</strong></td><td>ANA8</td><td>Température bouclage ECS</td><td>RF124</td><td>RF270</td><td>P9_CH (verrou démarrage)</td></tr>
+  </tbody>
+</table>
+
+<div class="warn">
+  <div class="ci">⚠</div>
+  <p>Les sondes ADS0 (adresse 0x48) correspondent aux canaux ANA0–ANA3,
+  ADS1 (0x49) aux ANA4–ANA7, ADS2 (0x4A) aux ANA8–ANA11.
+  En cas de valeur aberrante, vérifier d'abord les connexions I²C correspondantes.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="sorties"><span class="icon">⚡</span> Sorties — Relais</h2>
+
+<table>
+  <thead><tr><th>Relais</th><th>GPIO</th><th>Nom</th><th>Rôle</th><th>Commandé par</th></tr></thead>
+  <tbody>
+    <tr><td><strong>K1</strong></td><td>GPIO 5</td><td>Autorisation Chaudière</td><td>Autorise la mise en marche de la chaudière</td><td>P9_CH od1</td></tr>
+    <tr><td><strong>K2</strong></td><td>GPIO 6</td><td>V3V Chaudière/Solaire</td><td>Oriente le circuit solaire vers les ballons</td><td>P6_SOL od1</td></tr>
+    <tr><td><strong>K4</strong></td><td>GPIO 13</td><td>Circulateur Réhausse</td><td>Pompe de réhausse chaudière</td><td>P9_CH od2</td></tr>
+    <tr><td><strong>K5</strong></td><td>GPIO 9</td><td>Circ. ECS Solaire</td><td>Circulateur ECS côté solaire</td><td>P7_ECS od1</td></tr>
+    <tr><td><strong>K6</strong></td><td>GPIO 19</td><td>Circ. ECS Chaudière</td><td>Circulateur ECS côté chaudière</td><td>P7_ECS od2</td></tr>
+    <tr><td><strong>K7</strong></td><td>GPIO 10</td><td>V3V Plancher ↑ (ouvrir)</td><td>Ouvre la vanne 3 voies plancher</td><td>P8_LOI od2</td></tr>
+    <tr><td><strong>K8</strong></td><td>GPIO 26</td><td>V3V Plancher ↓ (fermer)</td><td>Ferme la vanne 3 voies plancher</td><td>P8_LOI od3</td></tr>
+    <tr><td><strong>K9</strong></td><td>GPIO 22</td><td>Circulateur Plancher</td><td>Pompe du plancher chauffant</td><td>P8_LOI od1</td></tr>
+    <tr><td><strong>K10</strong></td><td>GPIO 21</td><td>V3V Solaire</td><td>Vanne 3 voies circuit solaire</td><td>P6_SOL od3</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <div class="ci">ℹ</div>
+  <p>Tous les relais sont câblés en <strong>logique inverse</strong> (<code>active_low=True</code>) :
+  la sortie GPIO passe à <code>0</code> pour activer le relais. Le synoptique affiche l'état
+  réel (ACTIF / ARRÊT) sans tenir compte de l'inversion.</p>
+</div>
+
+<h3>Entrées TOR</h3>
+<table>
+  <thead><tr><th>Entrée</th><th>GPIO</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>E1</strong></td><td>GPIO 14</td><td>Contact production chaudière (retour de flamme)</td></tr>
+    <tr><td><strong>E2</strong></td><td>GPIO 23</td><td>Contact alarme chaudière</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="synoptique"><span class="icon">🖥</span> Accès au synoptique</h2>
+
+<p>Le synoptique est accessible depuis n'importe quel navigateur sur le réseau local :</p>
+
+<pre><code>http://[adresse-rpi]:5000/synoptic
+<span style="color:var(--text2)">ou, via YunoHost :</span>
+https://chauffage-maison.vincentlux.fr/synoptic
+
+<span style="color:var(--text2)">Sur smartphone (mode mobile optimisé) :</span>
+https://chauffage-maison.vincentlux.fr/synoptic?mobile=1</code></pre>
+
+<div class="tip">
+  <div class="ci">✅</div>
+  <p>Sur téléphone, utilise l'URL avec <code>?mobile=1</code> pour activer le mode mobile :
+  le synoptique s'adapte automatiquement à la largeur de l'écran, la barre latérale disparaît,
+  et le scroll tactile est activé. Enregistre ce lien en favori.</p>
+</div>
+
+<p>Le synoptique comporte <strong>7 pages</strong> accessibles via les onglets en bas de l'écran :</p>
+<table>
+  <thead><tr><th>Onglet</th><th>Contenu</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Vue principale</strong></td><td>Températures, état relais, commandes marche/arrêt et resets</td></tr>
+    <tr><td><strong>Horaires</strong></td><td>Planning hebdomadaire (heure début/fin par jour)</td></tr>
+    <tr><td><strong>Consignes</strong></td><td>Tous les paramètres de régulation réglables</td></tr>
+    <tr><td><strong>Compteurs</strong></td><td>Durées de fonctionnement cumulées de chaque actionneur</td></tr>
+    <tr><td><strong>Offsets CTN</strong></td><td>Correction individuelle de chaque sonde de température</td></tr>
+    <tr><td><strong>Chauffage Maison</strong></td><td>Vue schématique du circuit hydraulique avec valeurs en temps réel</td></tr>
+    <tr><td><strong>Forçage</strong></td><td>Forçages manuels des actionneurs (maintenance)</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="vue-principale"><span class="icon">🏠</span> Page — Vue principale</h2>
+
+<div class="section-intro">
+  Page de supervision quotidienne. Elle regroupe toutes les températures mesurées,
+  l'état des relais en temps réel, les interrupteurs de mode et les boutons de reset
+  des forçages.
+</div>
+
+<h3>Section Températures</h3>
+<table>
+  <thead><tr><th>Afficheur</th><th>Valeur</th><th>Source</th></tr></thead>
+  <tbody>
+    <tr><td>Ambiance</td><td>Température intérieure ambiante</td><td>RF266 (Sonde 1 + offset)</td></tr>
+    <tr><td>Extérieur</td><td>Température extérieure</td><td>RF255 (Sonde 2 + offset)</td></tr>
+    <tr><td>Capteurs</td><td>Température panneau solaire</td><td>RF108 (Sonde 3 + offset)</td></tr>
+    <tr><td>Chaudière</td><td>Température corps chaudière</td><td>RF247 (Sonde 4 + offset)</td></tr>
+    <tr><td>Ballon Haut</td><td>Température haut du ballon ECS</td><td>RF114 (Sonde 5 + offset)</td></tr>
+    <tr><td>Ballon Bas</td><td>Température bas du ballon ECS</td><td>RF268 (Sonde 6 + offset)</td></tr>
+    <tr><td>Départ</td><td>Température départ plancher chauffant</td><td>RF257 (Sonde 7 + offset)</td></tr>
+    <tr><td>Retour</td><td>Température retour plancher chauffant</td><td>RF123 (Sonde 8 + offset)</td></tr>
+    <tr><td>Bouclage</td><td>Température bouclage ECS</td><td>RF270 (Sonde 9 + offset)</td></tr>
+  </tbody>
+</table>
+
+<h3>Section Sorties Relais</h3>
+<p>
+  Neuf voyants relais affichent l'état réel de chaque contacteur.
+  Un voyant <span class="badge badge-on">ACTIF</span> signifie que le relais est alimenté.
+  Un voyant <span class="badge badge-off">ARRÊT</span> signifie qu'il est au repos.
+</p>
+
+<h3>Section Stats Système — Interrupteurs</h3>
+<table>
+  <thead><tr><th>Interrupteur</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Marche/Arrêt système de chauffage</strong></td><td>Interrupteur général. <strong>À activer en premier</strong> pour mettre le système en service.</td></tr>
+    <tr><td><strong>Marche Chauffage Chaudière</strong></td><td>Active la demande de chauffage plancher via la chaudière.</td></tr>
+    <tr><td><strong>Marche Chauffage Solaire</strong></td><td>Active la contribution solaire au plancher chauffant.</td></tr>
+    <tr><td><strong>Marche ECS Chaudière</strong></td><td>Autorise la chaudière à chauffer les ballons ECS.</td></tr>
+    <tr><td><strong>Marche ECS Solaire</strong></td><td>Autorise le solaire à chauffer les ballons ECS.</td></tr>
+    <tr><td><strong>Forçage Arrêt Chaudière</strong></td><td>Force l'arrêt de la chaudière (sécurité manuelle). À utiliser uniquement en cas d'urgence.</td></tr>
+  </tbody>
+</table>
+
+<h3>Boutons Reset (REST)</h3>
+<p>
+  Ces boutons remettent à zéro les mémoires bistables (SR) internes des régulations.
+  À utiliser en cas de blocage d'un actionneur après un forçage ou une anomalie.
+</p>
+<div class="warn">
+  <div class="ci">⚠</div>
+  <p>Un reset remet l'actionneur en mode automatique. Le relais peut se réactiver immédiatement
+  si les conditions de démarrage automatique sont remplies.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-horaires"><span class="icon">📅</span> Page — Horaires</h2>
+
+<div class="section-intro">
+  Configure les plages horaires de confort pour chaque jour de la semaine.
+  Pendant la plage de confort, la consigne d'ambiance est appliquée normalement.
+  En dehors (période nuit), une correction est appliquée.
+</div>
+
+<h3>Principe de fonctionnement</h3>
+<p>
+  Pour chaque jour de la semaine, tu peux définir :
+</p>
+<ul>
+  <li><strong>Activé/Désactivé</strong> (interrupteur) — si désactivé, le jour est en mode nuit permanent</li>
+  <li><strong>Heure début</strong> — heure de début de la période confort (format décimal, ex : 6.5 = 6h30)</li>
+  <li><strong>Heure fin</strong> — heure de fin de la période confort</li>
+</ul>
+
+<table>
+  <thead><tr><th>Jour</th><th>Variable début</th><th>Variable fin</th><th>Interrupteur</th></tr></thead>
+  <tbody>
+    <tr><td>Lundi</td><td><code>Prog_Heure_Debut_L</code></td><td><code>Prog_Heure_Fin_L</code></td><td>Lundi</td></tr>
+    <tr><td>Mardi</td><td><code>Prog_Heure_Debut_M</code></td><td><code>Prog_Heure_Fin_M</code></td><td>Mardi</td></tr>
+    <tr><td>Mercredi</td><td><code>Prog_Heure_Debut_ME</code></td><td><code>Prog_Heure_Fin_ME</code></td><td>Mercredi</td></tr>
+    <tr><td>Jeudi</td><td><code>Prog_Heure_Debut_J</code></td><td><code>Prog_Heure_Fin_J</code></td><td>Jeudi</td></tr>
+    <tr><td>Vendredi</td><td><code>Prog_Heure_Debut_V</code></td><td><code>Prog_Heure_Fin_V</code></td><td>Vendredi</td></tr>
+    <tr><td>Samedi</td><td><code>Prog_Heure_Debut_S</code></td><td><code>Prog_Heure_Fin_S</code></td><td>Samedi</td></tr>
+    <tr><td>Dimanche</td><td><code>Prog_Heure_Debut_D</code></td><td><code>Prog_Heure_Fin_D</code></td><td>Dimanche</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <div class="ci">✅</div>
+  <p>Les heures sont en format décimal : <code>6.5</code> = 6h30, <code>22.0</code> = 22h00,
+  <code>7.25</code> = 7h15. Si heure début = 0 et heure fin = 0, le jour est traité
+  comme non configuré (mode nuit permanent).</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-consignes"><span class="icon">⚙</span> Page — Consignes</h2>
+
+<div class="section-intro">
+  Tous les paramètres de régulation modifiables par l'utilisateur.
+  Chaque valeur est persistante (sauvegardée sur le RPi, rechargée au démarrage).
+</div>
+
+<h3 id="consignes-ecs">Ballons ECS</h3>
+<table>
+  <thead><tr><th>Paramètre</th><th>Défaut</th><th>Plage</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Consigne ballons</strong></td><td class="val-amber">75 °C</td><td>30–80</td><td>Température cible des ballons en mode normal. Quand le ballon bas est en dessous de (consigne − hystérésis bas), le chauffage se déclenche.</td></tr>
+    <tr><td><strong>Ballons Max</strong></td><td class="val-red">85 °C</td><td>40–95</td><td>Sécurité absolue ballon haut. Au-delà, toute production est coupée (solaire et chaudière).</td></tr>
+    <tr><td><strong>Mini Ballons (S/CH)</strong></td><td class="val-amber">30 °C</td><td>20–80</td><td>Température minimum en dessous de laquelle une demande prioritaire est envoyée à la chaudière même si le chauffage est arrêté.</td></tr>
+    <tr><td><strong>Hystérésis bas</strong></td><td>5 °C</td><td>0–15</td><td>Différentiel de déclenchement sur le ballon bas. Démarrage à (consigne − hyst), arrêt à consigne.</td></tr>
+    <tr><td><strong>Hystérésis haut</strong></td><td>5 °C</td><td>0–15</td><td>Différentiel de déclenchement sur le ballon haut. Même logique que l'hystérésis bas.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="consignes-solaire">Solaire thermique</h3>
+<table>
+  <thead><tr><th>Paramètre</th><th>Défaut</th><th>Plage</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Consigne mini panneaux</strong></td><td>20 °C</td><td>20–60</td><td>Température minimum des capteurs pour déclencher la pompe solaire. En dessous, pas de production même si ΔT est favorable.</td></tr>
+    <tr><td><strong>Hyst. retour froid</strong></td><td>5 °C</td><td>2–15</td><td>Anti-oscillation : la pompe ne s'arrête que si la condition est fausse depuis 30 s.</td></tr>
+    <tr><td><strong>Sécu mini panneaux</strong></td><td>−10 °C</td><td>−20–20</td><td>Sécurité basse : en dessous, le circuit solaire est arrêté (protection gel).</td></tr>
+    <tr><td><strong>Sécu max panneaux</strong></td><td>100 °C</td><td>80–130</td><td>Sécurité haute : au-delà, le circuit solaire est arrêté (surchauffe capteurs).</td></tr>
+    <tr><td><strong>Correction V3V sol.</strong></td><td>5 °C</td><td>−5–10</td><td>Offset ajouté à la consigne de départ côté solaire pour la V3V plancher.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="consignes-chaudiere">Chaudière</h3>
+<table>
+  <thead><tr><th>Paramètre</th><th>Défaut</th><th>Plage</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Temp de marche chaudière</strong></td><td class="val-amber">60 °C</td><td>30–90</td><td>Température minimum du corps chaudière pour considérer qu'elle est en production et autoriser la distribution de chaleur.</td></tr>
+    <tr><td><strong>Temp de marche circulateur</strong></td><td>60 °C</td><td>20–70</td><td>Durée minimum de marche du circulateur de réhausse avant autorisation d'arrêt (en secondes dans le code).</td></tr>
+    <tr><td><strong>Temp de dégommage</strong></td><td>30 °C</td><td>50–90</td><td>Température de déclenchement de la procédure de dégommage de la V3V (exercice périodique pour éviter le blocage).</td></tr>
+  </tbody>
+</table>
+
+<h3 id="consignes-loi-eau">Plancher chauffant — Loi d'eau</h3>
+<table>
+  <thead><tr><th>Paramètre</th><th>Défaut</th><th>Plage</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Consigne ambiance</strong></td><td>19 °C</td><td>15–28</td><td>Température d'ambiance cible (référence pour le calcul de la loi d'eau et la correction d'ambiance).</td></tr>
+    <tr><td><strong>Correction jour/nuit</strong></td><td>−1 °C</td><td>−5–5</td><td>Ajout ou soustraction à la consigne d'ambiance pendant la période de nuit.</td></tr>
+    <tr><td><strong>Départ V3V max</strong></td><td>50 °C</td><td>30–55</td><td>Température maximum autorisée au départ plancher (sécurité revêtement de sol).</td></tr>
+    <tr><td><strong>Pente</strong></td><td>0.7</td><td>0–5</td><td>Pente de la loi d'eau. Plus cette valeur est grande, plus la consigne de départ augmente par degré de froid extérieur. À ajuster selon l'isolation de la maison.</td></tr>
+    <tr><td><strong>Parallèle °C</strong></td><td>2.0 °C</td><td>0–500</td><td>Décalage fixe ajouté à la consigne de départ (compense la lenteur thermique du plancher).</td></tr>
+    <tr><td><strong>Tref Loi Eau</strong></td><td>17 °C</td><td>0–45</td><td>Température de référence des apports gratuits (ensoleillement, personnes…). Si T_ext > T_ref, la consigne de départ diminue.</td></tr>
+    <tr><td><strong>Gain correction ambiance</strong></td><td>1.5</td><td>0–20</td><td>Facteur de correction ambiance. Si T_ambiance &lt; T_consigne, la consigne de départ est augmentée proportionnellement.</td></tr>
+    <tr><td><strong>T départ mini</strong></td><td>20 °C</td><td>15–28</td><td>Plancher bas de la consigne de départ (valeur minimale même si la loi d'eau calcule moins).</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <div class="ci">✅</div>
+  <p><strong>Formule loi d'eau :</strong><br>
+  <code>T_dep = T_cons + pente × (T_ref − T_ext) + gain_amb × (T_cons − T_amb) + parallèle</code><br>
+  Le résultat est clampé entre <em>T départ mini</em> et <em>Départ V3V max</em>.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-compteurs"><span class="icon">⏱</span> Page — Compteurs</h2>
+
+<p>
+  Affiche les <strong>durées de fonctionnement cumulées</strong> de chaque actionneur depuis la dernière remise à zéro.
+  Utile pour la maintenance préventive et la surveillance de l'usure.
+</p>
+
+<table>
+  <thead><tr><th>Compteur</th><th>Actionneur suivi</th></tr></thead>
+  <tbody>
+    <tr><td>Autorisation Chaudière</td><td>Durée marche K1 (chaudière autorisée)</td></tr>
+    <tr><td>Rehausse Chaudière</td><td>Durée marche K4 (circulateur réhausse)</td></tr>
+    <tr><td>Circ. ECS Solaire</td><td>Durée marche K5</td></tr>
+    <tr><td>Circ. ECS Chaudière</td><td>Durée marche K6</td></tr>
+    <tr><td>V3V Plancher ↑</td><td>Durée ouverture K7</td></tr>
+    <tr><td>V3V Plancher ↓</td><td>Durée fermeture K8</td></tr>
+    <tr><td>Circulateur Plancher</td><td>Durée marche K9</td></tr>
+    <tr><td>V3V Solaire</td><td>Durée marche K10</td></tr>
+    <tr><td>V3V Chaudière</td><td>Durée marche K2</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-offsets"><span class="icon">🔧</span> Page — Offsets CTN</h2>
+
+<div class="section-intro">
+  Chaque sonde NTC10K a une légère imprécision de fabrication. Cette page permet
+  d'ajuster individuellement chaque capteur pour qu'ils affichent tous la même valeur
+  dans les mêmes conditions de référence.
+</div>
+
+<h3 id="calibration-ctn">Procédure de calibration</h3>
+<div class="steps">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Mesure de référence</strong>
+      Utiliser un thermomètre calibré de référence placé dans les mêmes conditions que la sonde à calibrer (même bain d'eau, même ambiance).
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Lire la valeur brute</strong>
+      Dans la page Offsets CTN, la colonne "Valeur brute" affiche la valeur de la sonde sans correction.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Calculer l'offset</strong>
+      <code>offset = T_réelle − T_brute</code><br>
+      Exemple : la sonde affiche 20.3 °C mais le thermomètre de référence indique 21.0 °C → offset = +0.7 °C
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Saisir l'offset</strong>
+      Entrer la valeur dans le champ <em>Correction CTN N</em> correspondant.
+      La colonne "Valeur corrigée" se met à jour immédiatement.
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <div class="ci">ℹ</div>
+  <p>Les sondes du même circuit hydraulique (départ/retour plancher par exemple) doivent
+  être calibrées dans les mêmes conditions. Une différence systématique de +1 °C sur
+  toutes les sondes n'est pas critique ; ce qui compte c'est la <strong>cohérence relative</strong>
+  entre les sondes d'un même circuit.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-chauffage"><span class="icon">🗺</span> Page — Chauffage Maison</h2>
+
+<p>
+  Vue schématique du circuit hydraulique complet avec les valeurs de températures
+  et l'état des actionneurs en temps réel. Cette page donne une vision instantanée
+  de l'ensemble du système sans avoir à consulter la page principale.
+</p>
+
+<p>Les symboles animés (pompes, vannes) changent d'état visuel selon que l'actionneur
+est actif ou non. Les valeurs numériques se mettent à jour à chaque cycle (100 ms).</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-forcage"><span class="icon">🛠</span> Page — Forçage</h2>
+
+<div class="section-intro">
+  Permet d'activer manuellement n'importe quel actionneur indépendamment de la régulation automatique.
+  <strong>Réservé à la maintenance et au diagnostic.</strong>
+</div>
+
+<div class="danger">
+  <div class="ci">🚨</div>
+  <p><strong>Attention :</strong> un forçage outrepasse toutes les sécurités automatiques.
+  Ne jamais laisser un forçage actif sans surveillance. Toujours désactiver les forçages
+  après intervention et vérifier que la régulation automatique reprend correctement.</p>
+</div>
+
+<table>
+  <thead><tr><th>Forçage</th><th>Effet</th></tr></thead>
+  <tbody>
+    <tr><td>BP_Forcage_Circulateur_Planché</td><td>Active K9 (pompe plancher) en continu</td></tr>
+    <tr><td>BP_Forcage_v3v_close</td><td>Ferme la V3V plancher (K8) en continu</td></tr>
+    <tr><td>BP_Forcage_v3v_open</td><td>Ouvre la V3V plancher (K7) en continu</td></tr>
+    <tr><td>BP_Forcage_Circulateur_Chaudier</td><td>Active K6 (circ. ECS chaudière) en continu</td></tr>
+    <tr><td>BP_Forcage_Circulateur_Solaire</td><td>Active K5 (circ. ECS solaire) en continu</td></tr>
+    <tr><td>Forcage_circulateur_réhausse</td><td>Active K4 (circ. réhausse chaudière) en continu</td></tr>
+    <tr><td>BP_Forcage_Arret_Auto_Chaudiere</td><td>Bloque l'autorisation chaudière (K1 reste OFF)</td></tr>
+    <tr><td>BP_Forcage_V3V_Solaire</td><td>Active K10 (V3V solaire) en continu</td></tr>
+    <tr><td>BP_Forcage_V3V_chaudière</td><td>Active K2 (V3V chaudière/solaire) en continu</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="reg-planning"><span class="icon">📅</span> Régulation — Planning Jours/Nuits (P5_JOURS)</h2>
+
+<p>
+  Ce module lit l'heure courante (du bloc <code>LOCALTIME</code>) et les plages horaires
+  configurées page Horaires. Il produit deux sorties :
+</p>
+<ul>
+  <li><strong>Période confort</strong> (booléen) — vrai pendant la plage horaire du jour courant</li>
+  <li><strong>Correction J/N</strong> (valeur) — envoyée à la loi d'eau : 0 °C pendant le confort, la valeur de <em>Correction jour/nuit</em> la nuit</li>
+</ul>
+
+<div class="note">
+  <div class="ci">ℹ</div>
+  <p>Si un jour est désactivé (interrupteur OFF dans la page Horaires), la correction nuit
+  est appliquée toute la journée pour ce jour-là.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="reg-solaire"><span class="icon">☀</span> Régulation — Solaire thermique (P6_SOL)</h2>
+
+<h3>Condition de démarrage</h3>
+<p>La pompe solaire (K2) démarre quand <strong>toutes</strong> ces conditions sont vraies :</p>
+<ul>
+  <li>T° capteurs &gt; T° bas du ballon <em>(le panneau est plus chaud que ce qu'il y a à chauffer)</em></li>
+  <li>T° capteurs &gt; Consigne mini panneaux (défaut 20 °C)</li>
+  <li>T° capteurs dans la plage sécurité [Sécu mini, Sécu max]</li>
+  <li>Marche ECS Solaire <span class="badge badge-on">ON</span> ET/OU Marche/Arrêt système <span class="badge badge-on">ON</span></li>
+  <li>La condition est vraie depuis <strong>120 secondes</strong> (timer anti-oscillation démarrage)</li>
+</ul>
+
+<h3>Condition d'arrêt</h3>
+<p>La pompe s'arrête quand la condition différentielle devient fausse depuis <strong>30 secondes</strong>
+(anti-court-cycle).</p>
+
+<h3>K10 — V3V Solaire</h3>
+<p>K10 suit K2 avec le même état (les deux actionneurs sont couplés dans la logique de la machine d'état V3V).</p>
+
+<div class="note">
+  <div class="ci">ℹ</div>
+  <p>Les timers (120 s démarrage, 30 s arrêt) sont en <strong>temps réel écoulé</strong>
+  (variable <code>dt</code> du moteur), non en nombre de cycles. Ils fonctionnent correctement
+  même si le scan varie.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="reg-ecs"><span class="icon">🚿</span> Régulation — Gestion ECS (P7_ECS)</h2>
+
+<h3>Logique de priorité</h3>
+<p>Le module gère la charge des deux ballons ECS (haut et bas) avec deux sources :</p>
+
+<table>
+  <thead><tr><th>Priorité</th><th>Source</th><th>Condition</th></tr></thead>
+  <tbody>
+    <tr><td class="val-green"><strong>1 — Solaire</strong></td><td>K5 (Circ. ECS Sol.)</td><td>T° capteurs &gt; T° ballon bas + hystérésis ET Marche ECS Solaire ON ET pompe BP_Marche ON</td></tr>
+    <tr><td class="val-amber"><strong>2 — Chaudière</strong></td><td>K6 (Circ. ECS Chaud.)</td><td>T° ballon bas &lt; (consigne − hystérésis bas) ET Marche ECS Chaudière ON ET T° chaudière suffisante</td></tr>
+  </tbody>
+</table>
+
+<h3>Sécurités ballons</h3>
+<ul>
+  <li><strong>Ballon max</strong> : si T° ballon haut ≥ Ballons Max (85 °C), toute production est stoppée</li>
+  <li><strong>Ballon mini</strong> : si T° ballon bas &lt; Consigne mini (30 °C), une demande prioritaire est envoyée à la chaudière indépendamment des modes activés</li>
+</ul>
+
+<h3>Sorties bouclage</h3>
+<p>
+  Le module surveille aussi T° bouclage (Sonde 9 = retour ECS). Si le bouclage est
+  suffisamment chaud, cela peut servir de verrou pour éviter de démarrer inutilement.
+</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="reg-loi-eau"><span class="icon">🌡</span> Régulation — Loi d'eau Plancher (P8_LOI)</h2>
+
+<h3>Calcul de la consigne de départ</h3>
+<p>La température de départ plancher est calculée dynamiquement à chaque cycle :</p>
+<pre><code>T_dep_consigne = T_cons_amb
+              + pente × (T_ref − T_ext)
+              + gain_amb × (T_cons_amb − T_ambiance)
+              + parallèle
+
+T_dep_consigne = max(T_dep_mini, min(T_dep_consigne, Départ_V3V_max))</code></pre>
+
+<h3>Correction jour/nuit</h3>
+<p>
+  La consigne d'ambiance est modulée par la correction J/N de P5_JOURS :
+  <code>T_cons_corr = T_cons_amb + correction_jn</code>.
+  La nuit, si <em>Correction jour/nuit</em> = −1 °C, la consigne est abaissée d'1 °C.
+</p>
+
+<h3>Gestion de la V3V plancher (K7/K8)</h3>
+<p>
+  La vanne 3 voies module la température de départ :
+</p>
+<ul>
+  <li>Si T° départ réelle &lt; T° consigne calculée → K7 s'ouvre (augmente départ)</li>
+  <li>Si T° départ réelle &gt; T° consigne calculée → K8 se ferme (diminue départ)</li>
+  <li>Le module gère une zone morte pour éviter les oscillations rapides</li>
+</ul>
+
+<h3>Dégommage V3V</h3>
+<p>
+  Si T° départ &gt; Temp de dégommage (30 °C), la vanne est exercée périodiquement
+  pour éviter le blocage mécanique par dépôt calcaire.
+</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="reg-chaudiere"><span class="icon">🔥</span> Régulation — Chaudière (P9_CH)</h2>
+
+<h3>Conditions d'autorisation (K1)</h3>
+<p>La chaudière est autorisée à fonctionner quand :</p>
+<ul>
+  <li>Une demande est présente (plancher OU ECS OU mini ECS)</li>
+  <li>Pas d'alarme chaudière (E2 = 0)</li>
+  <li>Interrupteur Marche système <span class="badge badge-on">ON</span></li>
+  <li>Forçage Arrêt Chaudière <span class="badge badge-off">OFF</span></li>
+  <li>T° bouclage acceptable (verrou démarrage)</li>
+</ul>
+
+<h3>Circulateur réhausse (K4)</h3>
+<p>
+  K4 démarre quand la chaudière est autorisée (K1) ET que la T° chaudière dépasse
+  la <em>Temp de marche chaudière</em> (60 °C). Il reste actif pendant une durée
+  minimum (<em>Temp de marche circulateur</em> en secondes) pour éviter les
+  cycles courts nuisibles à la chaudière.
+</p>
+
+<h3>Entrées de supervision</h3>
+<table>
+  <thead><tr><th>Signal</th><th>Source</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td>Contact Production (E1)</td><td>GPIO 14</td><td>Indique que la chaudière est réellement en production (brûleur allumé)</td></tr>
+    <tr><td>Contact Alarme (E2)</td><td>GPIO 23</td><td>Défaut chaudière — force l'arrêt immédiat de K1</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="demarrage"><span class="icon">▶</span> Démarrage du système</h2>
+
+<div class="steps">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Vérifier les températures</strong>
+      Page Vue principale : s'assurer que toutes les sondes affichent des valeurs cohérentes (pas de —, pas de 66 °C ou valeurs aberrantes).
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Activer le système</strong>
+      Passer l'interrupteur <em>Marche/Arrêt système de chauffage</em> sur <span class="badge badge-on">ON</span>.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Activer les modes souhaités</strong>
+      Selon la saison :<br>
+      • Hiver : activer <em>Marche Chauffage Chaudière</em> + <em>Marche ECS Chaudière</em> + <em>Marche ECS Solaire</em><br>
+      • Mi-saison : activer <em>Marche Chauffage Solaire</em> + <em>Marche ECS Solaire</em><br>
+      • Été : activer uniquement <em>Marche ECS Solaire</em>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Vérifier les horaires</strong>
+      Page Horaires : vérifier que les plages de confort correspondent à votre emploi du temps.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <strong>Observer la régulation</strong>
+      Après quelques minutes, des relais doivent s'activer selon les conditions (K2 si soleil, K9+K7/K8 si plancher demandé…). Page Chauffage Maison pour visualiser le circuit complet.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="arret"><span class="icon">⏹</span> Arrêt du système</h2>
+
+<p>Pour un arrêt normal (vacances, maintenance) :</p>
+<ol>
+  <li>Désactiver tous les interrupteurs de mode (ECS, Chauffage…)</li>
+  <li>Désactiver l'interrupteur général <em>Marche/Arrêt système</em></li>
+  <li>Vérifier que tous les relais indiquent <span class="badge badge-off">ARRÊT</span></li>
+</ol>
+
+<div class="warn">
+  <div class="ci">⚠</div>
+  <p>Ne pas couper l'alimentation électrique du RPi brutalement. Le service systemd
+  assure une sauvegarde propre à l'arrêt, mais une coupure brusque peut corrompre
+  les variables persistantes (AV/DV). Utiliser <code>sudo systemctl stop rpi-plc</code>
+  si nécessaire.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="alarmes"><span class="icon">🚨</span> Alarmes et sécurités</h2>
+
+<table>
+  <thead><tr><th>Alarme / Sécurité</th><th>Condition</th><th>Action automatique</th><th>Réarmement</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Surchauffe ballon</strong></td>
+      <td>T° ballon haut ≥ Ballons Max (85 °C)</td>
+      <td class="val-red">Arrêt K5 et K6 (plus de production ECS)</td>
+      <td>Automatique quand T° redescend</td>
+    </tr>
+    <tr>
+      <td><strong>Sécurité haute capteurs</strong></td>
+      <td>T° capteurs ≥ Sécu max panneaux (100 °C)</td>
+      <td class="val-red">Arrêt K2 (pompe solaire)</td>
+      <td>Automatique</td>
+    </tr>
+    <tr>
+      <td><strong>Sécurité basse capteurs</strong></td>
+      <td>T° capteurs ≤ Sécu mini panneaux (−10 °C)</td>
+      <td class="val-red">Arrêt K2 (protection gel)</td>
+      <td>Automatique</td>
+    </tr>
+    <tr>
+      <td><strong>Alarme chaudière</strong></td>
+      <td>Contact alarme E2 actif</td>
+      <td class="val-red">Arrêt immédiat K1 (autorisation chaudière)</td>
+      <td>Reset bouton <em>REST Autorisation Chaudière</em></td>
+    </tr>
+    <tr>
+      <td><strong>Surchauffe départ plancher</strong></td>
+      <td>T° départ &gt; Départ V3V max (50 °C)</td>
+      <td class="val-amber">Signal <em>surchauffe_depart</em> actif, K8 ferme</td>
+      <td>Automatique quand T° redescend</td>
+    </tr>
+    <tr>
+      <td><strong>Forçage arrêt chaudière</strong></td>
+      <td>Interrupteur manuel activé</td>
+      <td class="val-red">K1 bloqué OFF</td>
+      <td>Désactiver l'interrupteur manuellement</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="depannage"><span class="icon">🔍</span> Dépannage</h2>
+
+<h3>La chaudière ne démarre pas</h3>
+<ol>
+  <li>Vérifier que <em>Marche/Arrêt système</em> est <span class="badge badge-on">ON</span></li>
+  <li>Vérifier que <em>Forçage Arrêt Chaudière</em> est <span class="badge badge-off">OFF</span></li>
+  <li>Vérifier T° chaudière : elle doit être supérieure à <em>Temp de marche chaudière</em> (60 °C) pour que K4 se valide</li>
+  <li>Vérifier que le contact alarme E2 n'est pas actif (voyant alarme page Vue principale)</li>
+  <li>Vérifier qu'une demande existe (ECS ou plancher)</li>
+  <li>En dernier recours : page Forçage → activer <em>BP_Forcage_Circulateur_Chaudier</em> pour tester K4 manuellement</li>
+</ol>
+
+<h3>La pompe solaire ne démarre pas</h3>
+<ol>
+  <li>Vérifier que <em>Marche ECS Solaire</em> est <span class="badge badge-on">ON</span></li>
+  <li>Vérifier T° capteurs : doit être &gt; T° ballon bas ET &gt; 20 °C (consigne mini panneaux)</li>
+  <li>Vérifier les sécurités (T° capteurs pas hors plage)</li>
+  <li>Patienter 2 minutes : le timer anti-oscillation de 120 s doit s'écouler</li>
+  <li>Vérifier la cohérence des sondes page Offsets CTN</li>
+</ol>
+
+<h3>Le plancher ne chauffe pas</h3>
+<ol>
+  <li>Vérifier que <em>Marche Chauffage Chaudière</em> ou <em>Marche Chauffage Solaire</em> est <span class="badge badge-on">ON</span></li>
+  <li>Vérifier les horaires : sommes-nous dans la plage de confort du jour courant ?</li>
+  <li>Vérifier la consigne d'ambiance vs T° ambiante réelle</li>
+  <li>Vérifier T° extérieure — si elle est très haute, la loi d'eau peut calculer une consigne de départ en dessous du minimum (20 °C)</li>
+  <li>Page Chauffage Maison : vérifier l'état visuel de K9 et K7/K8</li>
+</ol>
+
+<h3>Une sonde affiche une valeur aberrante (— ou 66 °C)</h3>
+<ul>
+  <li><strong>— (tiret)</strong> : la valeur n'est pas disponible. Vérifier la connexion physique de la sonde sur le bornier ADS correspondant.</li>
+  <li><strong>66 °C permanent</strong> : la sonde était déconnectée au démarrage. Redémarrer le service : <code>sudo systemctl restart rpi-plc</code></li>
+  <li>Calibrer avec un offset (page Offsets CTN) si la valeur est cohérente mais légèrement décalée.</li>
+</ul>
+
+<h3>Un actionneur reste bloqué ON</h3>
+<ol>
+  <li>Page Forçage : désactiver tous les forçages correspondants</li>
+  <li>Page Vue principale : appuyer sur le bouton REST correspondant</li>
+  <li>Si toujours bloqué : recharger le programme depuis le studio PC (bouton <em>Envoyer programme</em>)</li>
+</ol>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="registres"><span class="icon">📊</span> Registres RF — Index</h2>
+
+<div class="section-intro">
+  Référence technique des registres RF utilisés dans le programme.
+  Utile pour le diagnostic avancé via l'API ou le synoptique.
+</div>
+
+<table>
+  <thead><tr><th>Registre</th><th>Nom</th><th>Producteur</th><th>Consommateurs</th></tr></thead>
+  <tbody>
+    <tr><td><code>RF103</code></td><td>T_Exterieur (brute)</td><td>SENSOR S2_ANA1 (ANA5)</td><td>ADD S2_ADD_1</td></tr>
+    <tr><td><code>RF104</code></td><td>Offset CTN Extérieur</td><td>AV S2_CTN_2</td><td>ADD S2_ADD_1</td></tr>
+    <tr><td><code>RF108</code></td><td>T_Capteurs_corr</td><td>ADD S2_ADD_2</td><td>P6_SOL A2, P7_ECS A1</td></tr>
+    <tr><td><code>RF114</code></td><td>T_BalH_corr</td><td>ADD S2_ADD_4</td><td>P7_ECS A5</td></tr>
+    <tr><td><code>RF123</code></td><td>T_Retour_corr</td><td>ADD S2_ADD_7</td><td>P8_LOI A3, P9_CH A3</td></tr>
+    <tr><td><code>RF144</code></td><td>Heure courante (0-23)</td><td>LOCALTIME</td><td>P5_JOURS A1</td></tr>
+    <tr><td><code>RF145</code></td><td>Jour semaine (0=Lun)</td><td>LOCALTIME</td><td>P5_JOURS I1</td></tr>
+    <tr><td><code>RF146</code></td><td>Minutes (0-59)</td><td>LOCALTIME</td><td>—</td></tr>
+    <tr><td><code>RF182</code></td><td>Hyst_Ballon_Bas</td><td>AV P7_AV_HB (défaut 5)</td><td>P7_ECS A3</td></tr>
+    <tr><td><code>RF185</code></td><td>Hyst_Ballon_Haut</td><td>AV P7_AV_HH (défaut 5)</td><td>P7_ECS A6</td></tr>
+    <tr><td><code>RF186</code></td><td>Consigne_Ballons (75 °C)</td><td>AV P7_AV_CONS</td><td>P7_ECS A7, P9_CH A8</td></tr>
+    <tr><td><code>RF199</code></td><td>Consigne_Ballons_Max (85 °C)</td><td>AV P7_AV_MAX</td><td>P7_ECS A9</td></tr>
+    <tr><td><code>RF205</code></td><td>Consigne_Ambiance (19 °C)</td><td>AV P8_AV_CAMB</td><td>P8_LOI A4</td></tr>
+    <tr><td><code>RF206</code></td><td>Correction_Jour_Nuit (−1 °C)</td><td>AV P8_AV_CJN</td><td>P8_LOI A5</td></tr>
+    <tr><td><code>RF208</code></td><td>Consigne_Depart_V3V_Max (50 °C)</td><td>AV P8_AV_DMAX</td><td>P8_LOI A7</td></tr>
+    <tr><td><code>RF227</code></td><td>Cons_Temp_Marche_Chaudiere (60 °C)</td><td>AV P9_AV_TMC</td><td>P9_CH A5</td></tr>
+    <tr><td><code>RF229</code></td><td>Cons_temp_Marche_Circulateur (60 s)</td><td>AV P9_AV_TCC</td><td>P9_CH A7</td></tr>
+    <tr><td><code>RF247</code></td><td>T_Chaudiere_corr</td><td>ADD B947</td><td>P7_ECS A4, P9_CH A1</td></tr>
+    <tr><td><code>RF255</code></td><td>T_Exterieur_corr</td><td>ADD S2_ADD_1</td><td>P8_LOI A1</td></tr>
+    <tr><td><code>RF257</code></td><td>T_Depart_corr</td><td>ADD B1050</td><td>P8_LOI A3</td></tr>
+    <tr><td><code>RF266</code></td><td>T_Ambiance_corr</td><td>ADD B966</td><td>P8_LOI A2</td></tr>
+    <tr><td><code>RF268</code></td><td>T_BalB_corr</td><td>ADD S2_ADD_5</td><td>P6_SOL A7, P7_ECS A2</td></tr>
+    <tr><td><code>RF270</code></td><td>T_Bouclage_corr</td><td>ADD S2_ADD_8</td><td>P9_CH A9</td></tr>
+    <tr><td><code>RF353</code></td><td>Pente_Loi_Eau (0.7)</td><td>AV B11434</td><td>P8_LOI (via state)</td></tr>
+    <tr><td><code>RF354</code></td><td>Decalage_Loi_Eau (2.0 °C)</td><td>AV B11435</td><td>P8_LOI</td></tr>
+    <tr><td><code>RF355</code></td><td>Tref_Loi_Eau (17 °C)</td><td>AV B11436</td><td>P8_LOI</td></tr>
+    <tr><td><code>RF356</code></td><td>Kamb_Loi_Eau (1.5)</td><td>AV B11437</td><td>P8_LOI</td></tr>
+    <tr><td><code>RF357</code></td><td>Tdep_Min_Loi_Eau (20 °C)</td><td>AV B11438</td><td>P8_LOI</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<footer>
+  <p>Documentation générée pour le projet <strong>Chaudière Maison V2</strong> — RPi-PLC Studio v3.4</p>
+  <p style="margin-top:6px;">Dernière modification : Juin 2026 · Scan cycle : 100 ms · 9 sondes NTC10K · 9 relais</p>
+</footer>
+
+</main>
+
+<script>
+// Navigation active sur scroll
+const sections = document.querySelectorAll('h2[id], h3[id]');
+const navLinks = document.querySelectorAll('nav a[href^="#"]');
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      const id = e.target.id;
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#'+id);
+      });
+    }
+  });
+}, {rootMargin:'-20% 0px -70% 0px'});
+sections.forEach(s => io.observe(s));
+</script>
+</body>
+</html>
