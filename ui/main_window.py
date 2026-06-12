@@ -18,6 +18,7 @@ from PyQt5.QtGui import QFont, QTextCursor, QIcon, QColor
 from PyQt5.QtWidgets import QApplication
 
 from core.plc_engine import PLCEngine
+from ui.rpi_monitor import RpiMonitor
 from core.project import Project
 from ui.block_editor import BlockEditor
 from ui.gpio_panel import GPIOPanel
@@ -98,6 +99,9 @@ class PalettePanel(QWidget):
 
 # ── Terminal de log ────────────────────────────────────────────────────────────
 class LogTerminal(QTextEdit):
+    # Signal thread-safe : peut être émis depuis n'importe quel thread
+    _log_signal = pyqtSignal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
@@ -120,9 +124,16 @@ class LogTerminal(QTextEdit):
             "RST":     "#f85149",
             "CMP":     "#d29922",
         }
+        # Connexion automatique Qt::QueuedConnection entre threads
+        self._log_signal.connect(self._append_in_main_thread)
 
     def append_log(self, msg: str, level: str = ""):
-        color = "#3fb950"  # vert par défaut
+        """Thread-safe : peut être appelé depuis n'importe quel thread."""
+        self._log_signal.emit(str(msg))
+
+    def _append_in_main_thread(self, msg: str):
+        """Exécuté uniquement dans le thread principal (via la queue Qt)."""
+        color = "#3fb950"
         for key, c in self._colors.items():
             if key in msg:
                 color = c
@@ -151,19 +162,38 @@ EXAMPLES_DATA = {
     ]),
 
     "blink": _make_fbd("Clignotant", [
-        {"id":"B1","type":"INPUT", "x":40, "y":80, "params":{"pin":22,"name":"Activer"}},
-        {"id":"B2","type":"NOT",   "x":200,"y":160,"params":{}},
-        {"id":"B3","type":"TON",   "x":200,"y":80, "params":{"preset_ms":500}},
-        {"id":"B4","type":"MEM",   "x":360,"y":80, "params":{"bit":"M0"}},
-        {"id":"B5","type":"COIL",  "x":360,"y":160,"params":{}},
-        {"id":"B6","type":"OUTPUT","x":520,"y":160,"params":{"pin":17,"name":"LED"}},
+        # ── Entrée enable ────────────────────────────────────────────────
+        {"id":"B1","type":"INPUT","x":40, "y":100,"params":{"pin":22,"name":"Activer"}},
+        # ── Phase OFF→ON : T1 compte pendant que M0=False ────────────────
+        {"id":"BN","type":"NOT",  "x":180,"y":160,"params":{}},
+        {"id":"BA","type":"AND",  "x":280,"y":100,"params":{}},
+        {"id":"T1","type":"TON",  "x":400,"y":100,"params":{"preset_ms":500}},
+        {"id":"BS","type":"SET",  "x":540,"y":100,"params":{}},
+        # ── Bit mémoire bascule (M0) ──────────────────────────────────────
+        {"id":"BM","type":"MEM",  "x":680,"y":100,"params":{"bit":"M0"}},
+        # ── Phase ON→OFF : T2 compte pendant que M0=True ─────────────────
+        {"id":"T2","type":"TON",  "x":400,"y":220,"params":{"preset_ms":500}},
+        {"id":"BR","type":"RESET","x":540,"y":220,"params":{}},
+        # ── Sortie : Enable ET M0 → LED ───────────────────────────────────
+        {"id":"BC","type":"COIL", "x":680,"y":220,"params":{}},
+        {"id":"B8","type":"OUTPUT","x":820,"y":220,"params":{"pin":17,"name":"LED"}},
     ],[
-        {"id":"W1","src":{"bid":"B1","port":"VAL"},"dst":{"bid":"B3","port":"IN"}},
-        {"id":"W2","src":{"bid":"B4","port":"R"},  "dst":{"bid":"B2","port":"IN"}},
-        {"id":"W3","src":{"bid":"B2","port":"OUT"},"dst":{"bid":"B3","port":"PT"}},
-        {"id":"W4","src":{"bid":"B3","port":"Q"},  "dst":{"bid":"B4","port":"W"}},
-        {"id":"W5","src":{"bid":"B4","port":"R"},  "dst":{"bid":"B5","port":"EN"}},
-        {"id":"W6","src":{"bid":"B5","port":"Q"},  "dst":{"bid":"B6","port":"VAL"}},
+        # Enable AND NOT(M0) → T1 (T1 démarre quand M0=False et Enable=ON)
+        {"id":"W1","src":{"bid":"B1","port":"VAL"},"dst":{"bid":"BA","port":"IN1"}},
+        {"id":"W2","src":{"bid":"BM","port":"R"},  "dst":{"bid":"BN","port":"IN"}},
+        {"id":"W3","src":{"bid":"BN","port":"OUT"},"dst":{"bid":"BA","port":"IN2"}},
+        {"id":"W4","src":{"bid":"BA","port":"OUT"},"dst":{"bid":"T1","port":"IN"}},
+        # T1 terminé → SET M0 (verrouille M0=True)
+        {"id":"W5","src":{"bid":"T1","port":"Q"},  "dst":{"bid":"BS","port":"S"}},
+        {"id":"W6","src":{"bid":"BS","port":"Q"},  "dst":{"bid":"BM","port":"W"}},
+        # M0=True → T2 démarre (phase ON)
+        {"id":"W7","src":{"bid":"BM","port":"R"},  "dst":{"bid":"T2","port":"IN"}},
+        # T2 terminé → RESET M0 (repasse M0=False)
+        {"id":"W8","src":{"bid":"T2","port":"Q"},  "dst":{"bid":"BR","port":"R"}},
+        {"id":"W9","src":{"bid":"BR","port":"Q"},  "dst":{"bid":"BM","port":"W"}},
+        # M0 → COIL → LED (sortie : allumé pendant la phase ON)
+        {"id":"W10","src":{"bid":"BM","port":"R"},"dst":{"bid":"BC","port":"EN"}},
+        {"id":"W11","src":{"bid":"BC","port":"Q"},"dst":{"bid":"B8","port":"VAL"}},
     ]),
 
     "sr_latch": _make_fbd("Bascule SR", [
@@ -221,44 +251,71 @@ EXAMPLES_DATA = {
     ]),
 
     "pt100_alarm": _make_fbd("🌡 Alarme PT100", [
-        {"id":"A1","type":"ANA_IN",    "x":40, "y":80, "params":{"ref":"ANA0","name":"Sonde 1","reg":"RF0"}},
-        {"id":"A2","type":"COMPARE_F", "x":220,"y":80, "params":{"ref":"RF0","threshold":80.0,"hysteresis":2.0,"op":"gt","reg":"M5"}},
-        {"id":"A3","type":"COIL",      "x":420,"y":80, "params":{}},
-        {"id":"A4","type":"OUTPUT",    "x":580,"y":80, "params":{"pin":22,"name":"Alarme K6"}},
+        # ANA_IN lit ANA0 → écrit dans RF0
+        {"id":"A1","type":"ANA_IN",    "x":40, "y":80, "params":{"analog_ref":"ANA0","name":"Sonde 1","reg_out":"RF0"}},
+        # COMPARE_F : RF0 > 80°C avec hystérésis 2°C → sortie sur GT câblée à MEM M5
+        {"id":"A2","type":"COMPARE_F", "x":220,"y":80, "params":{"reg_ref":"RF0","threshold":80.0,"hysteresis":2.0,"op":"gt"}},
+        {"id":"A5","type":"MEM",       "x":400,"y":80, "params":{"bit":"M5"}},
+        # COIL lit M5 → active sortie K6 (pin 22)
+        {"id":"A3","type":"COIL",      "x":520,"y":80, "params":{}},
+        {"id":"A4","type":"OUTPUT",    "x":680,"y":80, "params":{"pin":22,"name":"Alarme K6"}},
     ],[
-        {"id":"W1","src":{"bid":"A1","port":"OUT"},"dst":{"bid":"A2","port":"IN"}},
-        {"id":"W2","src":{"bid":"A2","port":"OUT"},"dst":{"bid":"A3","port":"EN"}},
-        {"id":"W3","src":{"bid":"A3","port":"Q"},  "dst":{"bid":"A4","port":"VAL"}},
+        # ANA_IN → (pas de fil requis, reg_out=RF0 est directement dans params)
+        # COMPARE_F.GT → MEM.W  (stocke le résultat dans M5)
+        {"id":"W2","src":{"bid":"A2","port":"GT"},"dst":{"bid":"A5","port":"W"}},
+        # MEM.R → COIL.EN (condition booléenne lue depuis M5)
+        {"id":"W3","src":{"bid":"A5","port":"R"}, "dst":{"bid":"A3","port":"EN"}},
+        # COIL.Q → OUTPUT.VAL
+        {"id":"W4","src":{"bid":"A3","port":"Q"}, "dst":{"bid":"A4","port":"VAL"}},
     ]),
 
     "pid_chauffe": _make_fbd("🔥 PID Chauffe", [
-        {"id":"P1","type":"ANA_IN", "x":40, "y":80, "params":{"ref":"ANA0","name":"Sonde 1","reg":"RF0"}},
-        {"id":"P2","type":"CONST",  "x":40, "y":180,"params":{"value":75.0,"reg":"RF1","name":"Consigne"}},
-        {"id":"P3","type":"PID",    "x":220,"y":80, "params":{"pv":"RF0","sp":"RF1","kp":2.0,"ki":0.1,"kd":0.5,
-                                                               "out_min":0,"out_max":100,"reg":"RF2"}},
-        {"id":"P4","type":"COMPARE_F","x":420,"y":80,"params":{"ref":"RF2","threshold":50.0,"hysteresis":5.0,"op":"gt","reg":"M0"}},
-        {"id":"P5","type":"COIL",  "x":600,"y":80, "params":{}},
-        {"id":"P6","type":"OUTPUT","x":760,"y":80, "params":{"pin":17,"name":"Chauffage K1"}},
+        # ANA_IN lit ANA0 → RF0
+        {"id":"P1","type":"ANA_IN",    "x":40, "y":80, "params":{"analog_ref":"ANA0","name":"Sonde 1","reg_out":"RF0"}},
+        # CONST 75°C — câblé sur SP du PID
+        {"id":"P2","type":"CONST",     "x":40, "y":200,"params":{"value":75.0}},
+        # PID : PV=RF0, SP=75 (via CONST câblé), sortie RF2
+        {"id":"P3","type":"PID",       "x":220,"y":80, "params":{"pv":"RF0","sp":75.0,"kp":2.0,"ki":0.1,"kd":0.0,
+                                                               "out_min":0,"out_max":100,"reg_out":"RF2"}},
+        # COMPARE_F : RF2 > 50% → bit M0
+        {"id":"P4","type":"COMPARE_F", "x":420,"y":80, "params":{"reg_ref":"RF2","threshold":50.0,"hysteresis":5.0,"op":"gt"}},
+        {"id":"PM","type":"MEM",       "x":580,"y":80, "params":{"bit":"M0"}},
+        # COIL lit M0 → relais chauffage pin17
+        {"id":"P5","type":"COIL",      "x":700,"y":80, "params":{}},
+        {"id":"P6","type":"OUTPUT",    "x":860,"y":80, "params":{"pin":17,"name":"Chauffage K1"}},
     ],[
+        # PID câblage PV (ANA_IN → RF0, déjà dans params, mais le fil permet l'affichage)
         {"id":"W1","src":{"bid":"P1","port":"OUT"},"dst":{"bid":"P3","port":"PV"}},
-        {"id":"W2","src":{"bid":"P2","port":"OUT"},"dst":{"bid":"P3","port":"SP"}},
-        {"id":"W3","src":{"bid":"P3","port":"OUT"},"dst":{"bid":"P4","port":"IN"}},
-        {"id":"W4","src":{"bid":"P4","port":"OUT"},"dst":{"bid":"P5","port":"EN"}},
-        {"id":"W5","src":{"bid":"P5","port":"Q"},  "dst":{"bid":"P6","port":"VAL"}},
+        # CONST 75 → SP du PID
+        {"id":"W2","src":{"bid":"P2","port":"VAL"},"dst":{"bid":"P3","port":"SP"}},
+        # COMPARE_F.GT → MEM.W
+        {"id":"W3","src":{"bid":"P4","port":"GT"},"dst":{"bid":"PM","port":"W"}},
+        # MEM.R → COIL.EN
+        {"id":"W4","src":{"bid":"PM","port":"R"}, "dst":{"bid":"P5","port":"EN"}},
+        # COIL.Q → OUTPUT.VAL
+        {"id":"W5","src":{"bid":"P5","port":"Q"}, "dst":{"bid":"P6","port":"VAL"}},
     ]),
 }
 
 
 class MainWindow(QMainWindow):
+    # Signal thread-safe : émis depuis le thread de téléchargement,
+    # reçu dans le thread principal pour ouvrir les dialogues Qt
+    _dl_ready = pyqtSignal(object)   # payload = dict {files, host, rpi_cfg}
+
     def __init__(self):
         super().__init__()
         self.project  = Project()
         self.engine   = PLCEngine(on_update=self._on_plc_update)
+        self._rpi_monitor: RpiMonitor | None = None   # moniteur RPi en direct
         self._pending_state = None
 
         # Fenêtre synoptique — créée une seule fois, cachée/montrée
         self._synoptic_win = SynopticWindow(self)
         self._synoptic_win.synoptic_changed.connect(self._on_synoptic_changed)
+
+        # Connexion du signal de téléchargement → slot main thread
+        self._dl_ready.connect(self._on_dl_ready)
 
         self.setWindowTitle("RPi-PLC Studio")
         self.resize(1280, 800)
@@ -290,6 +347,10 @@ class MainWindow(QMainWindow):
         self._ui_timer = QTimer()
         self._ui_timer.timeout.connect(self._apply_pending_state)
         self._ui_timer.start(80)
+
+        # ── Charger la config persistante depuis config.json au démarrage ──────
+        # GPIO, sondes analogiques et paramètres RPi survivent entre les sessions
+        self._load_persisted_config()
 
         self.statusBar().showMessage("Prêt — mode SIMULATION")
 
@@ -467,13 +528,23 @@ class MainWindow(QMainWindow):
         rpi_menu.addAction("📌 Configurer les GPIO…", self._open_gpio_config, "Ctrl+G")
         rpi_menu.addAction("🌡 Configurer les sondes…", self._open_analog_config, "Ctrl+T")
         rpi_menu.addAction("Ouvrir interface web RPi", self._open_rpi_web)
+        rpi_menu.addSeparator()
+        rpi_menu.addAction("📡 Démarrer moniteur RPi en direct", self._start_rpi_monitor, "F9")
+        rpi_menu.addAction("⏹ Arrêter moniteur RPi",            self._stop_rpi_monitor)
+        rpi_menu.addSeparator()
+        rpi_menu.addAction("📤 Envoyer un synoptique indépendant…", self._send_synoptic_to_rpi)
+        rpi_menu.addAction("🗑 Supprimer tous les synoptiques du RPi", self._clear_synoptic_on_rpi)
 
         # Synoptique
         syn_menu = mb.addMenu("Synoptique")
         syn_menu.addAction("Ouvrir l'éditeur de synoptique", self._open_synoptic, "F8")
         syn_menu.addAction("🌡 Synoptique Régulation (web)", self._open_regulech, "F9")
         syn_menu.addSeparator()
+        syn_menu.addAction("🏭 Ajouter pages Blocs Métier…", self._add_metier_pages)
+        syn_menu.addSeparator()
         syn_menu.addAction("Réinitialiser le synoptique", self._reset_synoptic)
+        syn_menu.addSeparator()
+        syn_menu.addAction("⬇ Télécharger le projet depuis RPi…", self._download_from_rpi)
 
         # Affichage — sélecteur de thème
         view_menu = mb.addMenu("Affichage")
@@ -576,7 +647,9 @@ class MainWindow(QMainWindow):
         # Synoptique → moteur PLC desktop
         syn_bridge = self._synoptic_win.editor.bridge
         syn_bridge.sig_gpio_write.connect(
-            lambda pin, val: self.engine.write_signal(int(pin), bool(val)))
+            lambda pin, val: self.engine.write_bool_out(
+                int(pin) if isinstance(pin, str) and pin.lstrip('-').isdigit() else pin,
+                bool(val)))
         syn_bridge.sig_register_write.connect(
             lambda ref, val: self.engine.write_register(ref, val))
         syn_bridge.sig_memory_write.connect(
@@ -612,8 +685,48 @@ class MainWindow(QMainWindow):
             if r != QMessageBox.Yes:
                 return
         self._stop_sim()
+
+        # ── Lire config.json pour préserver GPIO + Telegram + analog ──────────
+        import os as _os, json as _json
+        _cfg_path = _os.path.join(
+            _os.path.dirname(_os.path.abspath(__file__)),
+            "..", "rpi_server", "config.json"
+        )
+        _saved_gpio    = {}
+        _saved_analog  = {}
+        _saved_rpi     = {}
+        try:
+            _rpi_cfg       = _json.load(open(_cfg_path))
+            _saved_gpio    = _rpi_cfg.get("gpio",    {})
+            _saved_analog  = _rpi_cfg.get("analog",  {})
+            # Conserver aussi host/port/user du dernier déploiement
+            _saved_rpi     = {
+                k: self.project.data.get("rpi", {}).get(k, v)
+                for k, v in {
+                    "host": "192.168.1.100", "port": 22,
+                    "user": "pi", "password": "", "key_path": "",
+                    "remote_dir": "/home/pi/rpi-plc"
+                }.items()
+            }
+        except Exception:
+            pass
+
+        # Nouveau projet vierge
         self.project = Project()
         self.editor.clear()
+
+        # Réinjecter GPIO + analog + connexion RPi dans le nouveau projet
+        if _saved_gpio:
+            self.project.data.setdefault("plc", {})["gpio_config"]    = _saved_gpio
+            self.engine.reload_gpio_config(_saved_gpio)
+            self._reload_gpio_panel(_saved_gpio)
+        if _saved_analog:
+            self.project.data.setdefault("plc", {})["analog_config"]  = _saved_analog
+            self.engine.reload_analog_config(_saved_analog)
+        if _saved_rpi:
+            self.project.data["rpi"] = _saved_rpi
+
+        self.project.dirty = False
         self.setWindowTitle("RPi-PLC Studio — Nouveau projet")
 
     def _open_project(self):
@@ -652,6 +765,18 @@ class MainWindow(QMainWindow):
                 pass
         if _saved_analog:
             self.engine.reload_analog_config(_saved_analog)
+            # Synchroniser config.json local ↔ projet, afin que le dialogue
+            # et le déploiement voient toujours la même configuration des sondes.
+            try:
+                import json as _jsync
+                _local_cfg = _jsync.load(open(_cfg_path))
+                _local_cfg["analog"] = _saved_analog
+                with open(_cfg_path, "w", encoding="utf-8") as _fw:
+                    _fw.write(_jsync.dumps(_local_cfg, indent=2, ensure_ascii=False))
+            except Exception:
+                pass
+            # Pousser vers le canvas synoptique (dropdowns ANA enrichis)
+            self._push_analog_config_to_synoptic(_saved_analog)
 
         # ── Chargement FBD sans race condition ────────────────────────────────
         # loadDiagram côté JS déclenche notifyChange → program_changed →
@@ -745,12 +870,19 @@ class MainWindow(QMainWindow):
         self.engine.dv_vars[vn] = val
         # Écriture directe sur les GPIOs câblés à ce DV dans le programme
         # → fonctionne même sans scan loop actif
+        # Couvre les blocs 'dv' directs ET les coils auto-générés (pass 2)
         try:
             for block in self.engine.program:
                 if block.get('type') == 'dv' and block.get('varname','').lower() == vn:
                     out = block.get('output')
                     if out is not None:
                         self.engine.write_bool_out(out, val)
+                if block.get('type') == 'coil':
+                    cond = block.get('condition', {})
+                    if cond.get('type') == 'input' and str(cond.get('ref','')).lower() == vn:
+                        out = block.get('output')
+                        if out is not None:
+                            self.engine.write_bool_out(out, val)
         except Exception:
             pass
 
@@ -763,6 +895,7 @@ class MainWindow(QMainWindow):
         # Synchroniser la config GPIO dans le canvas FBD et le synoptique
         self._push_gpio_config_to_fbd()
         self._push_gpio_config_to_synoptic()
+        self._push_analog_config_to_synoptic()
 
 
     def _on_scan_time_changed(self, ms: int):
@@ -894,12 +1027,16 @@ class MainWindow(QMainWindow):
     def _send_to_rpi(self):
         """Envoie le programme FBD compilé au moteur RPI via HTTP /api/program."""
         import json, threading
-        # Récupérer l'URL RPI depuis le JSON du synoptique
-        syn_data = self.project.data.get("synoptic", {}) if self.project else {}
-        if isinstance(syn_data, str):
-            try: syn_data = json.loads(syn_data)
-            except: syn_data = {}
-        rpi_url = syn_data.get("rpiUrl", "").strip().rstrip("/")
+        # URL depuis project.rpi (source de vérité), fallback synoptique
+        rpi_host = self.project.data.get("rpi", {}).get("host", "") if self.project else ""
+        rpi_port = self.project.data.get("rpi", {}).get("web_port", 5000) if self.project else 5000
+        rpi_url  = f"http://{rpi_host}:{rpi_port}" if rpi_host else ""
+        if not rpi_url:
+            syn_data = self.project.data.get("synoptic", {}) if self.project else {}
+            if isinstance(syn_data, str):
+                try: syn_data = json.loads(syn_data)
+                except: syn_data = {}
+            rpi_url = syn_data.get("rpiUrl", "").strip().rstrip("/")
         if not rpi_url:
             from PyQt5.QtWidgets import QInputDialog
             rpi_url, ok = QInputDialog.getText(self, "IP du RPI",
@@ -939,6 +1076,78 @@ class MainWindow(QMainWindow):
         threading.Thread(target=_do_send, daemon=True).start()
 
     # ── Réception des mises à jour du moteur PLC (thread moteur) ─────────────
+    # ══════════════════════════════════════════════════════════════════════
+    # MONITEUR RPi EN DIRECT — polling /api/state → animation FBD + synoptic
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _start_rpi_monitor(self):
+        """Démarre le monitoring en direct depuis le RPi."""
+        from PyQt5.QtWidgets import QInputDialog
+
+        # Récupérer l'URL du RPi depuis le projet
+        rpi_cfg  = self.project.data.get("rpi", {}) if self.project else {}
+        rpi_host = rpi_cfg.get("host", "")
+        rpi_port = rpi_cfg.get("web_port", 5000)
+        default_url = f"http://{rpi_host}:{rpi_port}" if rpi_host else "http://192.168.1.49:5000"
+
+        url, ok = QInputDialog.getText(
+            self, "Moniteur RPi en direct",
+            "URL du RPi :",
+            text=default_url,
+        )
+        if not ok or not url.strip():
+            return
+        url = url.strip().rstrip("/")
+
+        # Arrêter un éventuel moniteur précédent
+        self._stop_rpi_monitor()
+
+        # Arrêter la simulation locale si elle tourne
+        if self.engine._running:
+            self.engine.stop()
+            self.sim_label.setText("◎ SIMULATION ARRÊTÉE")
+            self.sim_label.setStyleSheet("color: #8b949e; font-size:11px;")
+
+        # Créer et connecter le moniteur
+        self._rpi_monitor = RpiMonitor(url, parent=self)
+        self._rpi_monitor.state_received.connect(self._on_plc_update)
+        self._rpi_monitor.connected.connect(self._on_rpi_monitor_connected)
+        self._rpi_monitor.disconnected.connect(self._on_rpi_monitor_disconnected)
+        self._rpi_monitor.start_monitoring()
+
+        self.log_terminal.append_log(f"[MONITOR] Démarrage surveillance {url}")
+        self.statusBar().showMessage(f"Connexion RPi en direct → {url}…")
+
+    def _stop_rpi_monitor(self):
+        """Arrête le monitoring en direct."""
+        if self._rpi_monitor is not None:
+            self._rpi_monitor.stop_monitoring()
+            self._rpi_monitor = None
+            self.sim_label.setText("◎ MONITEUR ARRÊTÉ")
+            self.sim_label.setStyleSheet("color: #8b949e; font-size:11px;")
+            self.statusBar().showMessage("Moniteur RPi arrêté", 3000)
+            self.log_terminal.append_log("[MONITOR] Arrêté")
+
+    def _on_rpi_monitor_connected(self, url: str):
+        """Appelé quand la première réponse RPi est reçue."""
+        self.sim_label.setText("◉ RPi EN DIRECT")
+        self.sim_label.setStyleSheet(
+            "color: #00d4ff; font-size:11px; font-weight:bold;"
+        )
+        self.statusBar().showMessage(f"📡 Monitoring RPi en direct — {url}", 0)
+        self.log_terminal.append_log(f"[MONITOR] ✓ Connecté à {url}")
+        # Basculer le synoptique en mode opérateur
+        self._synoptic_win.set_operator_mode(True)
+
+    def _on_rpi_monitor_disconnected(self, error: str):
+        """Appelé quand la connexion RPi est perdue."""
+        self.sim_label.setText("⚠ RPi HORS LIGNE")
+        self.sim_label.setStyleSheet(
+            "color: #f85149; font-size:11px; font-weight:bold;"
+        )
+        self.statusBar().showMessage(f"⚠ RPi hors ligne : {error}", 0)
+        self.log_terminal.append_log(f"[MONITOR] ✗ Déconnecté : {error}")
+
     def _on_plc_update(self, state: dict):
         # On stocke l'état, le timer UI l'appliquera dans le bon thread
         self._pending_state = state
@@ -1003,9 +1212,30 @@ class MainWindow(QMainWindow):
         self._synoptic_win.show_and_raise()
         # Pousser la config GPIO dans le synoptique à l'ouverture
         self._push_gpio_config_to_synoptic()
+        # Pousser la config sondes dans le synoptique à l'ouverture
+        self._push_analog_config_to_synoptic()
         # Appliquer le thème courant après chargement (délai 200 ms)
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(200, lambda: self._apply_theme_to_synoptic(self._current_theme))
+
+    def _add_metier_pages(self):
+        """Injecte 6 pages synoptiques pré-construites pour les blocs Métier."""
+        # Ouvrir le synoptique si pas encore visible
+        self._open_synoptic()
+        # Exécuter la fonction JS dans le canvas synoptique
+        try:
+            editor = getattr(self._synoptic_win, 'editor', None)
+            if editor and hasattr(editor, 'view'):
+                editor.view.page().runJavaScript("window.addMetierPagesBtn && window.addMetierPagesBtn();")
+            else:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self, "Pages Métier",
+                    "Ouvrez d'abord l'éditeur de synoptique (F8),\n"
+                    "puis relancez Synoptique → 🏭 Ajouter pages Blocs Métier…"
+                )
+        except Exception as e:
+            self.log_terminal.append_log(f"[ERR] Ajout pages métier : {e}")
 
     def _reset_synoptic(self):
         from PyQt5.QtWidgets import QMessageBox
@@ -1029,6 +1259,225 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().showMessage("Synoptique sauvegardé", 2000)
 
+    def _download_from_rpi(self):
+        """Télécharge programme.json + synoptic.json + config.json depuis le RPi via SSH/SFTP
+        et propose de l'ouvrir dans le studio pour édition."""
+        from core.deployer import RPiDeployer as Deployer
+        import threading
+        from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
+                                      QLabel, QLineEdit, QPushButton, QFormLayout)
+
+        rpi_cfg = self.project.rpi
+
+        # ── Dialogue de connexion — toujours affiché ──────────────────────────
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Télécharger depuis le RPi")
+        dlg.setFixedWidth(380)
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(10)
+
+        lay.addWidget(QLabel("<b>Connexion au RPi</b>"))
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        ip_edit = QLineEdit(rpi_cfg.get("host", "192.168.1.49"))
+        ip_edit.setPlaceholderText("192.168.1.49")
+        form.addRow("IP / Hôte :", ip_edit)
+
+        port_edit = QLineEdit(str(rpi_cfg.get("web_port", 5000)))
+        port_edit.setPlaceholderText("5000")
+        form.addRow("Port web :", port_edit)
+
+        user_edit = QLineEdit(rpi_cfg.get("user", "pi"))
+        user_edit.setPlaceholderText("pi")
+        form.addRow("Utilisateur SSH :", user_edit)
+
+        pwd_edit = QLineEdit(rpi_cfg.get("password", ""))
+        pwd_edit.setPlaceholderText("mot de passe SSH (optionnel)")
+        pwd_edit.setEchoMode(QLineEdit.Password)
+        form.addRow("Mot de passe SSH :", pwd_edit)
+
+        lay.addLayout(form)
+
+        note = QLabel("ℹ️ SSH utilisé en priorité (programme + synoptic + config).\n"
+                       "Fallback HTTP automatique si SSH échoue\n"
+                       "(programme + synoptic uniquement).")
+        note.setStyleSheet("color:#8b949e; font-size:11px;")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+
+        btns = QHBoxLayout()
+        btn_ok     = QPushButton("⬇ Télécharger")
+        btn_cancel = QPushButton("Annuler")
+        btn_ok.setDefault(True)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        lay.addLayout(btns)
+
+        btn_ok.clicked.connect(dlg.accept)
+        btn_cancel.clicked.connect(dlg.reject)
+
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        host     = ip_edit.text().strip()
+        web_port = int(port_edit.text().strip() or 5000)
+        ssh_user = user_edit.text().strip() or "pi"
+        ssh_pwd  = pwd_edit.text()
+        if not host:
+            return
+
+        # Mémoriser pour la prochaine fois (sauf mot de passe)
+        rpi_cfg["host"]     = host
+        rpi_cfg["web_port"] = web_port
+        rpi_cfg["user"]     = ssh_user
+
+        def _log(msg):
+            self.log_terminal.append_log(msg)
+
+        deployer = Deployer(
+            host=host,
+            port=rpi_cfg.get("port", 22),
+            user=ssh_user,
+            password=ssh_pwd,
+            key_path=rpi_cfg.get("key_path", ""),
+            remote_dir=rpi_cfg.get("remote_dir", "/home/pi/rpi-plc"),
+            log_cb=_log,
+        )
+
+        _log(f"[DL] Connexion à {host}…")
+        self.statusBar().showMessage(f"Téléchargement depuis {host}…")
+
+        def _http_download(web_port: int) -> dict:
+            """Fallback : télécharge via HTTP quand SSH indisponible."""
+            import urllib.request, json as _json
+            base = f"http://{host}:{web_port}"
+            files = {}
+            endpoints = {
+                "programme.json":  f"{base}/api/program",
+                "fbd_diagram.json": f"{base}/api/fbd_diagram",
+                "synoptic.json":   f"{base}/api/synoptic",
+                "config.json":     f"{base}/api/config",
+            }
+            for fname, url in endpoints.items():
+                try:
+                    with urllib.request.urlopen(url, timeout=8) as r:
+                        content = _json.loads(r.read().decode())
+                        files[fname] = content
+                        _log(f"[DL/HTTP] ✓ {fname}")
+                except urllib.error.HTTPError as e:
+                    if e.code == 404 and fname == "config.json":
+                        _log(f"[DL/HTTP] ⚠ config.json : endpoint /api/config absent sur ce RPi")
+                        _log(f"[DL/HTTP]   → Déployez le nouveau server.py pour l'activer")
+                    elif e.code == 404 and fname == "fbd_diagram.json":
+                        _log(f"[DL/HTTP] ℹ fbd_diagram.json absent (ancien RPi) — reconstruction depuis programme.json")
+                    else:
+                        _log(f"[DL/HTTP] ✗ {fname} : {e}")
+                except Exception as e:
+                    _log(f"[DL/HTTP] ✗ {fname} : {e}")
+            return files
+
+        def _run():
+            try:
+                # ── Tentative SSH/SFTP ────────────────────────────────────────
+                res = deployer.connect()
+                if res.success:
+                    files = deployer.download_project()
+                    deployer.disconnect()
+                else:
+                    _log(f"[DL] SSH indisponible : {res.message}")
+                    _log("[DL] → Basculement sur téléchargement HTTP…")
+                    web_port = rpi_cfg.get("web_port", 5000)
+                    files = _http_download(web_port)
+
+                if not files:
+                    _log("[DL] ✗ Aucun fichier récupéré — vérifiez l'adresse IP et le port web")
+                    return
+
+                # Émettre le signal thread-safe → _on_dl_ready() s'exécute dans le thread principal
+                self._dl_ready.emit({
+                    "files":   files,
+                    "host":    host,
+                    "rpi_cfg": dict(rpi_cfg),
+                })
+
+            except Exception as e:
+                _log(f"[DL] ✗ Erreur : {e}")
+                import traceback
+                _log(traceback.format_exc())
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # ── Slot réception téléchargement RPi (thread principal) ────────────────
+    def _on_dl_ready(self, payload: dict):
+        """Reçoit les fichiers téléchargés et ouvre les dialogues Qt dans le thread principal."""
+        files   = payload.get("files", {})
+        host    = payload.get("host", "")
+        rpi_cfg = payload.get("rpi_cfg", {})
+
+        def _log(msg):
+            self.log_terminal.append_log(msg)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Enregistrer le projet téléchargé",
+            Project.default_path("projet_rpi"),
+            "Projet RPi-PLC (*.plcproj)"
+        )
+        if not path:
+            _log("[DL] Téléchargement annulé (pas de fichier de destination)")
+            return
+
+        # Préférer le diagramme FBD graphique s'il est disponible
+        fbd  = files.get("fbd_diagram.json")
+        prog = fbd if fbd else files.get("programme.json", [])
+        syn  = files.get("synoptic.json", {})
+        cfg  = files.get("config.json", {})
+
+        new_proj = Project()
+        new_proj.program = prog
+        new_proj.data["synoptic"] = syn
+        if cfg:
+            new_proj.data["rpi"] = {
+                "host":       host,
+                "port":       rpi_cfg.get("port", 22),
+                "user":       rpi_cfg.get("user", "pi"),
+                "web_port":   cfg.get("web_port", 5000),
+                "remote_dir": rpi_cfg.get("remote_dir", "/home/pi/rpi-plc"),
+            }
+            new_proj.data["plc"] = {
+                "gpio_config":   cfg.get("gpio", {}),
+                "analog_config": cfg.get("analog", {}),
+            }
+        new_proj.save(path)
+        _log(f"[DL] ✓ Projet sauvegardé : {path}")
+        self.statusBar().showMessage(f"Projet RPi téléchargé → {path}", 5000)
+
+        r = QMessageBox.question(
+            self, "Ouvrir le projet ?",
+            "Projet téléchargé avec succès.\nVoulez-vous l'ouvrir maintenant pour l'éditer ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+        )
+        if r == QMessageBox.Yes:
+            proj2 = Project.load(path)
+            if proj2:
+                self._stop_sim()
+                self.project = proj2
+                self.editor.load_program(proj2.program)
+                syn2 = proj2.data.get("synoptic", {})
+                self._synoptic_win.load_synoptic(syn2)
+                self._synoptic_win.show_and_raise()
+                self.setWindowTitle(f"RPi-PLC Studio — {proj2.name}")
+                # Appliquer la config GPIO + analog récupérée
+                _gpio2 = proj2.data.get("plc", {}).get("gpio_config", {})
+                if _gpio2:
+                    self.engine.reload_gpio_config(_gpio2)
+                    self._reload_gpio_panel(_gpio2)
+                _ana2 = proj2.data.get("plc", {}).get("analog_config", {})
+                if _ana2:
+                    self.engine.reload_analog_config(_ana2)
+                _log(f"[DL] Projet ouvert : {proj2.name}")
+
     # ── Déploiement ───────────────────────────────────────────────────────────
     def _open_gpio_config(self):
         """Ouvre le dialogue de configuration GPIO."""
@@ -1050,12 +1499,12 @@ class MainWindow(QMainWindow):
         dlg.exec_()
 
     def _on_gpio_config_changed(self, gpio_config: dict):
-        """Applique la nouvelle config GPIO : projet + config.json RPi + FBD canvas."""
+        """Applique la nouvelle config GPIO : projet + config.json RPi + push HTTP + FBD canvas."""
         import os, json
         # Sauvegarder dans le projet
         self.project.data.setdefault("plc", {})["gpio_config"] = gpio_config
         self.project.dirty = True
-        # Mettre à jour config.json RPi
+        # Mettre à jour config.json local (PC)
         cfg_path = os.path.join(os.path.dirname(__file__), "..", "rpi_server", "config.json")
         try:
             rpi_cfg = json.load(open(cfg_path))
@@ -1067,9 +1516,37 @@ class MainWindow(QMainWindow):
                 f"✅ GPIO configurés : {len(gpio_config)} pins — "
                 f"{n_out} sorties, {n_in} entrées"
             )
-            self.statusBar().showMessage("Configuration GPIO sauvegardée — redéployez pour appliquer", 5000)
         except Exception as e:
-            self.log_terminal.append_log(f"⚠ GPIO config sauvegarde : {e}")
+            self.log_terminal.append_log(f"⚠ GPIO config sauvegarde locale : {e}")
+
+        # ── Push immédiat de la config GPIO vers le serveur RPi ──────────────
+        rpi_cfg  = self.project.data.get("rpi", {})
+        rpi_host = rpi_cfg.get("host", "")
+        rpi_port = rpi_cfg.get("web_port", 5000)
+        rpi_url  = f"http://{rpi_host}:{rpi_port}" if rpi_host else ""
+        if rpi_url:
+            try:
+                import urllib.request as _ur
+                payload = json.dumps({"gpio": gpio_config}).encode("utf-8")
+                req = _ur.Request(
+                    f"{rpi_url.rstrip('/')}/api/gpio/config",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with _ur.urlopen(req, timeout=3) as resp:
+                    result = json.loads(resp.read())
+                if result.get("ok"):
+                    self.log_terminal.append_log("✅ GPIO poussé vers le RPi (live)")
+                    self.statusBar().showMessage("Configuration GPIO appliquée sur le RPi", 5000)
+                else:
+                    raise RuntimeError(result.get("error", "réponse non-ok"))
+            except Exception as e:
+                self.log_terminal.append_log(f"⚠ GPIO push RPi : {e} — redéployez pour appliquer")
+                self.statusBar().showMessage("GPIO sauvegardé localement — redéployez pour appliquer", 5000)
+        else:
+            self.statusBar().showMessage("GPIO sauvegardé — connectez le RPi ou redéployez pour appliquer", 5000)
+
         # Mettre à jour le moteur PLC en mémoire (engine.gpio)
         self.engine.reload_gpio_config(gpio_config)
         # Recharger le panneau GPIO du studio
@@ -1129,6 +1606,24 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.log_terminal.append_log(f"⚠ Synoptique GPIO config : {e}")
 
+    def _push_analog_config_to_synoptic(self, analog_config: dict = None):
+        """Envoie la config sondes au canvas Synoptique ET au canvas FBD (enrichit les dropdowns ANA0…ANA11)."""
+        import json as _json, os
+        if analog_config is None:
+            cfg_path = os.path.join(os.path.dirname(__file__), '..', 'rpi_server', 'config.json')
+            try:
+                analog_config = _json.load(open(cfg_path)).get('analog', {})
+            except Exception:
+                return
+        try:
+            self._synoptic_win.editor.set_analog_config(analog_config)
+        except Exception as e:
+            self.log_terminal.append_log(f"⚠ Synoptique ANA config : {e}")
+        try:
+            self.editor.set_analog_config(analog_config)
+        except Exception as e:
+            self.log_terminal.append_log(f"⚠ FBD ANA config : {e}")
+
     def _open_analog_config(self):
         """Ouvre le dialogue de configuration des sondes analogiques."""
         from ui.analog_config_dialog import AnalogConfigDialog
@@ -1144,20 +1639,19 @@ class MainWindow(QMainWindow):
         dlg.exec_()
 
     def _on_analog_config_changed(self, analog_config: dict):
-        """Applique la nouvelle config sondes : config.json + moteur PLC + projet."""
+        """Applique la nouvelle config sondes : config.json + moteur PLC + projet + push RPi."""
         import os, json
         # Sauvegarder dans le projet
         self.project.data.setdefault('plc', {})['analog_config'] = analog_config
         self.project.dirty = True
-        # Mettre à jour config.json RPi
+        # Mettre à jour config.json local
         cfg_path = os.path.join(os.path.dirname(__file__), '..', 'rpi_server', 'config.json')
         try:
             rpi_cfg = json.load(open(cfg_path))
             rpi_cfg['analog'] = analog_config
             json.dump(rpi_cfg, open(cfg_path, 'w'), indent=2, ensure_ascii=False)
         except Exception as e:
-            self.log_terminal.append_log(f'⚠ Sondes config sauvegarde : {e}')
-            return
+            self.log_terminal.append_log(f'⚠ Sondes config sauvegarde locale : {e}')
         # Mettre à jour le moteur PLC en mémoire
         self.engine.reload_analog_config(analog_config)
         # Log
@@ -1167,17 +1661,60 @@ class MainWindow(QMainWindow):
             f'R_ref={analog_config.get("r_ref_ohm",10000)}Ω  '
             f'VCC={analog_config.get("vcc",3.3)}V'
         )
-        self.statusBar().showMessage('Configuration sondes sauvegardée — redéployez pour appliquer', 5000)
+        # ── Push immédiat vers le RPi ────────────────────────────────────────
+        rpi_cfg_data = self.project.data.get("rpi", {})
+        rpi_host = rpi_cfg_data.get("host", "")
+        rpi_port = rpi_cfg_data.get("web_port", 5000)
+        if rpi_host:
+            try:
+                import urllib.request as _ur
+                payload = json.dumps({"analog": analog_config}).encode("utf-8")
+                req = _ur.Request(
+                    f"http://{rpi_host}:{rpi_port}/api/analog/config",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with _ur.urlopen(req, timeout=3) as resp:
+                    result = json.loads(resp.read())
+                if result.get("ok"):
+                    self.log_terminal.append_log("✅ Config sondes poussée vers le RPi (live)")
+                    self.statusBar().showMessage("Configuration sondes appliquée sur le RPi", 5000)
+                else:
+                    raise RuntimeError(result.get("error", "réponse non-ok"))
+            except Exception as e:
+                self.log_terminal.append_log(f"⚠ Sondes push RPi : {e} — redéployez pour appliquer")
+                self.statusBar().showMessage("Sondes sauvegardées localement — redéployez pour appliquer", 5000)
+        else:
+            self.statusBar().showMessage("Sondes sauvegardées — connectez le RPi ou redéployez pour appliquer", 5000)
+        # Mettre à jour le canvas synoptique (dropdowns ANA enrichis)
+        self._push_analog_config_to_synoptic(analog_config)
 
     def _open_deploy(self):
         from ui.deploy_dialog import DeployDialog
+        from PyQt5.QtCore import QEventLoop, QTimer
         prog = self.editor.get_engine_program()
         if not prog:
             QMessageBox.warning(self, "Programme vide",
                 "Ajouter au moins un bloc avant de déployer.")
             return
-        syn = self._synoptic_win.get_synoptic()
-        dlg = DeployDialog(self.project.rpi, prog, self, synoptic=syn)
+        # ── FIX : forcer la sauvegarde du synoptique avant déploiement ──────
+        # Sans ça, si l'utilisateur n'a pas cliqué "Sauvegarder" dans l'éditeur
+        # synoptique, c'est l'ancienne version qui part sur le RPi.
+        try:
+            self._synoptic_win.editor._force_save()   # déclenche saveSynoptic() en JS
+            loop = QEventLoop()                        # attend le callback _on_saved
+            QTimer.singleShot(400, loop.quit)          # 400 ms max (JS + bridge)
+            loop.exec_()
+        except Exception:
+            pass  # si l'éditeur n'est pas encore prêt, on continue avec ce qu'on a
+        syn       = self._synoptic_win.get_synoptic()
+        fbd_diag  = self.editor.get_program()   # diagramme FBD graphique complet
+        # Injecter la config GPIO + analog du projet pour que le deployer les envoie au RPi
+        rpi_cfg_deploy = dict(self.project.rpi)
+        rpi_cfg_deploy["gpio_config"]    = self.project.data.get("plc", {}).get("gpio_config", {})
+        rpi_cfg_deploy["analog_config"]  = self.project.data.get("plc", {}).get("analog_config", {})
+        dlg = DeployDialog(rpi_cfg_deploy, prog, self, synoptic=syn, fbd_diagram=fbd_diag)
         dlg.deploy_done.connect(lambda ok: self._on_deploy_done(ok, dlg.rpi_config))
         dlg.exec_()
 
@@ -1194,6 +1731,156 @@ class MainWindow(QMainWindow):
             self.log_terminal.append_log(f"[OK] Déployé sur {host} — http://{host}:5000")
             self.statusBar().showMessage(f"Déployé sur {host}", 5000)
 
+    # ══════════════════════════════════════════════════════════════════════
+    # GESTION SYNOPTIQUES RPi — envoi indépendant / suppression
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _rpi_base_url(self) -> str:
+        """Retourne l'URL de base du RPi depuis le projet, ou chaîne vide."""
+        if not self.project:
+            return ""
+        rpi = self.project.data.get("rpi", {})
+        host = rpi.get("host", "")
+        port = rpi.get("web_port", 5000)
+        return f"http://{host}:{port}" if host else ""
+
+    def _send_synoptic_to_rpi(self):
+        """Sélectionne un fichier synoptique (.json) et l'envoie au RPi via POST /api/synoptic.
+        Indépendant du synoptique du programme — remplace synoptic.json sur le RPi."""
+        import json as _json
+        import threading
+        import urllib.request, urllib.error
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+        # 1. Choisir le fichier
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Sélectionner un synoptique à envoyer",
+            "",
+            "Synoptiques JSON (*.json);;Tous les fichiers (*)"
+        )
+        if not path:
+            return
+
+        # 2. Lire et valider le JSON
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = _json.load(fh)
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur lecture", f"Impossible de lire le fichier :\n{e}")
+            return
+
+        # 3. Récupérer l'URL du RPi
+        url = self._rpi_base_url()
+        if not url:
+            from PyQt5.QtWidgets import QInputDialog
+            url, ok = QInputDialog.getText(
+                self, "URL du RPi", "URL de base :", text="http://192.168.1.49:5000"
+            )
+            if not ok or not url.strip():
+                return
+            url = url.strip().rstrip("/")
+
+        endpoint = f"{url}/api/synoptic"
+        payload  = _json.dumps(data, ensure_ascii=False).encode("utf-8")
+
+        import os as _os
+        filename = _os.path.basename(path)
+        self.log_terminal.append_log(f"[SYNOPTIC] Envoi de '{filename}' → {endpoint}")
+        self.statusBar().showMessage(f"Envoi synoptique → {url}…")
+
+        def _do():
+            try:
+                req = urllib.request.Request(
+                    endpoint,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    result = _json.loads(resp.read())
+                if result.get("ok"):
+                    self.log_terminal.append_log(
+                        f"[SYNOPTIC] ✓ '{filename}' déployé sur {url}"
+                    )
+                    self.statusBar().showMessage(
+                        f"✓ Synoptique déployé sur {url}", 4000
+                    )
+                else:
+                    err = result.get("error", "réponse inattendue")
+                    self.log_terminal.append_log(f"[SYNOPTIC] ✗ Erreur serveur : {err}")
+            except Exception as e:
+                self.log_terminal.append_log(f"[SYNOPTIC] ✗ Échec envoi : {e}")
+                self.statusBar().showMessage(f"✗ Erreur envoi synoptique : {e}", 5000)
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _clear_synoptic_on_rpi(self):
+        """Envoie un synoptique vide au RPi — efface tous les widgets de synoptic.json."""
+        import json as _json
+        import threading
+        import urllib.request, urllib.error
+        from PyQt5.QtWidgets import QMessageBox
+
+        rep = QMessageBox.question(
+            self,
+            "Supprimer tous les synoptiques",
+            "Cette opération va effacer synoptic.json sur le RPi\n"
+            "et supprimer tous les widgets du synoptique.\n\n"
+            "Continuer ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if rep != QMessageBox.Yes:
+            return
+
+        url = self._rpi_base_url()
+        if not url:
+            from PyQt5.QtWidgets import QInputDialog
+            url, ok = QInputDialog.getText(
+                self, "URL du RPi", "URL de base :", text="http://192.168.1.49:5000"
+            )
+            if not ok or not url.strip():
+                return
+            url = url.strip().rstrip("/")
+
+        endpoint = f"{url}/api/synoptic"
+        empty = {
+            "pages":      [{"name": "Vue principale", "bg": "#0d1117", "elements": []}],
+            "curPage":    0,
+            "showNavBar": True,
+            "images":     []
+        }
+        payload = _json.dumps(empty, ensure_ascii=False).encode("utf-8")
+
+        self.log_terminal.append_log(f"[SYNOPTIC] Effacement synoptic.json sur {url}")
+
+        def _do():
+            try:
+                req = urllib.request.Request(
+                    endpoint,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    result = _json.loads(resp.read())
+                if result.get("ok"):
+                    self.log_terminal.append_log(
+                        "[SYNOPTIC] ✓ Tous les synoptiques supprimés du RPi"
+                    )
+                    self.statusBar().showMessage(
+                        "✓ Synoptiques supprimés du RPi", 4000
+                    )
+                else:
+                    err = result.get("error", "réponse inattendue")
+                    self.log_terminal.append_log(f"[SYNOPTIC] ✗ Erreur serveur : {err}")
+            except Exception as e:
+                self.log_terminal.append_log(f"[SYNOPTIC] ✗ Échec suppression : {e}")
+                self.statusBar().showMessage(f"✗ Erreur suppression : {e}", 5000)
+
+        threading.Thread(target=_do, daemon=True).start()
+
     def _open_rpi_web(self):
         import webbrowser
         host = self.project.rpi.get("host", "192.168.1.100")
@@ -1206,82 +1893,121 @@ class MainWindow(QMainWindow):
             "Synoptique régulation — éditeur natif PLC Studio (F8)", 3000
         )
 
+    # ── Configuration persistante (GPIO + sondes + connexion RPi) ────────────
+
+    def _load_persisted_config(self):
+        """Charge config.json au démarrage et applique GPIO + analog + RPi au projet courant.
+        Telegram est déjà dans config.json — il est lu par le moteur RPI à chaque démarrage.
+        Cette méthode préserve le panneau GPIO du PC entre les sessions."""
+        import os as _os, json as _json
+        _cfg_path = _os.path.join(
+            _os.path.dirname(_os.path.abspath(__file__)),
+            "..", "rpi_server", "config.json"
+        )
+        try:
+            rpi_cfg = _json.load(open(_cfg_path))
+        except Exception:
+            return   # config.json absent ou corrompu — démarrage à blanc
+
+        gpio   = rpi_cfg.get("gpio",   {})
+        analog = rpi_cfg.get("analog", {})
+
+        if gpio:
+            self.project.data.setdefault("plc", {})["gpio_config"] = gpio
+            try:
+                self.engine.reload_gpio_config(gpio)
+                self._reload_gpio_panel(gpio)
+            except Exception as e:
+                self.statusBar().showMessage(f"GPIO config : {e}", 4000)
+
+        if analog:
+            self.project.data.setdefault("plc", {})["analog_config"] = analog
+            try:
+                self.engine.reload_analog_config(analog)
+            except Exception:
+                pass
+
+        # Conserver aussi les paramètres de connexion RPi (host/port/user/web_port)
+        for _key in ("host", "port", "user", "remote_dir", "web_port"):
+            _val = rpi_cfg.get(_key)
+            if _val is not None:
+                self.project.data.setdefault("rpi", {})[_key] = _val
+
+        if gpio or analog:
+            n_out = sum(1 for c in gpio.values() if c.get("mode") == "output")
+            n_in  = sum(1 for c in gpio.values() if c.get("mode") == "input")
+            self.statusBar().showMessage(
+                f"Config restaurée — {n_out} sorties, {n_in} entrées GPIO | "
+                f"Telegram {'activé' if rpi_cfg.get('telegram', {}).get('enabled') else 'désactivé'}",
+                5000
+            )
+
     # ── À propos ─────────────────────────────────────────────────────────────
     def _autosave(self):
-        """Sauvegarde automatique silencieuse si le projet a des modifications."""
+        """Sauvegarde automatique silencieuse si le projet a des modifications.
+        Ecrase le fichier courant. Cree une copie de securite .bak unique
+        (un seul fichier, toujours ecrase) avant d'ecraser le projet.
+        Si le projet n'a pas encore de chemin, sauvegarde dans ~/.rpi-plc-studio/autosave.plcproj.
+        """
         if not self.project or not self.project.dirty:
             return
-        import os, tempfile
-        # Sauvegarder dans un fichier autosave séparé (ne pas écraser le fichier principal)
+        import os, shutil
         try:
-            # Utiliser filepath (attribut correct du projet)
-            filepath = self.project.filepath
-            if filepath:
-                autosave_path = filepath.replace('.plcproj', '.autosave.plcproj')
-            else:
-                d = os.path.expanduser('~/.rpi-plc-studio')
-                os.makedirs(d, exist_ok=True)
-                autosave_path = os.path.join(d, 'autosave.plcproj')
             # Synchroniser programme ET synoptique avant sauvegarde
             self.project.program = self.editor.get_program()
             self.project.data["synoptic"] = self._synoptic_win.get_synoptic()
-            self.project.save(autosave_path)
-            self.statusBar().showMessage(
-                f"💾 Autosauvegarde — {os.path.basename(autosave_path)}", 3000)
-            self.log_terminal.append_log(f"Autosauvegarde : {autosave_path}")
+
+            filepath = self.project.filepath
+            if filepath:
+                # Copie de securite .bak (un seul fichier, toujours ecrase)
+                bak_path = filepath + ".bak"
+                try:
+                    if os.path.exists(filepath):
+                        shutil.copy2(filepath, bak_path)
+                except Exception:
+                    pass
+                # Ecraser le projet courant
+                self.project.save(filepath)
+                self.statusBar().showMessage(
+                    f"Autosauvegarde - {os.path.basename(filepath)}", 3000)
+                self.log_terminal.append_log(f"Autosauvegarde : {filepath}")
+            else:
+                # Projet non encore enregistre -> fichier temporaire
+                d = os.path.expanduser('~/.rpi-plc-studio')
+                os.makedirs(d, exist_ok=True)
+                tmp_path = os.path.join(d, 'autosave.plcproj')
+                _orig_filepath = self.project.filepath
+                self.project.save(tmp_path)
+                self.project.filepath = _orig_filepath  # ne pas fixer le chemin
+                self.statusBar().showMessage(
+                    "Autosauvegarde temporaire - autosave.plcproj", 3000)
+                self.log_terminal.append_log(f"Autosauvegarde temporaire : {tmp_path}")
         except Exception as e:
-            self.log_terminal.append_log(f"[WARN] Autosauvegarde échouée : {e}")
+            self.log_terminal.append_log(f"[WARN] Autosauvegarde echouee : {e}")
 
     def _open_doc(self):
-        """Ouvre la documentation HTML dans une fenêtre Qt flottante."""
-        import os
-        doc_path = os.path.join(
+        """Ouvre la documentation HTML dans Firefox (ou navigateur dispo)."""
+        import os, subprocess, webbrowser
+        doc_path = os.path.normpath(os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "..", "resources", "rpi-plc-studio-doc.html"
-        )
-        doc_path = os.path.normpath(doc_path)
+        ))
         if not os.path.exists(doc_path):
             QMessageBox.warning(self, "Documentation",
                 f"Fichier documentation introuvable :\n{doc_path}")
             return
-        # Réutiliser la fenêtre si déjà ouverte
-        if hasattr(self, '_doc_window') and self._doc_window and                 self._doc_window.isVisible():
-            self._doc_window.raise_()
-            self._doc_window.activateWindow()
-            return
-        try:
-            from PyQt5.QtWebEngineWidgets import QWebEngineView
-            from PyQt5.QtCore import QUrl
-            win = QWidget()
-            win.setWindowTitle("RPi-PLC Studio — Documentation")
-            win.resize(1100, 780)
-            layout = QVBoxLayout(win)
-            layout.setContentsMargins(0, 0, 0, 0)
-            view = QWebEngineView()
-            view.load(QUrl.fromLocalFile(doc_path))
-            layout.addWidget(view)
-            # Barre fermer
-            bar = QHBoxLayout()
-            bar.setContentsMargins(8, 4, 8, 4)
-            lbl = QLabel("📖 Documentation RPi-PLC Studio")
-            lbl.setStyleSheet("color:#58a6ff;font-weight:bold;font-size:13px;")
-            close_btn = QPushButton("✕ Fermer")
-            close_btn.setStyleSheet(
-                "background:#f85149;border:none;color:#fff;"                "border-radius:4px;padding:3px 10px;")
-            close_btn.clicked.connect(win.close)
-            bar.addWidget(lbl)
-            bar.addStretch()
-            bar.addWidget(close_btn)
-            bar_widget = QWidget()
-            bar_widget.setLayout(bar)
-            bar_widget.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
-            layout.insertWidget(0, bar_widget)
-            self._doc_window = win
-            win.show()
-        except ImportError:
-            # Fallback : ouvrir dans le navigateur système
-            import webbrowser
-            webbrowser.open(f"file://{doc_path}")
+        url = "file://" + doc_path.replace(" ", "%20")
+        # Essayer Firefox en priorite, puis alternatives courantes
+        for browser in ("firefox", "chromium-browser", "chromium", "google-chrome"):
+            try:
+                subprocess.Popen([browser, url],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+                return
+            except FileNotFoundError:
+                continue
+        # Fallback : navigateur par defaut du systeme
+        webbrowser.open(url)
 
     def _about(self):
         QMessageBox.about(self, "RPi-PLC Studio",

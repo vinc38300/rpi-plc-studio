@@ -23,8 +23,9 @@
 html,body{width:100%;height:100%;overflow:hidden;}
 body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;flex-direction:column;font-size:13px;}
 
-/* TOOLBAR */
-#toolbar{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
+/* TOOLBAR — caché par défaut (mode opérateur) */
+#toolbar{display:none;align-items:center;gap:4px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
+#toolbar.visible{display:flex;}
 .tbtn{padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font);transition:all .15s;white-space:nowrap;}
 .tbtn:hover{border-color:var(--accent);color:var(--accent);}
 .tbtn.primary{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
@@ -208,46 +209,67 @@ select.prop-input{cursor:pointer;}
   pointer-events:none;
 }
 
-/* ═══ BARRE DE NAVIGATION FIXE (top du canvas) ═══ */
+/* ═══ BARRE DE NAVIGATION FIXE — minimale, toujours visible en mode opérateur ═══ */
+/* ═══ BARRE DE NAVIGATION FIXE — toujours visible en mode opérateur ═══ */
 #nav-fixed-bar{
-  display:none; /* activé si showNavBar=true */
+  display:none; /* activé par JS via .visible */
   align-items:center;gap:6px;padding:4px 10px;
-  background:var(--bg2);border-bottom:1px solid var(--border);
-  flex-shrink:0;min-height:32px;
+  background:rgba(13,17,23,0.96);border-bottom:2px solid var(--accent);
+  flex-shrink:0;min-height:40px;height:40px;
+  backdrop-filter:blur(6px);
+  box-shadow:0 2px 12px rgba(0,0,0,0.5);
 }
 #nav-fixed-bar.visible{display:flex;}
+/* Boutons de navigation grands et clairs */
 .nav-fixed-btn{
-  padding:3px 12px;border-radius:5px;cursor:pointer;
+  padding:5px 14px;border-radius:6px;cursor:pointer;
   border:1px solid var(--border);background:var(--bg3);
-  color:var(--text2);font-size:10px;font-weight:600;
+  color:var(--text2);font-size:12px;font-weight:700;
   white-space:nowrap;transition:all .15s;
+  min-height:30px;line-height:1.2;
 }
-.nav-fixed-btn:hover{border-color:var(--accent);color:var(--accent);}
-.nav-fixed-btn.home{border-color:var(--accent);color:var(--accent);}
+.nav-fixed-btn:hover{border-color:var(--accent);color:var(--accent);background:#1a2f45;}
+.nav-fixed-btn.home{
+  border-color:var(--accent);color:var(--accent);
+  background:#1a2f45;font-size:16px;padding:4px 12px;
+}
+.nav-fixed-btn.home:hover{background:#1e3a55;}
+/* Boutons page précédente/suivante */
+.nav-prev-btn,.nav-next-btn{
+  padding:5px 12px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg3);
+  color:var(--text2);font-size:13px;font-weight:700;
+  white-space:nowrap;transition:all .15s;min-height:30px;
+}
+.nav-prev-btn:hover,.nav-next-btn:hover{border-color:var(--accent);color:var(--accent);background:#1a2f45;}
+.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.25;cursor:default;pointer-events:none;}
+/* Fil d'Ariane central */
 .nav-breadcrumb{
-  display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3);
+  display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);
   flex:1;overflow:hidden;
 }
-.nav-breadcrumb-sep{color:var(--border);}
-.nav-breadcrumb-item{color:var(--text2);cursor:pointer;}
-.nav-breadcrumb-item:hover{color:var(--accent);}
-.nav-breadcrumb-item.current{color:var(--text);font-weight:600;cursor:default;}
+.nav-breadcrumb-sep{color:var(--border);font-size:10px;}
+.nav-breadcrumb-item{color:var(--text2);cursor:pointer;font-size:11px;padding:2px 5px;border-radius:4px;transition:all .12s;}
+.nav-breadcrumb-item:hover{color:var(--accent);background:rgba(88,166,255,.1);}
+.nav-breadcrumb-item.current{color:var(--text);font-weight:700;cursor:default;background:rgba(255,255,255,.05);}
+/* Bouton Retour agrandi */
 .nav-back-btn{
-  padding:3px 10px;border-radius:5px;cursor:pointer;
+  padding:5px 12px;border-radius:6px;cursor:pointer;
   border:1px solid var(--border);background:var(--bg3);
-  color:var(--text2);font-size:10px;
-  transition:all .15s;flex-shrink:0;
+  color:var(--text2);font-size:12px;font-weight:600;
+  transition:all .15s;flex-shrink:0;min-height:30px;
 }
-.nav-back-btn:hover{border-color:var(--accent);color:var(--accent);}
-.nav-back-btn:disabled{opacity:0.35;cursor:default;}
+.nav-back-btn:hover{border-color:var(--amber);color:var(--amber);background:rgba(210,153,34,.1);}
+.nav-back-btn:disabled{opacity:0.25;cursor:default;}
 #nav-bar-toggle{
-  padding:3px 8px;border-radius:5px;cursor:pointer;font-size:10px;
+  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:10px;
   border:1px solid var(--border);background:var(--bg3);color:var(--text2);
+  transition:all .15s;
 }
-#nav-bar-toggle.on{border-color:var(--green);color:var(--green);}
+#nav-bar-toggle.on{border-color:var(--green);color:var(--green);background:rgba(63,185,80,.1);}
 </style>
 </head>
-<body>
+<body tabindex="-1">
 
 <div id="toolbar">
   <span id="editBadge" class="mode-badge edit" onclick="toggleMode()" title="Tab">✏ Édition</span>
@@ -290,9 +312,16 @@ select.prop-input{cursor:pointer;}
 </div>
 
 <div id="nav-fixed-bar">
-  <button class="nav-back-btn" id="nav-back-btn" onclick="navBack()" title="Page précédente">← Retour</button>
+  <button class="nav-back-btn" id="nav-back-btn" onclick="navBack()" title="Retour à la page précédente visitée  [Alt+←]">← Retour</button>
+  <div style="width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0;"></div>
+  <button class="nav-prev-btn" id="nav-prev-btn" onclick="navStepPage(-1)" title="Page précédente  [←]">‹ Préc.</button>
+  <button class="nav-fixed-btn home" onclick="switchPage(0)" title="Page d'accueil  [Origine]">⌂</button>
+  <button class="nav-next-btn" id="nav-next-btn" onclick="navStepPage(+1)" title="Page suivante  [→]">Suiv. ›</button>
+  <div style="width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0;"></div>
   <div class="nav-breadcrumb" id="nav-breadcrumb"></div>
-  <button class="nav-fixed-btn home" onclick="switchPage(0)" title="Page d'accueil">⌂</button>
+  <div style="flex:1;"></div>
+  <span id="nav-page-counter" style="font-size:10px;color:var(--text3);margin-right:6px;flex-shrink:0;"></span>
+  <button class="nav-fixed-btn" id="edit-mode-btn" onclick="toggleMode()" title="Basculer mode Édition / Opérateur" style="border-color:var(--accent);color:var(--accent);">👁 Opérateur</button>
 </div>
 
 <div class="workspace">
@@ -310,22 +339,37 @@ select.prop-input{cursor:pointer;}
     <!-- WIDGETS PLC -->
     <div class="sb-panel active" id="panel-widgets" style="display:flex;flex-direction:column;">
       <div class="sb-section">Mesures</div>
+      <div class="sb-item" draggable="true" data-type="temp_card"><div class="sb-icon" style="background:#fff2f2;color:#e53935;border:1px solid #ffcdd2;font-size:9px;font-weight:700;letter-spacing:0">🌡LCD</div>Temp. carte</div>
       <div class="sb-item" draggable="true" data-type="temperature"><div class="sb-icon" style="background:color-mix(in srgb,var(--cyan) 15%,var(--bg3));color:var(--cyan)">🌡</div>Thermomètre</div>
       <div class="sb-item" draggable="true" data-type="gauge"><div class="sb-icon" style="background:color-mix(in srgb,var(--purple) 15%,var(--bg3));color:var(--purple)">◎</div>Jauge circulaire</div>
       <div class="sb-item" draggable="true" data-type="bar"><div class="sb-icon" style="background:color-mix(in srgb,var(--green) 15%,var(--bg3));color:var(--green)">▮</div>Barre de niveau</div>
       <div class="sb-item" draggable="true" data-type="trend"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 15%,var(--bg3));color:var(--accent)">📈</div>Courbe tendance</div>
       <div class="sb-item" draggable="true" data-type="value"><div class="sb-icon" style="background:var(--bg4);color:var(--text)">123</div>Valeur numérique</div>
+      <div class="sb-item" draggable="true" data-type="av_display"><div class="sb-icon" style="background:color-mix(in srgb,#ffa030 15%,var(--bg3));color:#ffa030">AV</div>Afficheur AV/RF</div>
       <div class="sb-section">Commande</div>
       <div class="sb-item" draggable="true" data-type="relay"><div class="sb-icon" style="background:color-mix(in srgb,var(--green) 15%,var(--bg3));color:var(--green)">⚡</div>Relais ON/OFF</div>
+      <div class="sb-item" draggable="true" data-type="sp_card"><div class="sb-icon" style="background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;font-size:9px;font-weight:700">🎯LCD</div>Consigne carte</div>
       <div class="sb-item" draggable="true" data-type="setpoint"><div class="sb-icon" style="background:color-mix(in srgb,var(--amber) 15%,var(--bg3));color:var(--amber)">🎯</div>Consigne</div>
       <div class="sb-item" draggable="true" data-type="numentry"><div class="sb-icon" style="background:color-mix(in srgb,#e06c75 15%,var(--bg3));color:#e06c75">✎</div>Saisie num.</div>
       <div class="sb-item" draggable="true" data-type="button"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 15%,var(--bg3));color:var(--accent)">▶</div>Bouton action</div>
       <div class="sb-item" draggable="true" data-type="toggle"><div class="sb-icon" style="background:color-mix(in srgb,var(--purple) 15%,var(--bg3));color:var(--purple)">⊙</div>Interrupteur M</div>
       <div class="sb-item" draggable="true" data-type="dv_push"><div class="sb-icon" style="background:color-mix(in srgb,#f0883e 15%,var(--bg3));color:#f0883e">⏻</div>BP DV (poussoir)</div>
+      <div class="sb-item" draggable="true" data-type="push_3d"><div class="sb-icon" style="background:radial-gradient(circle at 35% 35%,#4ade80,#16a34a);border-radius:50%;color:#fff;font-size:14px">⏻</div>Bouton 3D (maintien)</div>
+      <div class="sb-item" draggable="true" data-type="toggle_btn_3d"><div class="sb-icon" style="background:radial-gradient(circle at 35% 35%,#60a5fa,#2563eb);border-radius:50%;color:#fff;font-size:14px">⏻</div>Bouton 3D ON/OFF</div>
+      <div class="sb-item" draggable="true" data-type="toggle_3d"><div class="sb-icon" style="background:linear-gradient(135deg,#6b7280,#374151);border-radius:4px;color:#3b82f6;font-size:13px;font-weight:bold">⇌</div>Switch 3D</div>
+      <div class="sb-item" draggable="true" data-type="btn_3d"><div class="sb-icon" style="background:linear-gradient(180deg,#60a5fa,#2563eb);border-radius:6px;color:#fff;font-size:11px;font-weight:bold">BTN</div>Bouton 3D</div>
       <div class="sb-item" draggable="true" data-type="cntdisplay"><div class="sb-icon" style="background:color-mix(in srgb,#50ff50 15%,var(--bg3));color:#50ff50">⏱</div>Compteur marche</div>
       <div class="sb-item" draggable="true" data-type="dv_toggle"><div class="sb-icon" style="background:color-mix(in srgb,#56d364 15%,var(--bg3));color:#56d364">⇌</div>Interrupteur DV</div>
+      <div class="sb-section" style="color:#ff7043;">🏭 Blocs Métier</div>
+      <div class="sb-item" draggable="true" data-type="plancher_w"><div class="sb-icon" style="background:color-mix(in srgb,#ff7043 15%,var(--bg3));color:#ff7043">🔥</div>Plancher chauf.</div>
+      <div class="sb-item" draggable="true" data-type="chaudiere_w"><div class="sb-icon" style="background:color-mix(in srgb,#ff5252 15%,var(--bg3));color:#ff5252">🔥</div>Chaudière</div>
+      <div class="sb-item" draggable="true" data-type="solar_w"><div class="sb-icon" style="background:color-mix(in srgb,#ffd740 15%,var(--bg3));color:#ffd740">☀</div>Solaire thermique</div>
+      <div class="sb-item" draggable="true" data-type="zone_chauf_w"><div class="sb-icon" style="background:color-mix(in srgb,#69f0ae 15%,var(--bg3));color:#69f0ae">🏠</div>Zone chauffage</div>
+      <div class="sb-item" draggable="true" data-type="ecs_w"><div class="sb-icon" style="background:color-mix(in srgb,#40c4ff 15%,var(--bg3));color:#40c4ff">💧</div>ECS</div>
+      <div class="sb-item" draggable="true" data-type="prog_h_w"><div class="sb-icon" style="background:color-mix(in srgb,#ffb300 15%,var(--bg3));color:#ffb300">📅</div>Planning Jour/Nuit</div>
       <div class="sb-section">Décoration</div>
       <div class="sb-item" draggable="true" data-type="label"><div class="sb-icon" style="background:var(--bg4);color:var(--text2)">T</div>Texte libre</div>
+      <div class="sb-item" draggable="true" data-type="dyn_text"><div class="sb-icon" style="background:color-mix(in srgb,#e6edf3 12%,var(--bg3));color:#e6edf3;font-size:9px;font-weight:700;letter-spacing:-.5px">Aa↺</div>Texte dynamique</div>
       <div class="sb-item" draggable="true" data-type="nav_back"><div class="sb-icon" style="background:color-mix(in srgb,var(--text2) 15%,var(--bg3));color:var(--text2)">←</div>Bouton Retour</div>
       <div class="sb-item" draggable="true" data-type="nav_page"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 20%,var(--bg3));color:var(--accent)">→</div>Naviguer page</div>
       <div class="sb-item" draggable="true" data-type="rect"><div class="sb-icon" style="background:var(--bg4);color:var(--text3)">□</div>Rectangle</div>

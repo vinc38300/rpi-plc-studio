@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPi-PLC Studio — Groupes de blocs primitifs</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700&display=swap');
+
+  :root {
+    --bg:       #0f1117;
+    --bg2:      #161b27;
+    --bg3:      #1e2537;
+    --border:   #2a3249;
+    --text:     #cdd5f0;
+    --muted:    #6b7a9e;
+    --accent:   #4fc3f7;
+    --amber:    #ffb74d;
+    --coral:    #ef5350;
+    --teal:     #26c6a4;
+    --purple:   #9c88e0;
+    --green:    #66bb6a;
+    --blue:     #5c9cf5;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 32px 48px 28px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .logo-badge {
+    background: var(--accent);
+    color: #0a0e17;
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-family: var(--font-head);
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .nav-pills {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .nav-pills a {
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+  .nav-pills a:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 48px 32px 80px;
+  }
+
+  /* ── SECTION GROUPE ── */
+  .groupe {
+    margin-bottom: 72px;
+  }
+  .groupe-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .groupe-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .groupe-header h2 {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+  .groupe-header .desc {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .badge-nb {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* ── SCHÉMA SVG ── */
+  .schema-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+    overflow-x: auto;
+  }
+  .schema-title {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .schema-wrap svg { display: block; width: 100%; max-width: 980px; }
+
+  /* ── TABLE DES BLOCS ── */
+  .blocs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .bloc-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    transition: border-color 0.15s;
+  }
+  .bloc-card:hover { border-color: #3a4560; }
+  .bloc-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .bloc-info .bloc-name {
+    font-size: 12px;
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .bloc-info .bloc-desc {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .bloc-info .bloc-params {
+    font-size: 11px;
+    color: var(--accent);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+
+  /* ── TABLE BITS MÉMOIRE ── */
+  .mem-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 28px;
+    font-size: 12px;
+  }
+  .mem-table th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .mem-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #1a2030;
+    vertical-align: top;
+  }
+  .mem-table tr:last-child td { border-bottom: none; }
+  .mem-table tr:hover td { background: #161b27; }
+  .bit { font-weight: 600; font-family: var(--font-mono); }
+
+  /* ── RÈGLES PRIORITÉ ── */
+  .priority-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 28px;
+  }
+  .priority-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+  .priority-num {
+    font-family: var(--font-head);
+    font-size: 11px;
+    font-weight: 700;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .priority-item .cond { color: #fff; font-weight: 600; }
+  .priority-item .effect { color: var(--muted); margin-top: 2px; }
+
+  /* ── NOTE / ASTUCE ── */
+  .note {
+    background: #0f1a2e;
+    border: 1px solid #1e3a5f;
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #8ab4d8;
+    margin-bottom: 20px;
+  }
+  .note strong { color: var(--accent); }
+
+  /* ── COULEURS BLOCS ── */
+  .c-teal   { background: #0d3028; color: var(--teal);   border-color: #1a5042; }
+  .c-blue   { background: #0d1f3c; color: var(--blue);   border-color: #1a3566; }
+  .c-red    { background: #2e0d0d; color: #ef9090;       border-color: #5e1a1a; }
+  .c-coral  { background: #2e1810; color: #f5a080;       border-color: #5e3020; }
+  .c-amber  { background: #2e1f00; color: var(--amber);  border-color: #5e3e00; }
+  .c-purple { background: #1e1535; color: var(--purple);  border-color: #3a2860; }
+  .c-gray   { background: #1a1f2e; color: #8899bb;       border-color: #2a3048; }
+  .c-green  { background: #0d2a18; color: var(--green);  border-color: #1a5030; }
+
+  /* ── LÉGENDE COULEURS ── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ── SÉPARATEUR ── */
+  .sep { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 24px;
+    color: var(--muted);
+    font-size: 11px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── SVG styles partagés ── */
+  .sv text { font-family: 'JetBrains Mono', monospace; }
+  .sv .arr { stroke: #3a4a6a; stroke-width: 1; fill: none; }
+  .sv .lbl { fill: #6b7a9e; font-size: 10px; }
+  .sv .lbl-w { fill: #cdd5f0; font-size: 11px; font-weight: 600; }
+  .sv .lbl-s { fill: #6b7a9e; font-size: 10px; }
+  .sv .box-bg { fill: #161b27; stroke: #2a3249; stroke-width: 0.8; rx: 6; }
+
+  @media (max-width: 700px) {
+    header { padding: 16px; flex-wrap: wrap; }
+    .nav-pills { display: none; }
+    main { padding: 24px 16px; }
+    .blocs-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-badge">RPi-PLC Studio</div>
+  <div>
+    <h1>Groupes de blocs primitifs</h1>
+    <p>Reconstruction des blocs métier avec les blocs de base FBD — v1.0</p>
+  </div>
+  <nav class="nav-pills">
+    <a href="#chaudiere">🔥 Chaudière</a>
+    <a href="#plancher">♨ Plancher</a>
+    <a href="#solaire">☀ Solaire</a>
+  </nav>
+</header>
+
+<main>
+
+<!-- ════════════════════════════════════════════════════════
+     INTRODUCTION
+════════════════════════════════════════════════════════ -->
+<div style="margin-bottom:48px; padding:20px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:12px;">
+  <p style="color:var(--muted); font-size:12px; margin-bottom:8px; text-transform:uppercase; letter-spacing:.08em;">À propos de ce document</p>
+  <p style="font-size:13px; line-height:1.8;">
+    Les blocs métier <code style="color:var(--accent)">CHAUDIERE</code>, <code style="color:var(--accent)">PLANCHER</code> et <code style="color:var(--accent)">SOLAR</code> sont des blocs tout-en-un qui encapsulent une logique complexe.
+    Ce document montre comment <strong style="color:#fff">reconstruire exactement le même comportement</strong> en assemblant les blocs primitifs disponibles dans l'éditeur FBD
+    — utile pour personnaliser, déboguer ou adapter la logique sans toucher au code Python.
+  </p>
+  <p style="font-size:12px; color:var(--muted); margin-top:10px;">
+    Chaque bit mémoire <code style="color:var(--purple)">M0..Mn</code> est local au groupe. Les registres <code style="color:var(--teal)">RF</code> sont partagés avec le SCADA.
+  </p>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     GROUPE 1 — CHAUDIÈRE
+════════════════════════════════════════════════════════ -->
+<section class="groupe" id="chaudiere">
+  <div class="groupe-header">
+    <div class="groupe-icon" style="background:#2e1510;">🔥</div>
+    <div>
+      <h2>Groupe CHAUDIÈRE</h2>
+      <p class="desc">Hystérésis tout/rien sur T°départ · Anti-cyclage min_on/min_off · Sécurité alarme départ</p>
+    </div>
+    <span class="badge-nb">9 blocs · 5 bits M</span>
+  </div>
+
+  <div class="note">
+    <strong>Principe :</strong> la chaudière à granulés ne peut pas s'allumer/s'éteindre librement.
+    L'anti-cyclage impose une durée minimale ON (120 s) et une durée minimale OFF (60 s) avant d'autoriser tout changement d'état.
+    La bascule <code>SR_R</code> mémorise l'état entre les cycles.
+  </div>
+
+  <!-- Schéma -->
+  <div class="schema-wrap">
+    <div class="schema-title">Schéma câblage FBD</div>
+    <svg class="sv" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ar1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#3a4a6a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="ar1r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#8b2020" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="ar1b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#1a4580" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="ar1p" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="#5a3a90" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- ANA_IN départ -->
+      <rect x="20" y="60" width="120" height="46" rx="6" fill="#0d3028" stroke="#1a5042" stroke-width="0.8"/>
+      <text x="80" y="80" text-anchor="middle" fill="#26c6a4" font-size="11" font-weight="600">ANA_IN</text>
+      <text x="80" y="96" text-anchor="middle" fill="#6b7a9e" font-size="10">ANA3 → RF3</text>
+      <text x="16" y="75" text-anchor="end" fill="#6b7a9e" font-size="10">T°départ</text>
+
+      <!-- ANA_IN retour -->
+      <rect x="20" y="120" width="120" height="46" rx="6" fill="#0d3028" stroke="#1a5042" stroke-width="0.8"/>
+      <text x="80" y="140" text-anchor="middle" fill="#26c6a4" font-size="11" font-weight="600">ANA_IN</text>
+      <text x="80" y="156" text-anchor="middle" fill="#6b7a9e" font-size="10">ANA4 → RF4</text>
+      <text x="16" y="135" text-anchor="end" fill="#6b7a9e" font-size="10">T°retour</text>
+
+      <!-- COMPH sécurité 90°C -->
+      <line x1="140" y1="83" x2="180" y2="83" stroke="#3a4a6a" stroke-width="1" marker-end="url(#ar1)"/>
+      <rect x="182" y="54" width="128" height="58" rx="6" fill="#2e0d0d" stroke="#5e1a1a" stroke-width="0.8"/>
+      <text x="246" y="76" text-anchor="middle" fill="#ef9090" font-size="11" font-weight="600">COMPH</text>
+      <text x="246" y="92" text-anchor="middle" fill="#6b7a9e" font-size="10">RF3 ≥ 90°C</text>
+      <text x="246" y="104" text-anchor="middle" fill="#ef9090" font-size="10">→ M5 alarme</text>
+      <text x="246" y="50" text-anchor="middle" fill="#6b7a9e" font-size="10">sécurité départ</text>
+      <line x1="310" y1="83" x2="370" y2="83" stroke="#8b2020" stroke-width="1" marker-end="url(#ar1r)"/>
+      <text x="340" y="76" text-anchor="middle" fill="#ef9090" font-size="10">M5</text>
+
+      <!-- COMPL allumage 62°C -->
+      <line x1="140" y1="83" x2="160" y2="83" stroke="#3a4a6a" stroke-width="0.8"/>
+      <line x1="160" y1="83" x2="160" y2="188" stroke="#3a4a6a" stroke-width="0.8"/>
+      <line x1="160" y1="188" x2="182" y2="188" stroke="#3a4a6a" stroke-width="0.8" marker-end="url(#ar1)"/>
+      <rect x="182" y="164" width="128" height="50" rx="6" fill="#0d1f3c" stroke="#1a3566" stroke-width="0.8"/>
+      <text x="246" y="184" text-anchor="middle" fill="#5c9cf5" font-size="11" font-weight="600">COMPL</text>
+      <text x="246" y="200" text-anchor="middle" fill="#6b7a9e" font-size="10">RF3 ≤ 62°C → M1</text>
+      <text x="246" y="160" text-anchor="middle" fill="#6b7a9e" font-size="10">T &lt; SP−hyst → allumage</text>
+      <line x1="310" y1="189" x2="370" y2="189" stroke="#1a4580" stroke-width="1" marker-end="url(#ar1b)"/>
+      <text x="340" y="182" text-anchor="middle" fill="#5c9cf5" font-size="10">M1</text>
+
+      <!-- COMPH extinction 68°C -->
+      <line x1="160" y1="188" x2="160" y2="285" stroke="#3a4a6a" stroke-width="0.8"/>
+      <line x1="160" y1="285" x2="182" y2="285" stroke="#3a4a6a" stroke-width="0.8" marker-end="url(#ar1)"/>
+      <rect x="182" y="260" width="128" height="50" rx="6" fill="#2e1810" stroke="#5e3020" stroke-width="0.8"/>
+      <text x="246" y="280" text-anchor="middle" fill="#f5a080" font-size="11" font-weight="600">COMPH</text>
+      <text x="246" y="296" text-anchor="middle" fill="#6b7a9e" font-size="10">RF3 ≥ 68°C → M2</text>
+      <text x="246" y="256" text-anchor="middle" fill="#6b7a9e" font-size="10">T ≥ SP+hyst → extinction</text>
+      <line x1="310" y1="285" x2="370" y2="285" stroke="#8b2020" stroke-width="1" marker-end="url(#ar1r)"/>
+      <text x="340" y="278" text-anchor="middle" fill="#f5a080" font-size="10">M2</text>
+
+      <!-- TIMER min_off 60s -->
+      <rect x="182" y="370" width="128" height="58" rx="6" fill="#1a1f2e" stroke="#2a3048" stroke-width="0.8"/>
+      <text x="246" y="392" text-anchor="middle" fill="#8899bb" font-size="11" font-weight="600">TIMER (TON)</text>
+      <text x="246" y="408" text-anchor="middle" fill="#6b7a9e" font-size="10">60 000 ms</text>
+      <text x="246" y="420" text-anchor="middle" fill="#8899bb" font-size="10">→ M3</text>
+      <text x="246" y="366" text-anchor="middle" fill="#6b7a9e" font-size="10">anti-cyclage min_off</text>
+      <text x="178" y="395" text-anchor="end" fill="#6b7a9e" font-size="10">cond: ¬M0</text>
+      <line x1="180" y1="395" x2="182" y2="399" stroke="#3a4a6a" stroke-width="0.8" marker-end="url(#ar1)"/>
+
+      <!-- TIMER min_on 120s -->
+      <rect x="182" y="458" width="128" height="58" rx="6" fill="#1a1f2e" stroke="#2a3048" stroke-width="0.8"/>
+      <text x="246" y="480" text-anchor="middle" fill="#8899bb" font-size="11" font-weight="600">TIMER (TON)</text>
+      <text x="246" y="496" text-anchor="middle" fill="#6b7a9e" font-size="10">120 000 ms</text>
+      <text x="246" y="508" text-anchor="middle" fill="#8899bb" font-size="10">→ M4</text>
+      <text x="246" y="454" text-anchor="middle" fill="#6b7a9e" font-size="10">anti-cyclage min_on</text>
+      <text x="178" y="483" text-anchor="end" fill="#6b7a9e" font-size="10">cond: M0</text>
+      <line x1="180" y1="483" x2="182" y2="487" stroke="#3a4a6a" stroke-width="0.8" marker-end="url(#ar1)"/>
+
+      <!-- Sorties timers vers SR -->
+      <line x1="310" y1="399" x2="360" y2="399" stroke="#3a4a6a" stroke-width="0.8" stroke-dasharray="4 3"/>
+      <line x1="360" y1="399" x2="360" y2="220" stroke="#3a4a6a" stroke-width="0.8" stroke-dasharray="4 3"/>
+      <line x1="360" y1="220" x2="372" y2="220" stroke="#3a4a6a" stroke-width="0.8" stroke-dasharray="4 3" marker-end="url(#ar1)"/>
+      <text x="338" y="315" text-anchor="middle" fill="#8899bb" font-size="10">M3</text>
+      <line x1="310" y1="487" x2="365" y2="487" stroke="#3a4a6a" stroke-width="0.8" stroke-dasharray="4 3"/>
+      <line x1="365" y1="487" x2="365" y2="270" stroke="#3a4a6a" stroke-width="0.8" stroke-dasharray="4 3"/>
+      <line x1="365" y1="270" x2="372" y2="270" stroke="#3a4a6a" stroke-width="0.8" stroke-dasharray="4 3" marker-end="url(#ar1)"/>
+      <text x="348" y="400" text-anchor="middle" fill="#8899bb" font-size="10">M4</text>
+
+      <!-- SR_R -->
+      <rect x="372" y="140" width="148" height="150" rx="6" fill="#1e1535" stroke="#3a2860" stroke-width="0.8"/>
+      <text x="446" y="168" text-anchor="middle" fill="#9c88e0" font-size="12" font-weight="600">SR_R</text>
+      <text x="446" y="188" text-anchor="middle" fill="#6b7a9e" font-size="10">bascule état chaudière</text>
+      <line x1="390" y1="210" x2="420" y2="210" stroke="#3a4a6a" stroke-width="0.5"/>
+      <text x="388" y="214" text-anchor="end" fill="#5c9cf5" font-size="10">S: M1 AND M3</text>
+      <line x1="390" y1="238" x2="420" y2="238" stroke="#3a4a6a" stroke-width="0.5"/>
+      <text x="388" y="242" text-anchor="end" fill="#f5a080" font-size="10">R: M2 AND M4</text>
+      <line x1="390" y1="266" x2="420" y2="266" stroke="#3a4a6a" stroke-width="0.5"/>
+      <text x="388" y="270" text-anchor="end" fill="#ef9090" font-size="10">R: M5 (sécurité)</text>
+      <text x="446" y="136" text-anchor="middle" fill="#6b7a9e" font-size="10">reset prioritaire</text>
+
+      <!-- fils vers SR -->
+      <line x1="370" y1="189" x2="372" y2="210" stroke="#1a4580" stroke-width="1" marker-end="url(#ar1b)"/>
+      <line x1="370" y1="285" x2="372" y2="238" stroke="#8b2020" stroke-width="1" marker-end="url(#ar1r)"/>
+      <line x1="370" y1="83" x2="371" y2="83" stroke="#8b2020" stroke-width="0.8" stroke-dasharray="3 3"/>
+      <line x1="371" y1="83" x2="371" y2="266" stroke="#8b2020" stroke-width="0.8" stroke-dasharray="3 3"/>
+      <line x1="371" y1="266" x2="372" y2="266" stroke="#8b2020" stroke-width="0.8" stroke-dasharray="3 3" marker-end="url(#ar1r)"/>
+
+      <!-- Sortie SR → M0 -->
+      <line x1="520" y1="215" x2="580" y2="215" stroke="#5a3a90" stroke-width="1.2" marker-end="url(#ar1p)"/>
+      <text x="550" y="207" text-anchor="middle" fill="#9c88e0" font-size="10">M0 état</text>
+
+      <!-- COIL brûleur K3 -->
+      <rect x="582" y="180" width="148" height="46" rx="6" fill="#2e1f00" stroke="#5e3e00" stroke-width="0.8"/>
+      <text x="656" y="200" text-anchor="middle" fill="#ffb74d" font-size="11" font-weight="600">COIL → K3</text>
+      <text x="656" y="216" text-anchor="middle" fill="#6b7a9e" font-size="10">M0 → brûleur</text>
+
+      <!-- COIL pompe K4 -->
+      <rect x="582" y="240" width="148" height="46" rx="6" fill="#2e1f00" stroke="#5e3e00" stroke-width="0.8"/>
+      <text x="656" y="260" text-anchor="middle" fill="#ffb74d" font-size="11" font-weight="600">COIL → K4</text>
+      <text x="656" y="276" text-anchor="middle" fill="#6b7a9e" font-size="10">M0 OR M5 → pompe</text>
+
+      <!-- M5 vers COIL pompe -->
+      <line x1="370" y1="83" x2="566" y2="83" stroke="#8b2020" stroke-width="0.8" stroke-dasharray="3 3"/>
+      <line x1="566" y1="83" x2="566" y2="263" stroke="#8b2020" stroke-width="0.8" stroke-dasharray="3 3"/>
+      <line x1="566" y1="263" x2="582" y2="263" stroke="#8b2020" stroke-width="0.8" stroke-dasharray="3 3" marker-end="url(#ar1r)"/>
+
+      <!-- Feedback M0 → timers -->
+      <line x1="640" y1="226" x2="660" y2="226" stroke="#5a3a90" stroke-width="0.8"/>
+      <line x1="660" y1="226" x2="660" y2="487" stroke="#5a3a90" stroke-width="0.8" stroke-dasharray="3 2"/>
+      <line x1="660" y1="487" x2="312" y2="487" stroke="#5a3a90" stroke-width="0.8" stroke-dasharray="3 2"/>
+      <line x1="660" y1="399" x2="312" y2="399" stroke="#5a3a90" stroke-width="0.8" stroke-dasharray="3 2"/>
+      <text x="700" y="350" text-anchor="middle" fill="#5a3a90" font-size="10" transform="rotate(-90,700,350)">M0 → conditions timers</text>
+
+      <!-- Légende zones -->
+      <rect x="18" y="350" width="148" height="46" rx="4" fill="none" stroke="#1e2537" stroke-width="0.5" stroke-dasharray="3 3"/>
+      <text x="92" y="378" text-anchor="middle" fill="#2a3249" font-size="10">RF4 retour</text>
+      <text x="92" y="368" text-anchor="middle" fill="#2a3249" font-size="10">(diagnostic seul)</text>
+    </svg>
+  </div>
+
+  <!-- Blocs -->
+  <div class="blocs-grid">
+    <div class="bloc-card">
+      <span class="bloc-tag c-teal">ANA_IN ×2</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Lecture sondes température</div>
+        <div class="bloc-desc">ANA3 → RF3 (T°départ) · ANA4 → RF4 (T°retour)</div>
+        <div class="bloc-params">analog_ref · reg_out</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-red">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sécurité alarme départ</div>
+        <div class="bloc-desc">RF3 ≥ 90°C → M5 : brûleur OFF, pompe reste ON</div>
+        <div class="bloc-params">ref=RF3 · high=90 · reg_out=M5</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-blue">COMPL</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Détection demande allumage</div>
+        <div class="bloc-desc">RF3 ≤ 62°C (SP−hyst) → M1 · demande SET de la bascule</div>
+        <div class="bloc-params">ref=RF3 · low=62 · reg_out=M1</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-coral">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Détection demande extinction</div>
+        <div class="bloc-desc">RF3 ≥ 68°C (SP+hyst) → M2 · demande RESET de la bascule</div>
+        <div class="bloc-params">ref=RF3 · high=68 · reg_out=M2</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">TIMER ×2</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Anti-cyclage min_off / min_on</div>
+        <div class="bloc-desc">TON 60 s (cond=¬M0) → M3 autorise allumage<br>TON 120 s (cond=M0) → M4 autorise extinction</div>
+        <div class="bloc-params">preset_ms · condition · output</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-purple">SR_R</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Bascule état chaudière</div>
+        <div class="bloc-desc">S = M1 AND M3 · R = M2 AND M4 (ou M5) → M0</div>
+        <div class="bloc-params">set_cond · res_cond · bit=M0</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-amber">COIL ×2</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sorties brûleur + pompe</div>
+        <div class="bloc-desc">K3 brûleur = M0 · K4 pompe = M0 OR M5 (reste ON si alarme)</div>
+        <div class="bloc-params">condition · output</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bits mémoire -->
+  <table class="mem-table">
+    <thead><tr><th>Bit</th><th>Condition déclenchement</th><th>Effet sur les sorties</th></tr></thead>
+    <tbody>
+      <tr><td><span class="bit" style="color:#ef9090">M5</span></td><td>T°départ ≥ 90°C</td><td>Brûleur OFF · pompe ON (refroidissement forcé)</td></tr>
+      <tr><td><span class="bit" style="color:#5c9cf5">M1</span></td><td>T°départ ≤ 62°C (SP−hyst)</td><td>Demande allumage → SET si M3=1</td></tr>
+      <tr><td><span class="bit" style="color:#f5a080">M2</span></td><td>T°départ ≥ 68°C (SP+hyst)</td><td>Demande extinction → RESET si M4=1</td></tr>
+      <tr><td><span class="bit" style="color:#8899bb">M3</span></td><td>TON 60 s écoulé (chaudière OFF)</td><td>Autorise l'allumage (anti-cyclage min_off)</td></tr>
+      <tr><td><span class="bit" style="color:#8899bb">M4</span></td><td>TON 120 s écoulé (chaudière ON)</td><td>Autorise l'extinction (anti-cyclage min_on)</td></tr>
+      <tr><td><span class="bit" style="color:#9c88e0">M0</span></td><td>Sortie SR_R (état courant)</td><td>Pilote K3 brûleur · K4 pompe · condition des deux timers</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="sep">
+
+<!-- ════════════════════════════════════════════════════════
+     GROUPE 2 — PLANCHER CHAUFFANT
+════════════════════════════════════════════════════════ -->
+<section class="groupe" id="plancher">
+  <div class="groupe-header">
+    <div class="groupe-icon" style="background:#2a1a08;">♨</div>
+    <div>
+      <h2>Groupe PLANCHER chauffant</h2>
+      <p class="desc">PID sur T°ambiance · 3 niveaux de sécurité · V3V motorisée (2 impulsions) · Circulateur</p>
+    </div>
+    <span class="badge-nb">10 blocs · 4 bits M</span>
+  </div>
+
+  <div class="note">
+    <strong>Principe :</strong> un PID calcule la demande de chauffe à partir de l'erreur T°amb − consigne.
+    Le résultat (%) est converti en booléen via un <code>COMPARE_F</code> (seuil 0).
+    Trois sécurités sont évaluées <em>avant</em> le PID et le court-circuitent si actives.
+    La V3V n'a jamais ses deux impulsions simultanées.
+  </div>
+
+  <!-- Blocs -->
+  <div class="blocs-grid">
+    <div class="bloc-card">
+      <span class="bloc-tag c-teal">ANA_IN ×3</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Lecture des 3 sondes</div>
+        <div class="bloc-desc">ANA0→RF0 T°ambiance · ANA1→RF1 T°départ · ANA2→RF2 T°retour</div>
+        <div class="bloc-params">analog_ref · reg_out</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">SEL</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sélection consigne SP</div>
+        <div class="bloc-desc">G=0 → IN0 = 20°C fixe · G=1 → IN1 = RF5 depuis PROG_H</div>
+        <div class="bloc-params">sel_cond · in0 · in1 · reg_out=RF6</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-blue">COMPL</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sécurité gel (priorité 1)</div>
+        <div class="bloc-desc">RF0 ≤ 5°C → M1 : V3V ouvre + circulateur ON</div>
+        <div class="bloc-params">ref=RF0 · low=5 · reg_out=M1</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-red">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sécurité surchauffe (priorité 2)</div>
+        <div class="bloc-desc">RF0 ≥ 35°C → M2 : V3V ferme + circulateur OFF</div>
+        <div class="bloc-params">ref=RF0 · high=35 · reg_out=M2</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-coral">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Alarme T°départ (priorité 3)</div>
+        <div class="bloc-desc">RF1 ≥ 45°C → M3 : V3V ferme + circulateur ON (refroidit)</div>
+        <div class="bloc-params">ref=RF1 · high=45 · reg_out=M3</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-purple">PID</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Régulateur ambiance</div>
+        <div class="bloc-desc">PV=RF0 · SP=RF6 · kp=2 · ki=0.1 · kd=0.5 → RF7 (0-100%)</div>
+        <div class="bloc-params">pv_ref=RF0 · reg_out=RF7</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">COMPARE_F</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Activation chauffe</div>
+        <div class="bloc-desc">RF7 &gt; 0 → M4 : chauffe active (remplace la bande morte)</div>
+        <div class="bloc-params">reg_ref=RF7 · op=gt · threshold=0</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">SUB</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Diagnostic ΔT échange</div>
+        <div class="bloc-desc">RF1 − RF2 → RF8 · visible SCADA (si ΔT &lt; 3°C : circulateur suspect)</div>
+        <div class="bloc-params">reg_a=RF1 · reg_b=RF2 · reg_out=RF8</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-amber">COIL ×3</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sorties V3V + circulateur</div>
+        <div class="bloc-desc">K7 V3V↑ · K8 V3V↓ · K9 circulateur — logique combinée M1..M4</div>
+        <div class="bloc-params">condition · output</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Règles priorité -->
+  <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Priorités des sécurités (évaluées avant le PID)</p>
+  <div class="priority-list">
+    <div class="priority-item">
+      <div class="priority-num" style="background:#0d1f3c;color:#5c9cf5;">1</div>
+      <div>
+        <div class="cond">GEL — T°amb &lt; 5°C (M1 = 1)</div>
+        <div class="effect">V3V ouvre (K7=1) · V3V ferme (K8=0) · Circulateur ON (K9=1) → fait circuler l'eau chaude pour protéger le plancher</div>
+      </div>
+    </div>
+    <div class="priority-item">
+      <div class="priority-num" style="background:#2e0d0d;color:#ef9090;">2</div>
+      <div>
+        <div class="cond">SURCHAUFFE — T°amb &gt; 35°C (M2 = 1)</div>
+        <div class="effect">V3V ferme (K7=0, K8=1) · Circulateur OFF (K9=0) → arrêt total du circuit</div>
+      </div>
+    </div>
+    <div class="priority-item">
+      <div class="priority-num" style="background:#2e1810;color:#f5a080;">3</div>
+      <div>
+        <div class="cond">ALM DÉPART — T°départ &gt; 45°C (M3 = 1)</div>
+        <div class="effect">V3V ferme (K7=0, K8=1) · Circulateur ON (K9=1) → refroidissement du plancher en faisant circuler</div>
+      </div>
+    </div>
+    <div class="priority-item">
+      <div class="priority-num" style="background:#1e1535;color:#9c88e0;">4</div>
+      <div>
+        <div class="cond">PID ACTIF — erreur &gt; 0 (M4 = 1)</div>
+        <div class="effect">V3V ouvre (K7=1, K8=0) · Circulateur ON (K9=1) → chauffe normale</div>
+      </div>
+    </div>
+    <div class="priority-item">
+      <div class="priority-num" style="background:#161b27;color:#6b7a9e;">—</div>
+      <div>
+        <div class="cond">PID INACTIF — erreur ≤ 0 (M4 = 0)</div>
+        <div class="effect">V3V ferme (K7=0, K8=1) · Circulateur OFF (K9=0) → consigne atteinte</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:16px;">
+    <strong>Logique COIL K7 (V3V ouvre) :</strong> <code>(M4 AND NOT M2 AND NOT M3) OR M1</code><br>
+    <strong>Logique COIL K8 (V3V ferme) :</strong> <code>(NOT M4 OR M2 OR M3) AND NOT M1</code><br>
+    <strong>Logique COIL K9 (circulateur) :</strong> <code>(M4 OR M1) AND NOT M2</code><br>
+    ⚠ K7 et K8 ne sont jamais simultanément à 1 — les conditions sont mutuellement exclusives.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ════════════════════════════════════════════════════════
+     GROUPE 3 — SOLAIRE THERMIQUE
+════════════════════════════════════════════════════════ -->
+<section class="groupe" id="solaire">
+  <div class="groupe-header">
+    <div class="groupe-icon" style="background:#1a1a00;">☀</div>
+    <div>
+      <h2>Groupe SOLAIRE thermique</h2>
+      <p class="desc">Hystérésis ΔT · Sécurités surchauffe + gel · Antigel actif · Priorité ECS → chauffage</p>
+    </div>
+    <span class="badge-nb">12 blocs · 8 bits M</span>
+  </div>
+
+  <div class="note">
+    <strong>Principe :</strong> la pompe solaire démarre quand le capteur est plus chaud que le ballon ECS d'au moins 8°C (ΔT_on)
+    et s'arrête quand l'écart tombe sous 3°C (ΔT_off). Une bascule <code>SR_R</code> mémorise l'état.
+    La vanne directionnelle envoie l'eau vers l'ECS en priorité, puis vers le chauffage si l'ECS est satisfaite.
+    En mode antigel, la pompe tourne en sens inverse pour réchauffer les capteurs depuis le ballon.
+  </div>
+
+  <!-- Blocs -->
+  <div class="blocs-grid">
+    <div class="bloc-card">
+      <span class="bloc-tag c-teal">ANA_IN ×4</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Lecture des 4 sondes</div>
+        <div class="bloc-desc">ANA5→RF0 capteur · ANA6→RF1 ECS · ANA1→RF2 chauf · RF3 source antigel</div>
+        <div class="bloc-params">analog_ref · reg_out</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">SUB</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Calcul ΔT capteur − ECS</div>
+        <div class="bloc-desc">RF0 − RF1 → RF10 · valeur utilisée pour toute la logique de pompe</div>
+        <div class="bloc-params">reg_a=RF0 · reg_b=RF1 · reg_out=RF10</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">SCALE</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Rendement estimé (SCADA)</div>
+        <div class="bloc-desc">RF10 → RF11 en % · in_lo=0 in_hi=24 (delta_on×3) out 0→100%</div>
+        <div class="bloc-params">reg_ref=RF10 · reg_out=RF11</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-red">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sécurité surchauffe stagnation</div>
+        <div class="bloc-desc">RF0 ≥ 120°C → M1 : tout OFF immédiat (pompe, vanne ECS, vanne chauf)</div>
+        <div class="bloc-params">ref=RF0 · high=120 · reg_out=M1</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-blue">COMPL</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Détection gel capteur</div>
+        <div class="bloc-desc">RF0 &lt; 5°C → M2 : coupe vanne ECS, déclenche logique antigel</div>
+        <div class="bloc-params">ref=RF0 · low=5 · reg_out=M2</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-blue">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Source antigel suffisante</div>
+        <div class="bloc-desc">RF3 ≥ 30°C → M3 : source (chaud. ou ECS) assez chaude pour l'antigel</div>
+        <div class="bloc-params">ref=RF3 · high=30 · reg_out=M3</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-amber">COMPH</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Démarrage pompe — ΔT_on</div>
+        <div class="bloc-desc">RF10 ≥ 8°C → M4 : demande SET bascule pompe</div>
+        <div class="bloc-params">ref=RF10 · high=8 · reg_out=M4</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-gray">COMPL</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Arrêt pompe — ΔT_off</div>
+        <div class="bloc-desc">RF10 &lt; 3°C → M5 : demande RESET bascule pompe</div>
+        <div class="bloc-params">ref=RF10 · low=3 · reg_out=M5</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-purple">SR_R</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Bascule état pompe</div>
+        <div class="bloc-desc">S = M4 · R = M5 OR M1 (surchauffe reset immédiat) → M6</div>
+        <div class="bloc-params">set_cond=M4 · res_cond=M5|M1 · bit=M6</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-coral">COMPH ×2</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Destination ECS et chauffage</div>
+        <div class="bloc-desc">RF1 ≥ 60°C → M7 (ECS_OK) · RF2 ≥ 50°C → M8 (CHAUF_OK)</div>
+        <div class="bloc-params">ref=RF1/RF2 · high=60/50 · reg_out=M7/M8</div>
+      </div>
+    </div>
+    <div class="bloc-card">
+      <span class="bloc-tag c-amber">COIL ×3</span>
+      <div class="bloc-info">
+        <div class="bloc-name">Sorties K1 / K2 / K3</div>
+        <div class="bloc-desc">K1 pompe · K2 vanne ECS · K3 vanne chauffage — logique combinée M1..M8</div>
+        <div class="bloc-params">condition · output</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logique sorties -->
+  <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Logique des sorties combinées</p>
+  <div class="priority-list">
+    <div class="priority-item">
+      <div class="priority-num" style="background:#2e0d0d;color:#ef9090;">!</div>
+      <div>
+        <div class="cond">K1 pompe solaire — <code style="color:#ffb74d">M6 OR (M2 AND M3)  AND NOT M1</code></div>
+        <div class="effect">Marche normale (M6) OU antigel actif (M2 AND M3) — bloquée si surchauffe (M1)</div>
+      </div>
+    </div>
+    <div class="priority-item">
+      <div class="priority-num" style="background:#1e1535;color:#9c88e0;">2</div>
+      <div>
+        <div class="cond">K2 vanne ECS — <code style="color:#ffb74d">M6 AND NOT M7 AND NOT M1 AND NOT M2</code></div>
+        <div class="effect">Pompe ON + ECS non atteinte + pas de sécurité → priorité ECS</div>
+      </div>
+    </div>
+    <div class="priority-item">
+      <div class="priority-num" style="background:#2e1810;color:#f5a080;">3</div>
+      <div>
+        <div class="cond">K3 vanne chauffage — <code style="color:#ffb74d">(M6 AND M7 AND NOT M8) OR (M2 AND M3)</code></div>
+        <div class="effect">ECS OK + chauf non atteint → surplus vers chauffage · OU antigel (eau chaude vers capteurs)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table bits -->
+  <table class="mem-table" style="margin-top:20px;">
+    <thead><tr><th>Bit</th><th>Condition</th><th>Rôle dans la logique</th></tr></thead>
+    <tbody>
+      <tr><td><span class="bit" style="color:#ef9090">M1</span></td><td>Capteur ≥ 120°C</td><td>Surchauffe stagnation → tout OFF + reset SR_R pompe</td></tr>
+      <tr><td><span class="bit" style="color:#5c9cf5">M2</span></td><td>Capteur &lt; 5°C</td><td>Gel → vanne ECS OFF, déclenche logique antigel</td></tr>
+      <tr><td><span class="bit" style="color:#5c9cf5">M3</span></td><td>Source antigel ≥ 30°C</td><td>Source assez chaude → pompe + vanne chauf ON (sens inverse)</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">M4</span></td><td>ΔT ≥ 8°C</td><td>Demande démarrage pompe → SET SR_R</td></tr>
+      <tr><td><span class="bit" style="color:#8899bb">M5</span></td><td>ΔT &lt; 3°C</td><td>Demande arrêt pompe → RESET SR_R</td></tr>
+      <tr><td><span class="bit" style="color:#9c88e0">M6</span></td><td>Sortie SR_R</td><td>État courant pompe (1=ON) → condition principale K1/K2/K3</td></tr>
+      <tr><td><span class="bit" style="color:#f5a080">M7</span></td><td>Ballon ECS ≥ 60°C</td><td>ECS satisfaite → bascule vanne vers chauffage</td></tr>
+      <tr><td><span class="bit" style="color:#f5a080">M8</span></td><td>Ballon chauf ≥ 50°C</td><td>Chauffage satisfait → pompe s'arrête (RESET SR_R via M5)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note" style="margin-top:16px;">
+    <strong>Mode antigel (M2 AND M3) :</strong> la pompe tourne mais la vanne ECS est fermée (M2 force K2=0).
+    La vanne chauffage (K3) s'ouvre pour faire circuler l'eau chaude du ballon <em>vers</em> les capteurs —
+    sens inverse du fonctionnement normal — afin de les protéger du gel sans solliciter la source ECS.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ════════════════════════════════════════════════════════
+     RÉFÉRENCE — REGISTRES RF
+════════════════════════════════════════════════════════ -->
+<section style="margin-bottom:48px;">
+  <div class="groupe-header">
+    <div class="groupe-icon" style="background:#0d2a18;">📊</div>
+    <div>
+      <h2>Registres RF — référence SCADA</h2>
+      <p class="desc">Valeurs écrites automatiquement par les blocs, lisibles dans le synoptique</p>
+    </div>
+  </div>
+  <table class="mem-table">
+    <thead><tr><th>Registre</th><th>Groupe</th><th>Contenu</th></tr></thead>
+    <tbody>
+      <tr><td><span class="bit" style="color:#26c6a4">RF3</span></td><td>CHAUDIÈRE</td><td>T°départ chaudière (°C)</td></tr>
+      <tr><td><span class="bit" style="color:#26c6a4">RF4</span></td><td>CHAUDIÈRE</td><td>T°retour chaudière (°C) — diagnostic seul</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF0</span></td><td>PLANCHER</td><td>T°ambiance (°C)</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF1</span></td><td>PLANCHER</td><td>T°départ eau plancher (°C)</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF2</span></td><td>PLANCHER</td><td>T°retour plancher (°C)</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF5</span></td><td>PLANCHER</td><td>Consigne active PROG_H (°C) — entrée SP câblée</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF6</span></td><td>PLANCHER</td><td>Consigne active utilisée par le PID (sortie SEL)</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF7</span></td><td>PLANCHER</td><td>Sortie PID en % (0-100) — visible SCADA</td></tr>
+      <tr><td><span class="bit" style="color:#ffb74d">RF8</span></td><td>PLANCHER</td><td>ΔT départ−retour plancher (diagnostic efficacité échange)</td></tr>
+      <tr><td><span class="bit" style="color:#9c88e0">RF10</span></td><td>SOLAIRE</td><td>ΔT capteur − ballon ECS (°C)</td></tr>
+      <tr><td><span class="bit" style="color:#9c88e0">RF11</span></td><td>SOLAIRE</td><td>Rendement estimé 0-100%</td></tr>
+      <tr><td><span class="bit" style="color:#9c88e0">RF12</span></td><td>SOLAIRE</td><td>Vitesse pompe % (mode 0-10V analogique)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+
+<footer>
+  RPi-PLC Studio — Documentation groupes de blocs primitifs · Générée depuis <code>plc_engine.py</code> · 2026
+</footer>
+
+</body>
+</html>

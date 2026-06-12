@@ -32,10 +32,11 @@ class DeployDialog(QDialog):
     deploy_done = pyqtSignal(bool)
 
     def __init__(self, rpi_config: dict, program: list, parent=None,
-                 synoptic: dict = None):
+                 synoptic: dict = None, fbd_diagram: dict = None):
         super().__init__(parent)
         self.rpi_config  = dict(rpi_config)
         self.program     = program
+        self.fbd_diagram = fbd_diagram or {}   # diagramme FBD graphique complet
         self.synoptic    = synoptic or {}   # synoptique à déployer
         self.deployer    = None
         self._sig        = LogSignal()
@@ -527,11 +528,13 @@ class DeployDialog(QDialog):
         synoptic = self.synoptic  # capture
 
         def _run():
-            r = d.deploy(self.program, synoptic=synoptic,
-                         extra_config={"telegram": cfg.get("telegram", {}),
-                                       "security": cfg.get("security", {}),
+            r = d.deploy(self.program, synoptic=synoptic, fbd_diagram=self.fbd_diagram,
+                         extra_config={"telegram":     cfg.get("telegram", {}),
+                                       "security":     cfg.get("security", {}),
                                        "scan_time_ms": cfg.get("scan_time_ms", 100),
-                                       "auto_start": cfg.get("auto_start", True)})
+                                       "auto_start":   cfg.get("auto_start", True),
+                                       "gpio":         self.rpi_config.get("gpio_config", {}),
+                                       "analog":       self.rpi_config.get("analog_config", {})})
             if r.success:
                 # Activer le monitoring post-déploiement
                 cfg2 = self._get_config()
@@ -855,9 +858,11 @@ class DeployDialog(QDialog):
             # Proposer l'action adaptée via signal thread-safe
             self._sig.message.emit(f"\n{'─'*52}")
             if action == "prog_only":
-                self._sig.message.emit("✅ RPi conforme — déploiement programme + config GPIO")
-                # Déployer programme + synoptique + config.json (GPIO)
-                r2 = d.deploy_prog_only(self.program, synoptic=synoptic)
+                self._sig.message.emit("✅ RPi conforme — déploiement programme + config GPIO + sondes")
+                # Déployer programme + synoptique + config.json (GPIO + analog)
+                r2 = d.deploy_prog_only(self.program, synoptic=synoptic, fbd_diagram=self.fbd_diagram,
+                                        extra_config={"gpio":    self.rpi_config.get("gpio_config", {}),
+                                                      "analog":  self.rpi_config.get("analog_config", {})})
                 self._sig.done.emit(r2.success, r2.message)
             elif action == "update_server":
                 self._sig.message.emit("🟡 Service à mettre à jour — déploiement complet recommandé")
@@ -881,7 +886,9 @@ class DeployDialog(QDialog):
             if not r.success:
                 self._sig.done.emit(False, r.message)
                 return
-            r2 = d.deploy_prog_only(self.program, synoptic=synoptic)
+            r2 = d.deploy_prog_only(self.program, synoptic=synoptic, fbd_diagram=self.fbd_diagram,
+                                        extra_config={"gpio":   self.rpi_config.get("gpio_config", {}),
+                                                      "analog": self.rpi_config.get("analog_config", {})})
             self._sig.done.emit(r2.success, r2.message)
 
         threading.Thread(target=_run, daemon=True).start()

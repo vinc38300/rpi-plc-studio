@@ -194,8 +194,8 @@ cat > "$SERVICE_FILE" << SVCEOF
 [Unit]
 Description=RPi-PLC Studio — Automate programmable (gpiod/Bookworm)
 Documentation=https://github.com/rpi-plc
-After=network.target
-Wants=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -203,7 +203,7 @@ User=$CURRENT_USER
 WorkingDirectory=$SCRIPT_DIR
 ExecStart=$PY $SCRIPT_DIR/server.py
 Restart=always
-RestartSec=5
+RestartSec=10
 StartLimitIntervalSec=60
 StartLimitBurst=10
 TimeoutStopSec=10
@@ -243,6 +243,7 @@ sleep 1
 if do_sudo true 2>/dev/null; then
     echo "[SVC] Installation du service systemd…"
     do_sudo cp "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
+    do_sudo systemctl enable systemd-networkd-wait-online.service 2>/dev/null || true
     do_sudo systemctl daemon-reload
     do_sudo systemctl enable "$SERVICE_NAME"
     do_sudo systemctl start "$SERVICE_NAME"

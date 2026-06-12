@@ -120,7 +120,15 @@ class Project:
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
             proj = cls()
-            proj.data = {**DEFAULT_PROJECT, **data}
+            # Fusion profonde : les sous-dicts (rpi, plc…) héritent des défauts
+            # sans écraser entièrement les clés manquantes dans le fichier sauvegardé
+            merged = json.loads(json.dumps(DEFAULT_PROJECT))
+            for k, v in data.items():
+                if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+                    merged[k] = {**merged[k], **v}
+                else:
+                    merged[k] = v
+            proj.data = merged
             proj.filepath = filepath
             proj.dirty = False
             return proj

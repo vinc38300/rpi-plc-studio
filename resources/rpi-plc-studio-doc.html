@@ -19,39 +19,41 @@ html { scroll-behavior: smooth; }
 body {
   font-family: var(--font); background: var(--bg); color: var(--text);
   font-size: 15px; line-height: 1.7;
-  display: grid; grid-template-columns: 280px 1fr; min-height: 100vh;
 }
 
 /* ── SIDEBAR ── */
 nav {
   background: var(--bg2); border-right: 1px solid var(--border);
-  position: sticky; top: 0; height: 100vh; overflow-y: auto;
-  padding: 0 0 40px; display: flex; flex-direction: column;
+  position: fixed; left: 0; top: 0;
+  width: 260px; height: 100vh; overflow-y: auto;
+  padding: 0 0 40px;
+  z-index: 200;
 }
 nav::-webkit-scrollbar { width: 4px; }
 nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .nav-logo {
-  padding: 20px 20px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
 }
 .nav-logo h1 { font-size: 18px; font-weight: 800; color: var(--accent); }
 .nav-logo h1 span { color: var(--green); }
-.nav-logo p { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.nav-logo p { font-size: 11px; color: #6e7681; margin-top: 2px; }
 .nav-section {
   padding: 14px 20px 4px; font-size: 10px; font-weight: 700;
-  color: var(--text3); text-transform: uppercase; letter-spacing: 1.5px;
+  color: #6e7681; text-transform: uppercase; letter-spacing: 1.5px;
+  line-height: 1.4;
 }
 nav a {
-  display: block; padding: 6px 20px 6px 28px; font-size: 13px;
-  color: var(--text2); text-decoration: none; border-left: 2px solid transparent;
+  display: block; padding: 6px 20px 6px 28px; font-size: 13px; line-height: 1.5;
+  color: #c9d1d9; text-decoration: none; border-left: 2px solid transparent;
   transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-nav a:hover { color: var(--text); background: var(--bg3); }
+nav a:hover { color: #e6edf3; background: var(--bg3); }
 nav a.active { color: var(--accent); border-left-color: var(--accent); background: #0d1f35; }
-nav a.sub { padding-left: 36px; font-size: 12px; }
+nav a.sub { padding-left: 36px; font-size: 12px; color: #aab4c0; }
 
 /* ── MAIN ── */
-main { max-width: 960px; padding: 48px 48px 80px; }
-@media (max-width: 900px) { body { grid-template-columns: 1fr; } nav { display: none; } main { padding: 24px 20px; } }
+main { margin-left: 260px; max-width: 960px; padding: 40px 48px 80px; }
+@media (max-width: 900px) { nav { display: none; } main { margin-left: 0; padding: 24px 20px; } }
 
 /* ── TYPOGRAPHY ── */
 h1 { font-size: 32px; font-weight: 800; color: var(--text); margin-bottom: 12px; line-height: 1.2; }
@@ -71,6 +73,23 @@ li::marker { color: var(--text3); }
 strong { color: var(--text); font-weight: 600; }
 em { color: var(--text2); font-style: italic; }
 hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+
+
+/* ── EXAMPLE CARDS ── */
+.example-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px; margin: 16px 0 24px;
+}
+.example-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px 18px;
+}
+.example-title {
+  font-size: 14px; font-weight: 700; color: var(--accent);
+  margin-bottom: 8px;
+}
+.example-desc { font-size: 13px; color: var(--text2); line-height: 1.6; }
+.example-desc strong { color: var(--text); }
 
 /* ── CODE ── */
 code {
@@ -239,10 +258,11 @@ footer {
 <nav>
   <div class="nav-logo">
     <h1>RPi-PLC<span> Studio</span></h1>
-    <p>Documentation Utilisateur v2.0</p>
+    <p>Documentation Utilisateur v3.2</p>
   </div>
 
   <div class="nav-section">Introduction</div>
+  <a href="#nouveautes">🆕 Nouveautés v3.2</a>
   <a href="#apercu">Aperçu général</a>
   <a href="#archi">Architecture du projet</a>
   <a href="#install">Installation</a>
@@ -274,6 +294,8 @@ footer {
   <a href="#blocs-metier" class="sub">SOLAR — Solaire thermique</a>
   <a href="#blocs-metier" class="sub">ZONE_CHAUF — Zone chauffage</a>
   <a href="#blocs-metier" class="sub">ECS_BLOC — Eau Chaude Sanitaire</a>
+  <a href="#prog-h">📅 PROG_H — Planning Jour/Nuit</a>
+  <a href="#synoptic-metier">🏭 Synoptiques Métier</a>
   <a href="#carithm">Bloc CArithm (code C)</a>
   <a href="#pyblock">🐍 Bloc PYBLOCK (Python natif)</a>
   <a href="#pyblock" class="sub">Variables disponibles</a>
@@ -285,8 +307,7 @@ footer {
   <a href="#gpio-map">Carte GPIO RPi 3</a>
   <a href="#config-json">config.json</a>
 
-  <div class="nav-section">Interface PC</div>
-  <a href="#gpio-config-dialog">Configurateur GPIO</a>
+  <a href="#gpio-config-dialog">📌 Configurateur GPIO</a>
 
   <div class="nav-section">Déploiement RPi</div>
   <a href="#deploy">Déploiement SSH</a>
@@ -332,6 +353,13 @@ footer {
   <a href="#validation">Validation du câblage FBD</a>
 
   <div class="nav-section">Référence</div>
+  <a href="#recettes">📋 Recettes complètes</a>
+  <a class="sub" href="#recette-thermostat">Thermostat différentiel</a>
+  <a class="sub" href="#recette-chaudiere">Séquence chaudière</a>
+  <a class="sub" href="#recette-plancher">Plancher multi-zones</a>
+  <a class="sub" href="#recette-compteur">Compteur horaire</a>
+  <a class="sub" href="#recette-telegram">Alerte Telegram</a>
+  <a class="sub" href="#recette-pyblock-vs-carithm">PyBlock vs CArithm</a>
   <a href="#raccourcis-globaux">Raccourcis clavier</a>
   <a href="#registres">Registres RF & Mémoires M</a>
   <a href="#api-complete">API REST complète</a>
@@ -345,9 +373,9 @@ footer {
 <!-- ── COVER ── -->
 <div class="cover">
   <h1>RPi-PLC Studio</h1>
-  <p class="subtitle">Documentation Utilisateur Complète — Automate Programmable Visuel pour Raspberry Pi 3</p>
+  <p class="subtitle">Documentation Utilisateur Complète — Automate Programmable Visuel pour Raspberry Pi 3/4/5</p>
   <div class="cover-meta">
-    <div class="cover-badge">Version <span>2.0</span></div>
+    <div class="cover-badge">Version <span>3.1</span></div>
     <div class="cover-badge">Matériel <span>RPi 3 · ADS1115 · NTC40</span></div>
     <div class="cover-badge">Interface <span>FBD / SCADA</span></div>
     <div class="cover-badge">Python <span>3.x · PyQt5 · Flask</span></div>
@@ -358,6 +386,7 @@ footer {
 <div class="toc">
   <h3>Table des matières</h3>
   <ol>
+    <li><a href="#nouveautes">🆕 Nouveautés v3.2</a></li>
     <li><a href="#apercu">Aperçu général</a></li>
     <li><a href="#archi">Architecture du projet</a></li>
     <li><a href="#install">Installation</a></li>
@@ -400,6 +429,118 @@ footer {
 </div>
 
 <!-- ════════════════════════════════════════════════════════════ -->
+<!-- ── NOUVEAUTÉS v3.2 ── -->
+<h2 id="nouveautes33"><span class="icon">🆕</span> Nouveautés &amp; Corrections v3.3</h2>
+
+<h3>✅ Corrections de bugs critiques</h3>
+<table class="ref-table">
+  <thead><tr><th>Fichier</th><th>Bug corrigé</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>ui/block_editor.py</code></td>
+      <td><strong>CARITHM — sorties jamais écrites.</strong> Le bloc compilé ne contenait pas
+      <code>n_a/n_d/n_i/n_oa/n_od/n_oi</code>. Le moteur lisait
+      <code>block.get("n_od", 0)</code> → 0, donc la boucle d'écriture des sorties
+      <code>od1..od8</code> s'exécutait 0 fois. K1 ne recevait jamais le signal du bloc.
+      Correction : les 6 paramètres sont maintenant copiés dans le bloc compilé, identique à PYBLOCK.</td>
+    </tr>
+    <tr>
+      <td><code>core/plc_engine.py</code></td>
+      <td><strong>Sondes ANA — affichent 66,2 °C par défaut en simulation.</strong>
+      <code>sim_value</code> était initialisé à <code>0,55 V</code>. La formule NTC/PT100 sur 0,55 V donnait
+      ~66,2 °C à chaque cycle. Correction : <code>sim_value = -1.0</code> (marqueur "override °C direct")
+      — les sondes affichent désormais <strong>20,0 °C</strong> par défaut.</td>
+    </tr>
+    <tr>
+      <td><code>rpi_server/server.py</code></td>
+      <td>Même bug simulation sondes que plc_engine.py, corrigé avec la même logique :
+      valeur par défaut 20 °C si aucune tension simulée définie.</td>
+    </tr>
+    <tr>
+      <td><code>ui/main_window.py</code></td>
+      <td><strong>Bouton Doc</strong> ouvrait parfois le gestionnaire de fichiers au lieu d'un navigateur.
+      Correction : on essaie Firefox → Chromium → Google Chrome → fallback <code>webbrowser</code> Python.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="warning" style="margin-top:16px;">
+  <strong>⚠ Piège courant PyBlock — opérateur négatif parasite</strong><br>
+  Une faute de frappe fréquente : écrire <code>elif A1 &lt; -A2</code> au lieu de <code>elif A1 &lt; A2</code>.
+  Le tiret transforme le seuil en valeur négative (~−66 °C pour une sonde à 66 °C) → la condition n'est
+  <em>jamais vraie</em>, le contacteur reste collé à ON.<br>
+  <strong>Règle :</strong> utilisez toujours <code>od1 = A1 &gt; A2</code> (comparaison directe, sans <code>state</code>)
+  quand il n'y a pas d'hystérésis à mémoriser.
+</div>
+
+<h2 id="nouveautes"><span class="icon">🆕</span> Nouveautés v3.2</h2>
+
+<div class="tip">
+  <span>💡</span>
+  <div><strong>Mise à jour du 27 mars 2026.</strong> Trois corrections importantes : sélecteurs RF persistants, éditeur d'horaires hebdomadaires dans le synoptique, et stabilité du moteur PLC en cas d'erreur.</div>
+</div>
+
+<h3>✅ Corrections de bugs</h3>
+<table>
+  <tr><th>Bug</th><th>Fichier corrigé</th><th>Explication</th></tr>
+  <tr>
+    <td><strong>SP actif (RF) revenait à "—" dans les propriétés</strong></td>
+    <td><code>ui/synoptic_canvas.js</code></td>
+    <td>Les sélecteurs <code>varSP</code>, <code>varDep</code>, <code>varRet</code>, <code>varEcs</code>, <code>varPrim</code>, <code>varCapt</code>, <code>varChauf</code>, <code>varDelta</code> comparaient tous avec <code>w.varRef</code> au lieu de leur propre clé. Ajout des helpers <code>rfFor(key)</code> et <code>anFor(key)</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>Messages [SAFE] en boucle infinie dans le terminal</strong></td>
+    <td><code>core/plc_engine.py</code></td>
+    <td>Après 10 erreurs consécutives, le compteur était remis à 0 → nouvelle boucle de 10 erreurs → nouveau SAFE. Le moteur reste maintenant en état sûr (cycle ralenti à 2s) jusqu'à un stop/reload explicite, et affiche l'erreur réelle.</td>
+  </tr>
+  <tr>
+    <td><strong>Moteur RPi non mis à jour lors du déploiement programme</strong></td>
+    <td><code>core/deployer.py</code></td>
+    <td><code>deploy_prog_only</code> comparait la taille de <code>server.py</code> local vs distant — si différente, il met à jour automatiquement tous les fichiers serveur avant de redémarrer le service.</td>
+  </tr>
+</table>
+
+<h3>✨ Nouvelle fonctionnalité — Éditeur d'horaires hebdomadaires dans le synoptique</h3>
+<p>
+  Le widget <code>prog_h_w</code> (Planning Jour/Nuit) expose maintenant dans son panneau propriétés
+  un <strong>éditeur d'horaires complet par jour de semaine</strong> :
+</p>
+<ul>
+  <li>Case à cocher pour activer/désactiver chaque jour (ex : week-end en veille)</li>
+  <li>Sélecteurs Début/Fin par pas de 15 minutes pour chaque jour</li>
+  <li>Le calendrier du widget se met à jour en temps réel</li>
+  <li>La timeline 24h affiche maintenant l'horaire réel du jour courant (pas une valeur globale)</li>
+</ul>
+<div class="note">
+  <span>📝</span>
+  <div>Ces horaires sont distincts des consignes SP jour/nuit/vac qui restent configurées dans le bloc FBD PROG_H. Le widget synoptique <b>affiche</b> les horaires ; le <b>calcul</b> est fait par le moteur FBD.</div>
+</div>
+
+<h3>✅ Corrections v3.1 (rappel)</h3>
+<table>
+  <tr><th>Bug</th><th>Fichier corrigé</th><th>Explication</th></tr>
+  <tr>
+    <td><strong>Blocs OUTPUT/CONTACTOR revenaient à K1</strong></td>
+    <td><code>fbd_canvas.js</code></td>
+    <td>Le sélecteur HTML retourne une <em>chaîne</em> (<code>"6"</code>) alors que le tableau <code>GPIO_OUT</code> contient des <em>entiers</em>. <code>GPIO_OUT.includes("6")</code> retournait toujours <code>false</code>, remettant le bloc sur K1. Correctif : <code>parseInt()</code> à la lecture du sélecteur et dans <code>setGpioConfig()</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>Script de navigation tronqué</strong></td>
+    <td><code>rpi-plc-studio-doc.html</code></td>
+    <td>L'injection Cloudflare tronquait le script IntersectionObserver de la sidebar, rendant la navigation non fonctionnelle.</td>
+  </tr>
+</table>
+
+<h3>🧩 Éditeur de bloc — Modale avancée</h3>
+<p>
+  Un double-clic sur n'importe quel bloc ouvre une <strong>modale d'édition complète</strong> avec deux onglets :
+</p>
+<ul>
+  <li><strong>⚙ Paramètres</strong> — tous les champs configurables en temps réel avec aperçu instantané sur le canvas</li>
+  <li><strong>📖 Documentation</strong> — description complète du bloc, entrées/sorties, exemples d'utilisation</li>
+</ul>
+<p>Le bouton <strong>✓ Appliquer</strong> déclenche un rendu immédiat. La modale est déplaçable et redimensionnable.</p>
+
 <h2 id="apercu"><span class="icon">🎯</span> Aperçu général</h2>
 
 <div class="section-intro">
@@ -659,7 +800,7 @@ sudo i2cdetect -y 1
   <li><strong>Double-clic</strong> sur le canvas → menu de sélection du type de bloc</li>
 </ul>
 
-<h3 id="props">Panneau de propriétés</h3>
+<h3 id="props">Panneau de propriétés &amp; Éditeur de bloc</h3>
 <p>Cliquer sur un bloc ouvre ses propriétés dans le panneau droit. Les modifications sont <strong>appliquées en temps réel</strong> — pas besoin de valider.</p>
 
 <div class="note"><div class="ci">ℹ</div><p>Pour les blocs analogiques (PT_IN, ANA_IN), un <strong>curseur de simulation</strong> permet de forcer la valeur en mode PC sans matériel. La valeur est transmise au moteur PLC en temps réel.</p></div>
@@ -667,6 +808,7 @@ sudo i2cdetect -y 1
 
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-es"><span class="icon">🔌</span> Bibliothèque de blocs — E/S</h2>
+<div class="note"><span>🔄</span><div><strong>Synchronisation automatique du nom (v3.1)</strong> — Quand tu sélectionnes un GPIO dans le panneau propriétés d'un bloc INPUT, OUTPUT ou CONTACTOR, le champ <em>Nom</em> se met à jour automatiquement avec le nom de la config GPIO. Le nom reste modifiable librement après.</div></div>
 
 <div class="block-grid">
   <div class="block-card">
@@ -915,6 +1057,55 @@ sudo i2cdetect -y 1
 </div>
 
 
+
+<h3>Exemples concrets — Logique booléenne</h3>
+
+<div class="example-grid">
+
+  <div class="example-card">
+    <div class="example-title">🔒 Verrouillage démarrage moteur</div>
+    <div class="example-desc">
+      Un moteur ne démarre que si le sectionneur est fermé <strong>ET</strong> que la sécurité thermique
+      n'est pas déclenchée. Câblage : <code>INPUT(Sectionneur) → AND.IN1</code>,
+      <code>INPUT(Therm.OK) → AND.IN2</code>, <code>AND.OUT → OUTPUT(Marche)</code>.
+    </div>
+<div class="code-block">Sectionneur:1  Therm_OK:1  →  Marche:1  ✓
+Sectionneur:1  Therm_OK:0  →  Marche:0  (thermique déclenché)
+Sectionneur:0  Therm_OK:1  →  Marche:0  (coupure amont)</div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">🔔 Alarme multi-capteurs</div>
+    <div class="example-desc">
+      Déclencher une alarme sonore si <strong>AU MOINS UN</strong> capteur de fumée est actif.
+      Câblage : <code>INPUT(Fumée1) → OR.IN1</code>, <code>INPUT(Fumée2) → OR.IN2</code>,
+      <code>OR.OUT → OUTPUT(Sirène)</code>.
+    </div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">💡 Interrupteur va-et-vient</div>
+    <div class="example-desc">
+      Chaque appui bascule la lampe. Câblage :
+      <code>INPUT(BP1) → XOR.IN1</code>, <code>INPUT(BP2) → XOR.IN2</code>,
+      <code>XOR.OUT → SR_S.SET</code> — ou plus simplement avec un seul BP et une bascule SR_S.
+    </div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">⛽ Pompe de remplissage (bascule SR)</div>
+    <div class="example-desc">
+      La pompe démarre sur niveau bas (S=1), s'arrête sur niveau haut (R=1).
+      Câblage : <code>INPUT(Niveau_bas) → SR.S1</code>,
+      <code>INPUT(Niveau_haut) → SR.R</code>,
+      <code>SR.Q1 → OUTPUT(Pompe)</code>.<br>
+      <em>Utiliser SR (Set prioritaire) pour éviter une coupure intempestive si les deux niveaux
+      sont vus simultanément en transitoire.</em>
+    </div>
+  </div>
+
+</div>
+
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-bobines"><span class="icon">🔋</span> Bobines & Affectation</h2>
 
@@ -1006,6 +1197,76 @@ sudo i2cdetect -y 1
 </div>
 
 
+
+<h3>Exemples concrets — Bobines, Temporisations &amp; Compteurs</h3>
+
+<div class="example-grid">
+
+  <div class="example-card">
+    <div class="example-title">⏳ TON — Anti-rebond bouton</div>
+    <div class="example-desc">
+      Éviter les faux démarrages dus aux rebonds mécaniques. Le signal doit rester stable
+      <strong>50 ms</strong> avant d'être accepté.
+      Câblage : <code>INPUT(BP) → TON.IN</code>, <code>CONST(50) → TON.PT</code>,
+      <code>TON.Q → OUTPUT(Action)</code>.
+    </div>
+<div class="code-block">BP appui 30 ms puis relâche → TON ne déclenche pas (rebond ignoré)
+BP appui &gt; 50 ms           → TON.Q = 1 → Action confirmée</div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">🌀 TOF — Ventilateur de refroidissement</div>
+    <div class="example-desc">
+      Le ventilateur continue <strong>3 minutes</strong> après extinction du moteur pour
+      évacuer la chaleur résiduelle. Câblage : <code>INPUT(Moteur_marche) → TOF.IN</code>,
+      <code>CONST(180000) → TOF.PT</code>, <code>TOF.Q → OUTPUT(Ventilateur)</code>.
+    </div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">💧 TP — Impulsion de purge vanne</div>
+    <div class="example-desc">
+      Ouvre la vanne de purge exactement <strong>5 secondes</strong> à chaque demande,
+      quel que soit le temps d'appui sur le bouton.
+      Câblage : <code>INPUT(BP_Purge) → TP.IN</code>, <code>CONST(5000) → TP.PT</code>,
+      <code>TP.Q → OUTPUT(Vanne_purge)</code>.
+    </div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">🔢 CTU — Compteur de cycles machine</div>
+    <div class="example-desc">
+      Compter les pièces produites, déclencher une maintenance à 10 000 pièces.
+      Câblage : <code>INPUT(Capteur_pièce) → CTU.CU</code>,
+      <code>CONST(10000) → CTU.PV</code>,
+      <code>CTU.Q → OUTPUT(Alarme_maintenance)</code>,
+      <code>CTU.CV → BACKUP(nb_pièces)</code> pour mémoriser entre redémarrages.
+    </div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">🔋 SET/RESET — Mémorisation défaut</div>
+    <div class="example-desc">
+      Un défaut détecté s'enregistre et reste actif même après disparition de la cause.
+      Nécessite un acquittement opérateur.<br>
+      Câblage : <code>INPUT(Défaut_capteur) → SET.S</code>,
+      <code>INPUT(BP_Acquittement) → RESET.R</code>,
+      les deux câblés vers le même <code>M5</code> (bit mémoire).
+    </div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">📋 MOVE — Sélection de consigne</div>
+    <div class="example-desc">
+      Basculer entre consigne hiver (19 °C) et été (26 °C) selon un interrupteur de saison.
+      Câblage : <code>CONST(19) → MOVE_Hiver.IN</code> + <code>INPUT(Mode_hiver) → MOVE_Hiver.EN</code>,
+      <code>CONST(26) → MOVE_Ete.IN</code> + <code>NOT(Mode_hiver) → MOVE_Ete.EN</code>,
+      les deux <code>MOVE.OUT → RF2</code> (registre consigne commun).
+    </div>
+  </div>
+
+</div>
+
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-comp"><span class="icon">⚖</span> Comparaison</h2>
 
@@ -1069,6 +1330,66 @@ sudo i2cdetect -y 1
   </div>
 </div>
 
+
+
+<h3>Exemples concrets — Analogique, Mesure &amp; PID</h3>
+
+<div class="example-grid">
+
+  <div class="example-card">
+    <div class="example-title">🌡 SENSOR + COMPARE_F — Thermostat avec hystérésis</div>
+    <div class="example-desc">
+      Chaudière ON si T &lt; 19 °C, OFF si T &gt; 21 °C (hystérésis 2 °C évite les courts-cycles).
+    </div>
+<div class="code-block">SENSOR(ANA0) → COMPARE_F.IN
+CONST(20)    → COMPARE_F.SP   (consigne centre)
+hystérésis   = 1.0°C → paramètre COMPARE_F
+COMPARE_F.LT → SR.S1    (trop froid → allume)
+COMPARE_F.GT → SR.R     (assez chaud → éteint)
+SR.Q1        → OUTPUT(Chaudière)</div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">📊 SCALE — Capteur 4–20 mA → %</div>
+    <div class="example-desc">
+      Convertir la tension d'un transmetteur 4–20 mA (via résistance 250 Ω → 1 à 5 V)
+      en pourcentage pour une jauge synoptique.
+    </div>
+<div class="code-block">ANA_IN(canal3) → SCALE.IN
+in_lo  = 1.0  (V, correspond à 4 mA = 0%)
+in_hi  = 5.0  (V, correspond à 20 mA = 100%)
+out_lo = 0.0
+out_hi = 100.0
+SCALE.OUT → RF5  (affiché dans widget Jauge synoptique)</div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">🎛 PID — Régulation température four</div>
+    <div class="example-desc">
+      Maintenir le four à 180 °C avec modulation PWM de la résistance chauffante.
+    </div>
+<div class="code-block">SENSOR(ANA2)  → PID.PV      (mesure)
+BACKUP(cons)  → PID.SP      (consigne persistante, réglable synoptique)
+INPUT(Marche) → PID.EN
+out_min=0, out_max=100      (% puissance)
+Kp=2.0  Ki=0.05  Kd=0.5
+PID.OUT → SCALE(0-100 → 0-255) → RF8 → PWM GPIO18</div>
+  </div>
+
+  <div class="example-card">
+    <div class="example-title">🔁 MUX — Loi d'eau multi-modes</div>
+    <div class="example-desc">
+      Selon le mode de chauffe sélectionné (0=Standard, 1=Eco, 2=Boost),
+      choisir la bonne loi d'eau parmi 3 valeurs précalculées.
+    </div>
+<div class="code-block">CARITHM(loi std) → RF0
+CARITHM(loi eco) → RF1
+CARITHM(loi boost) → RF2
+DV(mode_chauffe) → MUX.IDX
+MUX(In0=RF0, In1=RF1, In2=RF2) → RF10  (consigne départ retenue)</div>
+  </div>
+
+</div>
 
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-calcul"><span class="icon">🔢</span> Calcul & Traitement</h2>
@@ -1383,6 +1704,109 @@ Anti-légio : si (WDAY==antileg_day ET HOUR==antileg_hour)
   <strong>🔍 Accès à la documentation in-app :</strong> Double-cliquer sur n'importe quel bloc métier dans le canvas FBD 
   → onglet <strong>📖 Documentation</strong> pour accéder à cette référence directement dans le studio, 
   ou appuyer sur <kbd>F1</kbd> pour ouvrir la documentation complète.
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="prog-h"><span class="icon">📅</span> Bloc PROG_H — Programmation horaire Jour/Nuit</h2>
+
+<div class="section-intro">
+  Le bloc <strong>PROG_H</strong> (Programmation Horaire) gère automatiquement la sélection de consigne selon l'heure de la journée et un mode vacances. Il est conçu pour se connecter directement aux blocs PLANCHER, ZONE_CHAUF ou tout autre bloc qui accepte une consigne via registre RF.
+</div>
+
+<div class="tip">
+  <span>💡</span>
+  <div><strong>Cas d'usage typique :</strong> PROG_H calcule la consigne active (jour/nuit/vacances) → écrit dans <code>RF5</code> → PLANCHER lit <code>RF5</code> comme consigne SP. Un seul bloc pilote tout le système de régulation.</div>
+</div>
+
+<h3>Ports du bloc</h3>
+<table>
+  <thead><tr><th>Port</th><th>Direction</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>EN</code></td><td>Entrée</td><td>Bool</td><td>Enable — désactive tout si 0 (sort SP_nuit)</td></tr>
+    <tr><td><code>VAC</code></td><td>Entrée</td><td>Bool</td><td>Forcer mode Vacances (override horaire)</td></tr>
+    <tr><td><code>JOUR</code></td><td>Sortie</td><td>Bool</td><td>1 si on est en plage horaire de jour</td></tr>
+    <tr><td><code>SP_ACT</code></td><td>Sortie</td><td>Float</td><td>Consigne active (valeur du registre RF configuré)</td></tr>
+    <tr><td><code>VAC_OUT</code></td><td>Sortie</td><td>Bool</td><td>Reflet de l'entrée VAC (pour chaîner)</td></tr>
+    <tr><td><code>ACTIF</code></td><td>Sortie</td><td>Bool</td><td>1 si le jour courant est actif (mode hebdo)</td></tr>
+  </tbody>
+</table>
+
+<h3>Paramètres — Mode simple (même plage tous les jours)</h3>
+<table>
+  <thead><tr><th>Paramètre</th><th>Défaut</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>h_debut_j / m_debut_j</code></td><td>06 h 30</td><td>Début de la plage JOUR</td></tr>
+    <tr><td><code>h_fin_j / m_fin_j</code></td><td>22 h 00</td><td>Fin de la plage JOUR</td></tr>
+    <tr><td><code>sp_jour</code></td><td>20.0 °C</td><td>Consigne pendant la plage JOUR</td></tr>
+    <tr><td><code>sp_nuit</code></td><td>17.0 °C</td><td>Consigne hors plage JOUR</td></tr>
+    <tr><td><code>sp_vac</code></td><td>15.0 °C</td><td>Consigne en mode VACANCES</td></tr>
+    <tr><td><code>reg_sp</code></td><td>RF5</td><td>Registre RF où écrire la consigne active</td></tr>
+    <tr><td><code>out_jour</code></td><td>—</td><td>Variable DV booléenne reflétant JOUR</td></tr>
+    <tr><td><code>out_vac_dv</code></td><td>—</td><td>Variable DV booléenne reflétant VAC</td></tr>
+    <tr><td><code>out_actif</code></td><td>—</td><td>Variable DV booléenne : jour actif (hebdo)</td></tr>
+  </tbody>
+</table>
+
+<h3>Mode hebdomadaire — planning par jour de semaine</h3>
+<p>Activer <strong>hebdo_mode = true</strong> dans le panneau propriétés FBD pour définir des horaires différents pour chaque jour. Chaque jour <code>d0</code> (Lundi) à <code>d6</code> (Dimanche) est un objet JSON :</p>
+<table>
+  <thead><tr><th>Clé JSON</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>active</code></td><td>Bool</td><td>Jour actif (<code>true</code>) ou jour de repos (<code>false</code>, ex : week-end)</td></tr>
+    <tr><td><code>h_deb / m_deb</code></td><td>Int</td><td>Heure et minute de début de la plage JOUR ce jour-là</td></tr>
+    <tr><td><code>h_fin / m_fin</code></td><td>Int</td><td>Heure et minute de fin de la plage JOUR ce jour-là</td></tr>
+    <tr><td><code>sp_jour</code></td><td>Float</td><td>Consigne JOUR pour ce jour (remplace la valeur globale)</td></tr>
+    <tr><td><code>sp_nuit</code></td><td>Float</td><td>Consigne NUIT pour ce jour</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <span>⚙</span>
+  <div><strong>Plage enjambant minuit :</strong> si <code>h_fin_j &lt; h_debut_j</code> (ex : début 22h, fin 06h), le moteur détecte automatiquement une plage nocturne inversée et calcule correctement le mode JOUR/NUIT.</div>
+</div>
+
+<div class="tip">
+  <span>📅</span>
+  <div><strong>Édition des horaires dans le synoptique :</strong> en mode <strong>Édition</strong>, cliquer sur le widget <code>prog_h_w</code> → panneau Propriétés → section <em>Horaires hebdomadaires</em>. Cocher/décocher les jours, ajuster les horaires début/fin par menu déroulant (pas de 15 min). Les modifications sont reflétées instantanément dans le widget.</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="synoptic-metier"><span class="icon">🏭</span> Pages synoptiques Blocs Métier</h2>
+
+<div class="section-intro">
+  Chaque bloc Métier dispose d'un <strong>widget synoptique dédié</strong> et d'une <strong>page pré-construite</strong> injectable en un clic. Ces pages donnent une vue opérateur complète sans aucune configuration manuelle.
+</div>
+
+<h3>Widgets disponibles</h3>
+<table>
+  <thead><tr><th>Widget</th><th>Type palette</th><th>Variables lues</th></tr></thead>
+  <tbody>
+    <tr><td>🔥 Plancher chauffant</td><td><code>plancher_w</code></td><td>varRef (T° amb), varSP (RF consigne), varDep (RF départ), varRet (RF retour), dvCirc, dvV3v, dvErr</td></tr>
+    <tr><td>🔥 Chaudière</td><td><code>chaudiere_w</code></td><td>varRet (RF), varDep (RF), varSP (RF consigne), dvBrulee, dvPompe, dvAlm</td></tr>
+    <tr><td>☀ Solaire thermique</td><td><code>solar_w</code></td><td>varCapt (RF/ANA), varEcs (RF/ANA), varChauf (RF/ANA), varDelta (RF), dvPompe, dvVanneEcs, dvVanneCh, dvAlm</td></tr>
+    <tr><td>🏠 Zone chauffage</td><td><code>zone_chauf_w</code></td><td>varRef (ANA/RF T° amb), varSP (RF consigne), dvVanne, dvActive</td></tr>
+    <tr><td>💧 ECS</td><td><code>ecs_w</code></td><td>varEcs (ANA/RF), varPrim (ANA/RF), varSP (RF consigne), dvPompe, dvAlm</td></tr>
+    <tr><td>📅 Planning Jour/Nuit</td><td><code>prog_h_w</code></td><td>varSP (RF SP actif lu), dvJour (bool), dvVac (bool) — horaires édités dans les propriétés</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <span>🔧</span>
+  <div><strong>Correctif v3.2 :</strong> le sélecteur "SP actif (RF)" et toutes les variables de type <code>varSP</code>, <code>varDep</code>, <code>varRet</code>, <code>varEcs</code>, etc. conservent maintenant leur valeur à la réouverture du panneau propriétés. Ce bug (sélect revenant à "—") est corrigé.</div>
+</div>
+
+<h3>Injection des pages pré-construites</h3>
+<ol>
+  <li>Ouvrir l'éditeur de synoptique (<kbd>F8</kbd>)</li>
+  <li>Menu <strong>Synoptique → 🏭 Ajouter pages Blocs Métier…</strong></li>
+  <li>Confirmer → 6 pages s'ajoutent à la fin du projet</li>
+  <li>Configurer chaque widget : cliquer dessus en mode Édition → panneau Propriétés → lier les variables RF/DV aux sorties de vos blocs FBD</li>
+</ol>
+
+<div class="tip">
+  <span>🔗</span>
+  <div><strong>Liaison rapide :</strong> les pages pré-construites utilisent les valeurs par défaut des blocs Métier (RF0-RF14, k1-k10). Si vos blocs sont configurés avec ces mêmes références, le synoptique est opérationnel immédiatement après injection.</div>
 </div>
 
 
@@ -3153,6 +3577,168 @@ else:
 </div>
 
 
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="recettes"><span class="icon">📋</span> Recettes complètes — Cas d'usage pas à pas</h2>
+
+<div class="section-intro">
+  Ces exemples montrent comment câbler plusieurs blocs ensemble pour réaliser des automatismes
+  courants. Chaque recette indique les blocs utilisés, le câblage FBD et le comportement attendu.
+</div>
+
+<!-- ── Recette 1 ── -->
+<h3 id="recette-thermostat">🌡 Recette 1 — Thermostat différentiel (2 sondes)</h3>
+<p>
+  Cas typique : chauffage solaire — la pompe de circulation démarre si la sonde capteur (Sonde1)
+  est plus chaude que la sonde ballon (Sonde2) d'au moins <strong>5 °C</strong>,
+  et s'arrête quand l'écart descend sous <strong>2 °C</strong>.
+</p>
+<h4>Blocs utilisés</h4>
+<p>2× SENSOR, 1× SUB, 1× COMPARE_F (avec hystérésis), 1× OUTPUT</p>
+<h4>Câblage FBD</h4>
+<div class="code-block">SENSOR(ANA4, Capteur solaire) ─────┐
+                                   ├→ SUB.IN1
+SENSOR(ANA5, Ballon)          ─────┘  SUB.IN2
+
+SUB.OUT → COMPARE_F.IN
+  SP (setpoint)  = 3.5 °C  (centre de la plage)
+  hystérésis     = 1.5 °C  (→ ON à 5°C, OFF à 2°C)
+  opération      = &gt;
+
+COMPARE_F.GT → OUTPUT(K1 — Pompe circulation)</div>
+<div class="tip">
+  <strong>Alternative PYBLOCK</strong> si vous avez besoin de logique plus complexe (délai de
+  protection pompe, compteur de cycles...) :
+</div>
+<div class="code-block"># A1 = T_capteur, A2 = T_ballon
+SEUIL_ON  = 5.0   # démarrage pompe si ΔT > 5°C
+SEUIL_OFF = 2.0   # arrêt pompe si ΔT < 2°C
+delta = A1 - A2
+if delta &gt; SEUIL_ON:
+    state['pompe'] = True
+elif delta &lt; SEUIL_OFF:
+    state['pompe'] = False
+od1 = state.get('pompe', False)</div>
+
+<!-- ── Recette 2 ── -->
+<h3 id="recette-chaudiere">🔥 Recette 2 — Séquence démarrage chaudière avec sécurités</h3>
+<p>
+  Démarrage de la chaudière uniquement si : pressostat OK <strong>ET</strong> niveau eau OK
+  <strong>ET</strong> pas de défaut en cours. Temporisation 10 s avant mise en chauffe
+  (pré-purge brûleur). Mémorisation du défaut jusqu'à acquittement.
+</p>
+<h4>Blocs utilisés</h4>
+<p>INPUT ×4, AND ×2, NOT, TON, SET, RESET, OUTPUT ×2</p>
+<h4>Câblage FBD</h4>
+<div class="code-block">INPUT(Pressostat_OK)  ─┐
+INPUT(Niveau_OK)      ─┤→ AND1.OUT ─┐
+INPUT(M_Defaut) → NOT ─┘            ├→ AND2.OUT → TON.IN
+INPUT(Demande_chauffe)              ─┘    PT = 10 000 ms
+
+TON.Q → OUTPUT(Brûleur_ON)
+TON.Q → OUTPUT(Ventilateur)
+
+# Gestion défaut
+INPUT(Capteur_défaut)    → SET.S   → M_Defaut
+INPUT(BP_Acquittement)   → RESET.R → M_Defaut</div>
+<div class="warning">
+  <strong>⚠</strong> Toujours utiliser un bit mémoire <code>Mx</code> pour les défauts mémorisés,
+  pas directement un GPIO de sortie — les GPIO sont remis à zéro à chaque cycle si non pilotés.
+</div>
+
+<!-- ── Recette 3 ── -->
+<h3 id="recette-plancher">🏠 Recette 3 — Plancher chauffant multi-zones (PID + loi d'eau)</h3>
+<p>
+  3 zones indépendantes avec vannes motorisées. La consigne de chaque zone est calculée par
+  une loi d'eau depuis la température extérieure. Chaque zone a son propre régulateur PID.
+</p>
+<h4>Page 1 — Loi d'eau commune</h4>
+<div class="code-block">SENSOR(ANA0, T_ext) → PYBLOCK(loi_eau)
+  # code pyblock
+  T_ext = A1
+  T_dep = max(25, min(55, 45 - 1.2 * T_ext))  # loi d'eau simple
+  OA1 = T_dep  # consigne départ commune → RF0
+
+RF0 → CONST_PAGE_OUT(cons_depart)  # passe à la page 2</div>
+<h4>Page 2 — Zones 1/2/3 (même câblage répété)</h4>
+<div class="code-block">PAGE_IN(cons_depart) → RF0
+SENSOR(ANA1, T_zone1) → PID_Z1.PV
+RF0 (cons_depart)     → PID_Z1.SP
+INPUT(Marche_Z1)      → PID_Z1.EN
+PID_Z1.OUT → SCALE(0–100 → 0–255) → RF1 → PWM_vanne_Z1</div>
+
+<!-- ── Recette 4 ── -->
+<h3 id="recette-compteur">⏱ Recette 4 — Compteur horaire avec maintenance et remise à zéro</h3>
+<p>
+  Compter les heures de marche d'une pompe, afficher dans le synoptique, déclencher
+  une alarme maintenance à 500 h, reset par bouton opérateur.
+</p>
+<h4>Option PYBLOCK (recommandée pour la persistance)</h4>
+<div class="code-block"># Nb entrées : d1=marche pompe, d2=reset opérateur
+# Nb sorties  : OA1=heures cumulées, od1=alarme maintenance
+SEUIL_MAINTENANCE = 500.0  # heures
+
+if d2:  # reset opérateur
+    state['h'] = 0.0
+    state['alarme_ack'] = False
+elif d1:
+    state.setdefault('h', 0.0)
+    state['h'] += dt / 3600.0
+
+heures = state.get('h', 0.0)
+write_register("RF12", heures)   # → widget Valeur numérique synoptique
+OA1 = heures
+od1 = heures &gt;= SEUIL_MAINTENANCE
+
+# Câbler od1 → OUTPUT(Voyant_maintenance) + OUTPUT(Buzzer via TON 500ms)</div>
+
+<!-- ── Recette 5 ── -->
+<h3 id="recette-telegram">📱 Recette 5 — Alerte Telegram sur défaut température</h3>
+<p>
+  Envoyer une alerte Telegram si une sonde dépasse 85 °C, avec délai de confirmation
+  30 s pour éviter les fausses alarmes. Une seule notification par événement (pas de spam).
+</p>
+<div class="code-block"># PYBLOCK — A1 = température sonde, od1 = sortie alarme confirmée
+SEUIL_ALARME = 85.0   # °C
+DELAI_CONF   = 30.0   # secondes de confirmation
+
+if A1 &gt; SEUIL_ALARME:
+    state.setdefault('timer', 0.0)
+    state['timer'] += dt
+    if state['timer'] &gt;= DELAI_CONF and not state.get('notif_envoyee'):
+        state['notif_envoyee'] = True
+        od1 = True  # déclenche OUTPUT → bit M15
+else:
+    state['timer'] = 0.0
+    state['notif_envoyee'] = False
+    od1 = False</div>
+<div class="tip">
+  Configurer dans <strong>Raspberry Pi → Telegram</strong> : cocher <em>Notifier sur M15=1</em>.
+  Le bot Telegram envoie automatiquement le message dès que M15 passe à 1.
+</div>
+
+<!-- ── Recette 6 ── -->
+<h3 id="recette-pyblock-vs-carithm">⚡ Recette 6 — PyBlock vs CArithm : quand utiliser lequel ?</h3>
+<table class="ref-table">
+  <thead><tr><th>Besoin</th><th>Recommandé</th><th>Raison</th></tr></thead>
+  <tbody>
+    <tr><td>Calcul arithmétique pur (loi d'eau, PID custom, offset)</td><td><strong>CArithm</strong></td><td>Syntaxe C plus proche d'un automate industriel, légèrement plus rapide</td></tr>
+    <tr><td>Logique avec mémoire entre cycles (filtres, intégrateurs, compteurs)</td><td><strong>PyBlock</strong></td><td>Dictionnaire <code>state</code> persistant</td></tr>
+    <tr><td>Statistiques sur plusieurs sondes (moyenne, écart-type)</td><td><strong>PyBlock</strong></td><td>Module <code>statistics</code> disponible directement</td></tr>
+    <tr><td>Algorithme en plusieurs étapes avec conditions imbriquées</td><td><strong>PyBlock</strong></td><td>Python natif, indentation, listes, f-strings</td></tr>
+    <tr><td>Débogage en simulation avec print()</td><td><strong>PyBlock</strong></td><td><code>print()</code> redirigé vers le journal PLC</td></tr>
+    <tr><td>Code compatible Proview CArit</td><td><strong>CArithm</strong></td><td>Syntaxe identique ou très proche</td></tr>
+    <tr><td>Accès direct aux registres RF/M sans câblage</td><td><strong>PyBlock</strong></td><td><code>read_analog("RF5")</code>, <code>write_signal("M3", True)</code></td></tr>
+  </tbody>
+</table>
+
+<div class="tip" style="margin-top:16px;">
+  <strong>🔑 Règle d'or :</strong> si votre code tient en 5 lignes sans état persistant →
+  <strong>CArithm</strong>. Dès que vous avez besoin de mémoriser quelque chose entre deux cycles →
+  <strong>PyBlock + state{}</strong>.
+</div>
+
+
 <h2 id="raccourcis-globaux"><span class="icon">⌨</span> Raccourcis clavier — Référence complète</h2>
 
 <h3>Application Qt — fenêtre principale</h3>
@@ -3331,7 +3917,7 @@ else:
 
 
 <footer>
-  <p>RPi-PLC Studio — Documentation Utilisateur — Version 3.0</p>
+  <p>RPi-PLC Studio — Documentation Utilisateur — Version 3.1</p>
   <p>Matériel : Raspberry Pi 3/4/5 · ADS1115 × 1–3 · NTC40 × 4–12 · Relais × jusqu'à 24</p>
   <p>Logiciel : Python 3 · PyQt5 · Flask · SQLite · SocketIO · Chart.js · HTML5 Canvas</p>
   <p>Modules : auth · telegram_bot · recipes · backup_manager · calibration · report_generator</p>
@@ -3342,7 +3928,19 @@ else:
 
 </main>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 // Navigation active sur scroll
 const sections = document.querySelectorAll('h2[id], h3[id]');
-const n
+const navLinks = document.querySelectorAll('nav a[href^="#"]');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#'+id);
+      });
+    }
+  });
+}, { rootMargin: '-10% 0px -85% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>

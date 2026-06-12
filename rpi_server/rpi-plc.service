@@ -4,17 +4,17 @@
 [Unit]
 Description=RPi-PLC Studio — Automate programmable (gpiod/Bookworm)
 Documentation=https://github.com/rpi-plc
-After=network.target
-Wants=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/rpi-plc
-ExecStart=/usr/bin/python3 /home/pi/rpi-plc/server.py
+User=rpi1
+WorkingDirectory=/home/rpi1/rpi-plc
+ExecStart=/usr/bin/python3 /home/rpi1/rpi-plc/server.py
 Restart=always
-RestartSec=5
-StartLimitIntervalSec=60
+RestartSec=10
+StartLimitIntervalSec=120
 StartLimitBurst=10
 TimeoutStopSec=10
 KillMode=mixed

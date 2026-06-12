@@ -1,6 +1,157 @@
 
 
 // ════════════════════════════════════════════════════════════
+// COMPILATEUR DE FILS — Auto-assignation des registres RF
+// ════════════════════════════════════════════════════════════
+//
+// Quand un fil est tracé entre deux ports, un registre RF est
+// automatiquement assigné dans les params du bloc source (ex: reg_out)
+// et du bloc destination (ex: reg_a / a1_ref / d1_ref…).
+// Le serveur n'a plus besoin de deviner les connexions : flatten_blocks
+// lit directement ces params pour exécuter le programme.
+//
+// Convention :
+//   RF100..RF999  réservés au compilateur de fils (auto-wire)
+//   RF0..RF99     libres pour usage manuel dans les params
+
+let _rfAuto = 100; // prochain registre disponible
+
+/** Renvoie un nouveau registre RF unique pour le compilateur de fils. */
+function _nextRF(){
+  return `RF${_rfAuto++}`;
+}
+
+/**
+ * Initialise _rfAuto en scannant tous les registres RF>=100 déjà utilisés
+ * dans le diagramme, pour éviter les collisions après un rechargement.
+ */
+function _initRFCounter(diagram){
+  let maxRF = 99;
+  (diagram.pages||[]).forEach(pg=>{
+    (pg.blocks||[]).forEach(b=>{
+      Object.values(b.params||{}).forEach(v=>{
+        if(typeof v==='string' && v.startsWith('RF')){
+          const n=parseInt(v.slice(2));
+          if(!isNaN(n) && n>maxRF) maxRF=n;
+        }
+      });
+    });
+  });
+  _rfAuto = maxRF + 1;
+}
+
+/**
+ * Retourne le nom du param params[] côté SOURCE pour un port donné.
+ *   ex: port='VAL' → 'reg_out'
+ *       port='OA1' → 'oa1_ref'
+ *       port='od2' → 'od2_ref'
+ */
+function _srcParamKey(btype, port){
+  const p = port.toLowerCase();
+  if(['val','out','sig','sts','q'].includes(p))        return 'reg_out';
+  if(p==='hour')                                       return 'reg_hour';
+  if(p==='wday' || p==='mday')                         return 'reg_wday';
+  const oaM = p.match(/^oa(\d+)$/);  if(oaM) return `oa${oaM[1]}_ref`;
+  const odM = p.match(/^od(\d+)$/);  if(odM) return `od${odM[1]}_ref`;
+  // RUNTIMCNT sorties
+  if(p==='starts')   return 'reg_starts';
+  if(p==='total')    return 'reg_total';
+  if(p==='runtime')  return 'reg_runtime';
+  // Valeur générique
+  return 'reg_out';
+}
+
+/**
+ * Retourne le nom du param params[] côté DESTINATION pour un port donné.
+ *   ex: port='IN1' → 'reg_a'
+ *       port='A3'  → 'a3_ref'
+ *       port='d2'  → 'd2_ref'
+ */
+function _dstParamKey(btype, port){
+  const p = port.toLowerCase();
+  const bt = (btype||'').toLowerCase();
+  if(p==='in' && (bt==='conn'||bt==='conn_tx'||bt==='conn_rx')) return 'reg_in';
+  if(p==='in1' || p==='in')                         return 'reg_a';
+  if(p==='in2')                                     return 'reg_b';
+  if(p==='sig' && bt==='page_out')                  return 'reg_in';
+  if(p==='val' && ['output','backup'].includes(bt)) return 'val_ref';
+  if(p==='val')                                     return 'reg_a';
+  // Bobines / conditions booléennes
+  if(p==='run'  || p==='en')  return 'condition';
+  if(p==='rst'  || p==='res') return 'reset_condition';
+  if(p==='set'  || p==='s')   return 'set_cond';
+  if(p==='r')                 return 'res_cond';
+  // RUNTIMCNT
+  if(p==='run')  return 'condition';
+  if(p==='rst')  return 'reset_condition';
+  // PYBLOCK / CARITHM : A1..A9, d1..d9, I1..I2
+  const aM = p.match(/^a(\d+)$/);   if(aM) return `a${aM[1]}_ref`;
+  const dM = p.match(/^d(\d+)$/);   if(dM) return `d${dM[1]}_ref`;
+  const iM = p.match(/^i(\d+)$/);   if(iM) return `i${iM[1]}_ref`;
+  // Entrée générique
+  return 'reg_a';
+}
+
+/**
+ * Assigne un registre RF à un fil src→dst dans les params des blocs.
+ * Si le port source a déjà un RF auto-assigné (fan-out), le réutilise.
+ * Retourne le RF assigné.
+ */
+function _assignWireRF(p, sBid, sPort, dBid, dPort){
+  const sb = p.blocks.find(b=>b.id===sBid);
+  const db = p.blocks.find(b=>b.id===dBid);
+  if(!sb||!db) return null;
+
+  const srcKey = _srcParamKey(sb.type, sPort);
+  const dstKey = _dstParamKey(db.type, dPort);
+
+  // ── Fan-out standard : réutiliser le RF déjà assigné à la source ──────────
+  let rf = sb.params[srcKey];
+  if(!rf || typeof rf!=='string' || !rf.startsWith('RF') || parseInt(rf.slice(2))<100){
+
+    // ── Cas CONN* (port OUT) : propager le RF du partenaire TX → RX ───────
+    // Quand on relie CONN_RX.OUT→B (ou CONN.OUT→B), chercher le RF du
+    // partenaire (CONN_TX ou l'autre CONN de même num) déjà alimenté.
+    let rfFromPartner = null;
+    if(srcKey === 'reg_out' && (sb.type==='CONN'||sb.type==='CONN_RX')){
+      const myNum = String(sb.params.num || '');
+      const partner = p.blocks.find(x=>
+        x.id !== sb.id &&
+        (x.type==='CONN'||x.type==='CONN_TX') &&
+        String(x.params.num||'') === myNum &&
+        x.params.reg_in && x.params.reg_in.startsWith('RF') && parseInt(x.params.reg_in.slice(2))>=100
+      );
+      if(partner) rfFromPartner = partner.params.reg_in;
+    }
+
+    rf = rfFromPartner || _nextRF();
+    if(srcKey) sb.params[srcKey] = rf;
+  }
+  if(dstKey) db.params[dstKey] = rf;
+  return rf;
+}
+
+/**
+ * Libère le param RF d'un bloc destination quand son fil est supprimé.
+ * Si le port source n'alimente plus aucun autre fil, nettoie aussi le src.
+ */
+function _releaseWireRF(p, w){
+  const sb = p.blocks.find(b=>b.id===w.src.bid);
+  const db = p.blocks.find(b=>b.id===w.dst.bid);
+  if(!sb||!db) return;
+
+  const dstKey = _dstParamKey(db.type, w.dst.port);
+  if(dstKey) delete db.params[dstKey];
+
+  // Nettoyer le src seulement si aucun autre fil ne part du même port
+  const srcKey = _srcParamKey(sb.type, w.src.port);
+  const stillUsed = p.wires.some(
+    x=>x!==w && x.src.bid===w.src.bid && x.src.port===w.src.port
+  );
+  if(!stillUsed && srcKey) delete sb.params[srcKey];
+}
+
+// ════════════════════════════════════════════════════════════
 // DÉFINITIONS
 // ════════════════════════════════════════════════════════════
 const DEFS = {
@@ -9,10 +160,11 @@ const DEFS = {
   OUTPUT:   {cat:'E/S',        col:'#1f2d0d',hdr:'#2a3d10',bdg:'#3fb950',ins:['VAL'],       outs:[],         desc:'Sortie GPIO'},
   CONST:    {cat:'E/S',        col:'#2a1f0a',hdr:'#352810',bdg:'#d29922',ins:[],            outs:['VAL'],    desc:'Constante'},
   MEM:      {cat:'E/S',        col:'#1a1a2a',hdr:'#252535',bdg:'#bc8cff',ins:['W'],         outs:['R'],      desc:'Bit mémoire'},
-  // Connecteurs inter-pages
-  PAGE_IN:  {cat:'Connecteurs',col:'#0a2a1a',hdr:'#103520',bdg:'#39d353',ins:[],            outs:['SIG'],    desc:'Signal entrant (page)'},
-  PAGE_OUT: {cat:'Connecteurs',col:'#2a1a0a',hdr:'#352010',bdg:'#f0883e',ins:['SIG'],       outs:[],         desc:'Signal sortant (page)'},
+  // Zone cartouche (cadre dessin imprimable)
+  CARTOUCHE:{cat:'Cartouche', col:'#12192a',hdr:'#1a2540',bdg:'#c9d1d9',ins:[],           outs:[],         desc:'Zone cartouche (cadre impression)'},
   CONN:     {cat:'Connecteurs',col:'#0a1a2a',hdr:'#102030',bdg:'#58a6ff',ins:['IN'],        outs:['OUT'],    desc:'Connecteur numéroté'},
+  CONN_TX:  {cat:'Connecteurs',col:'#1a0a2a',hdr:'#2a1040',bdg:'#f0883e',ins:['IN'],        outs:[],         desc:'Connecteur émetteur (envoi)'},
+  CONN_RX:  {cat:'Connecteurs',col:'#0a1a1a',hdr:'#102828',bdg:'#39d3b0',ins:[],            outs:['OUT'],    desc:'Connecteur récepteur (réception)'},
   GROUP:    {cat:'Groupes',    col:'#1a0a35',hdr:'#2a1050',bdg:'#bc8cff',ins:[],           outs:[],         desc:'Bloc groupe (Ctrl+G)'},
   GROUP_IN: {cat:'Groupes',    col:'#0a1a35',hdr:'#102030',bdg:'#58a6ff',ins:[],           outs:['SIG'],    desc:'Port entrée du groupe'},
   GROUP_OUT:{cat:'Groupes',    col:'#0a2a10',hdr:'#103510',bdg:'#3fb950',ins:['IN'],        outs:[],         desc:'Port sortie du groupe'},
@@ -73,6 +225,9 @@ const DEFS = {
   // Logique avancée (Proview)
   XOR:      {cat:'Logique',    col:'#1f3a5f',hdr:'#2a4a70',bdg:'#58a6ff',ins:['IN1','IN2'],outs:['OUT'],         desc:'OU exclusif (XOR)'},
   INV:      {cat:'Logique',    col:'#1f2a4a',hdr:'#2a3a5f',bdg:'#8b949e',ins:['IN'],       outs:['OUT'],         desc:'Inverseur (alias NOT)'},
+  NAND:     {cat:'Logique',    col:'#1f3a5f',hdr:'#2a4a70',bdg:'#ff6060',ins:['IN1','IN2'],outs:['OUT'],         desc:'NON ET (NAND)'},
+  NOR:      {cat:'Logique',    col:'#1f3a5f',hdr:'#2a4a70',bdg:'#ff9040',ins:['IN1','IN2'],outs:['OUT'],         desc:'NON OU (NOR)'},
+  BOOLEAN:  {cat:'Logique',    col:'#0a1a35',hdr:'#102040',bdg:'#60c0ff',ins:['I1','I2','I3','I4'],outs:['O1','O2'],       desc:'Table de vérité booléenne (1-6 entrées, 1-2 sorties)'},
   // Temps avancés (Proview)
   WAIT:     {cat:'Temps',      col:'#1f0a3d',hdr:'#2a1050',bdg:'#bc8cff',ins:['IN'],        outs:['Q'],          desc:'Délai fixe (Wait/Pulse)'},
   WAITH:    {cat:'Temps',      col:'#1f0a3d',hdr:'#2a1050',bdg:'#9070d0',ins:['IN'],        outs:['STS'],         desc:'Tempo désactivation (WaitH)'},
@@ -107,6 +262,10 @@ const DEFS = {
   ECS_BLOC:   {cat:'Métier', col:'#0a0a2a',hdr:'#101035',bdg:'#40c4ff',
                ins:['TEMP_ECS','TEMP_PRIM','EN'], outs:['POMPE','ALM_LEG'],
                desc:'Préparation ECS avec anti-légionellose'},
+  PROG_H:     {cat:'Métier', col:'#1a1000',hdr:'#2a1a00',bdg:'#ffb300',
+               ins:['EN','VAC'],
+               outs:['JOUR','SP_ACT','VAC_OUT'],
+               desc:'Programmation horaire Jour/Nuit — consigne adaptative + mode vacances'},
 
   PYBLOCK:  {cat:'Arithmétique',col:'#0a0a25',hdr:'#10102a',bdg:'#7c3aed',ins:['A1','A2','A3','A4','d1','d2','d3','d4'],outs:['OA1','OA2','od1','od2','od3'],desc:'Bloc Python natif — accès complet aux variables PLC'},
   CONTACTOR:{cat:'Actionneurs',col:'#0a1f0a',hdr:'#102a10',bdg:'#40ff80',ins:['ON'],        outs:['Q'],           desc:'Contacteur/Relais (ContactorFo)'},
@@ -562,10 +721,46 @@ let GPIO_OUT  = [5, 6, 11, 13, 9, 19, 10, 26, 22, 21, 27, 20, 17, 16, 4, 12];  /
 let GPIO_NAMES = {"4":"Sortie K15","5":"Sortie K1","6":"Sortie K2","7":"Entr\u00e9e TOR 8","8":"Entr\u00e9e TOR 7","9":"Sortie K5","10":"Sortie K7","11":"Sortie K3","12":"Sortie K16","13":"Sortie K4","14":"Entr\u00e9e TOR 1","15":"Entr\u00e9e TOR 2","16":"Sortie K14","17":"Sortie K13","18":"Entr\u00e9e TOR 3","19":"Sortie K6","20":"Sortie K12","21":"Sortie K10","22":"Sortie K9","23":"Entr\u00e9e TOR 4","24":"Entr\u00e9e TOR 5","25":"Entr\u00e9e TOR 6","26":"Sortie K8","27":"Sortie K11"};  // initialisé depuis config.json
 const MEMS      = Array.from({length:16},(_,i)=>`M${i}`);
 const ANA_REFS  = ['PT0','PT1','PT2','PT3','ANA0','ANA1','ANA2','ANA3'];
-const REG_REFS  = Array.from({length:16},(_,i)=>`RF${i}`);
+const REG_REFS  = Array.from({length:256},(_,i)=>`RF${i}`);  // RF0..RF255 (RF0..RF99 manuels, RF100+ compilateur de fils)
 const PT_TYPES  = [{v:'pt100',l:'PT100 (100Ω)'},{v:'pt1000',l:'PT1000 (1kΩ)'}];
 const ADS_CH    = [{v:0,l:'CH0'},{v:1,l:'CH1'},{v:2,l:'CH2'},{v:3,l:'CH3'}];
 const SPI_CH    = [{v:0,l:'SPI CE0'},{v:1,l:'SPI CE1'},{v:2,l:'SPI CE2'},{v:3,l:'SPI CE3'}];
+
+// ── Config sondes analogiques (poussée depuis Python via setAnalogConfig) ──
+window._analogCfg = {};
+
+/** Construit la liste d'options pour le dropdown "Entrée analogique" du bloc SENSOR.
+ *  Utilise les noms configurés dans _analogCfg si disponibles,
+ *  sinon retourne les libellés génériques ANA0..ANA11. */
+function _anaOptions() {
+  const opts = [];
+  const ads = (window._analogCfg && window._analogCfg.ads) || [];
+  if (ads.length) {
+    ads.forEach(module => {
+      (module.channels || []).forEach(ch => {
+        const label = ch.name && ch.name.trim()
+          ? `${ch.id} — ${ch.name}`
+          : `${ch.id} — Sonde`;
+        opts.push({v: ch.id, l: label});
+      });
+    });
+  }
+  // Fallback : 12 canaux génériques si la config n'est pas encore chargée
+  if (!opts.length) {
+    for (let i = 0; i < 12; i++) opts.push({v:`ANA${i}`, l:`ANA${i} — Sonde ${i+1}`});
+  }
+  return opts;
+}
+
+/** Appelée depuis Python (block_editor.py → set_analog_config) après validation
+ *  du dialogue "Configuration des sondes analogiques". */
+window.setAnalogConfig = function(cfg) {
+  window._analogCfg = cfg || {};
+  // Si le panneau de propriétés affiche un bloc SENSOR, le rafraîchir
+  if (typeof selB !== 'undefined' && selB && selB.type === 'SENSOR') {
+    showBlockProps(selB);
+  }
+};
 
 // ════════════════════════════════════════════════════════════
 // ÉTAT
@@ -694,10 +889,13 @@ const pg=()=>pages[cur];
 // NAVIGATION PAGES
 // ════════════════════════════════════════════════════════════
 function addPage(name){
+  // Canvas infini : une seule page logique ; addPage conservé
+  // pour compatibilité ascendante mais ne crée qu'une page si vide.
+  if(pages.length>0) return; // déjà une page : rien faire
   const id=`P${idCtr++}`;
-  pages.push({id,name:name||`Page ${pages.length+1}`,blocks:[],wires:[]});
+  pages.push({id,name:name||'Programme',blocks:[],wires:[]});
   pgVP[id]={x:40,y:40,scale:1};
-  goPage(pages.length-1);
+  cur=0; updateNav(); drawGrid(); render();
 }
 
 function goPage(idx){
@@ -708,33 +906,18 @@ function goPage(idx){
   vp.x=sv.x;vp.y=sv.y;vp.scale=sv.scale;
   selB=null;selW=null;showEmptyProps();
   updateNav(); drawGrid(); render();
+  // FIX: si la page n'a jamais été vue (viewport par défaut scale=1, x=40),
+  // ajuster automatiquement la vue pour afficher tous les blocs
+  if(sv.scale===1 && sv.x===40 && sv.y===40 && pages[cur].blocks.length){
+    fitView();
+  }
 }
 
 function updateNav(){
-  const total=pages.length;
-  const p=pages[cur];
-  document.getElementById('nav-prev').className='nav-arrow'+(cur===0?' disabled':'');
-  document.getElementById('nav-next').className='nav-arrow'+(cur===total-1?' disabled':'');
-  document.getElementById('nav-page-name').textContent=`${cur+1} / ${total}  —  ${p?p.name:''}`;
-
-  // Points de navigation
-  const dots=document.getElementById('nav-page-dots');
-  dots.innerHTML='';
-  const maxDots=Math.min(total,12);
-  const startDot=Math.max(0,Math.min(cur-5,total-maxDots));
-  for(let i=startDot;i<startDot+maxDots;i++){
-    const d=document.createElement('div');
-    d.className='page-dot'+(i===cur?' active':'');
-    d.title=pages[i]?pages[i].name:'';
-    d.addEventListener('click',()=>goPage(i));
-    dots.appendChild(d);
-  }
-
-  // Badge inter-pages
-  if(p){
-    const xp=p.blocks.filter(b=>b.type==='PAGE_IN'||b.type==='PAGE_OUT'||b.type==='CONN');
-    document.getElementById('nav-crosspage-badge').style.display=xp.length?'block':'none';
-  }
+  // Canvas infini : pas de navigation multi-pages
+  // Les éléments nav-prev/next sont masqués dans le HTML
+  const badge = document.getElementById('nav-crosspage-badge');
+  if(badge) badge.style.display='none';
 }
 
 function deletePage(idx){
@@ -750,11 +933,7 @@ function renameCurrentPage(){
   if(name&&name.trim()){p.name=name.trim();updateNav();notifyChange();}
 }
 
-document.getElementById('nav-prev').addEventListener('click',()=>{if(cur>0)goPage(cur-1);});
-document.getElementById('nav-next').addEventListener('click',()=>{if(cur<pages.length-1)goPage(cur+1);});
-document.getElementById('nav-add').addEventListener('click',()=>{addPage();notifyChange();});
-document.getElementById('nav-del').addEventListener('click',()=>deletePage(cur));
-document.getElementById('nav-page-name').addEventListener('dblclick',renameCurrentPage);
+// Canvas infini : boutons nav-pages masqués dans le HTML — pas d'event listeners nécessaires
 
 // ════════════════════════════════════════════════════════════
 // PALETTE
@@ -828,6 +1007,73 @@ function computeH(t){
   return HDR+PTOP+Math.max(d.ins.length,d.outs.length,1)*PGAP+8;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Auto-nommage unique : evite toute collision sur TOUTES les pages
+// ═══════════════════════════════════════════════════════════════════════
+
+const _UNIQUE_VARNAME = new Set(['BACKUP','AV','DV','STOAV','STOAP']);
+const _UNIQUE_NAME    = new Set(['CONTACTOR','VALVE3V','RUNTIMCNT','WAIT','WAITH',
+                                  'PULSE','INPUT','OUTPUT','PT_IN','ANA_IN','SENSOR']);
+
+function _allUsedNames(){
+  const s=new Set();
+  pages.forEach(pg2=>pg2.blocks.forEach(b=>{
+    const pp=b.params||{};
+    if(pp.varname) s.add(pp.varname);
+    if(pp.name)    s.add(pp.name);
+    if(pp.bit)     s.add(pp.bit);
+  }));
+  return s;
+}
+
+function _allUsedRFNums(){
+  const used=new Set();
+  pages.forEach(pg2=>pg2.blocks.forEach(b=>{
+    Object.values(b.params||{}).forEach(v=>{
+      if(typeof v==='string'){
+        const m=v.match(/^RF(\d+)$/);
+        if(m) used.add(parseInt(m[1],10));
+      }
+    });
+  }));
+  return used;
+}
+
+function _remapBlockRFs(params){
+  const usedNums=_allUsedRFNums();
+  const localRFs=new Set();
+  Object.values(params).forEach(v=>{
+    if(typeof v==='string'&&/^RF\d+$/.test(v)) localRFs.add(v);
+  });
+  if(!localRFs.size) return params;
+  let cursor=0;
+  const rfMap={};
+  localRFs.forEach(rf=>{
+    while(usedNums.has(cursor)) cursor++;
+    rfMap[rf]=`RF${cursor}`;
+    usedNums.add(cursor);
+    cursor++;
+  });
+  const out={};
+  Object.entries(params).forEach(([k,v])=>{
+    out[k]=(typeof v==='string'&&rfMap[v])?rfMap[v]:v;
+  });
+  return out;
+}
+
+function _uniqueNew(base, used){
+  if(!used.has(base)){ used.add(base); return base; }
+  const m=base.match(/^(.*?)(\d+)$/);
+  if(m){
+    let i=parseInt(m[2],10)+1;
+    while(used.has(`${m[1]}${i}`)) i++;
+    const n=`${m[1]}${i}`; used.add(n); return n;
+  }
+  let i=2;
+  while(used.has(`${base}_${i}`)) i++;
+  const n=`${base}_${i}`; used.add(n); return n;
+}
+
 function addBlock(t,wx,wy){
   if(t==='GROUP'){
     const name=prompt('Nom du groupe :','Nouveau groupe'); if(!name)return null;
@@ -839,8 +1085,28 @@ function addBlock(t,wx,wy){
   }
   pushUndo();
   const bid=`B${idCtr++}`;
+  let params=defParams(t);
+
+  // 1. Remap RF : chaque RF du nouveau bloc recoit un numero libre
+  params=_remapBlockRFs(params);
+
+  // 2. varname unique (BACKUP, AV, DV, STOAV, STOAP)
+  if(_UNIQUE_VARNAME.has(t)&&params.varname){
+    params.varname=_uniqueNew(params.varname,_allUsedNames());
+  }
+  // 3. name unique (INPUT, OUTPUT, SENSOR, CONTACTOR, etc.)
+  if(_UNIQUE_NAME.has(t)&&params.name){
+    params.name=_uniqueNew(params.name,_allUsedNames());
+  }
+  // 4. Numéro CONN libre (CONN, CONN_TX, CONN_RX)
+  if(t==='CONN'||t==='CONN_TX'||t==='CONN_RX'){
+    const n=_nextConnNum();
+    params.num=n;
+    params.label=`C${n}`;
+  }
+
   const b={id:bid,type:t,x:sn(wx),y:sn(wy),w:BW,h:computeH(t),
-           params:defParams(t),ports_in:[],ports_out:[],active:false};
+           params,ports_in:[],ports_out:[],active:false};
   updPorts(b);
   pg().blocks.push(b);
   selB=b;selW=null;showBlockProps(b);
@@ -855,6 +1121,8 @@ function defParams(t){
   if(t==='PAGE_IN') return{signal:'SIG1'};
   if(t==='PAGE_OUT')return{signal:'SIG1'};
   if(t==='CONN')    return{num:1,label:'C1'};
+  if(t==='CONN_TX') return{num:1,label:'C1'};
+  if(t==='CONN_RX') return{num:1,label:'C1'};
   if(['TON','TOF','TP'].includes(t))return{preset_ms:1000};
   if(['CTU','CTD','CTUD'].includes(t))return{preset:10};
   if(t==='PT_IN')   return{analog_ref:'PT0',pt_type:'pt100',spi_ch:0,reg_out:'RF0',wires:3,name:'Sonde PT100'};
@@ -955,7 +1223,26 @@ function defParams(t){
     name:'ECS', pv_ref_ecs:'RF3', pv_ref_prim:'RF4',
     sp_ecs:55.0, sp_antileg:65.0, antileg_day:0, antileg_hour:3,
     hysteresis:2.0, out_pompe:'k6'};
+  if(t==='PROG_H') return{
+    name:'Planning',
+    hebdo_mode: false,            // false=simple, true=par jour
+    h_debut_j:6,  m_debut_j:30,  // plage jour par défaut (mode simple)
+    h_fin_j:22,   m_fin_j:0,
+    sp_jour:20.0, sp_nuit:17.0, sp_vac:15.0,
+    // Planning hebdomadaire : d0=Lun … d6=Dim
+    d0:{active:true, h_deb:6,m_deb:30,h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    d1:{active:true, h_deb:6,m_deb:30,h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    d2:{active:true, h_deb:6,m_deb:30,h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    d3:{active:true, h_deb:6,m_deb:30,h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    d4:{active:true, h_deb:6,m_deb:30,h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    d5:{active:false,h_deb:8,m_deb:0, h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    d6:{active:false,h_deb:8,m_deb:0, h_fin:22,m_fin:0,sp_jour:20.0,sp_nuit:17.0},
+    reg_sp:'RF5', out_jour:'', out_vac_dv:'', out_actif:'',
+  };
 
+  if(t==='NAND')     return{};
+  if(t==='NOR')      return{};
+  if(t==='BOOLEAN')  return{n_in:4,n_out:1,invert_o1:false,invert_o2:false,truth_table:null};
   if(t==='CONTACTOR')return{name:'K1',pin:5};
   if(t==='GROUP_IN') return{label:'IN1'};
   if(t==='GROUP_OUT')return{label:'Q1'};
@@ -975,6 +1262,7 @@ function updPorts(b){
     b.h = Math.max(60, HDR + PTOP + nPorts*PGAP + 10);
     return;
   }
+  if(b.type==='BOOLEAN')  { updPortsBoolean(b);   return; }
   if(b.type==='CARITHM'){ updPortsCarithm(b); return; }
   if(b.type==='PYBLOCK') { updPortsPyblock(b);  return; }
   const d=DEFS[b.type]||DEFS.AND;
@@ -996,6 +1284,22 @@ function updPortsCarithm(b){
   b.ports_in =ins.map( (n,i)=>({name:n,x:b.x,    y:b.y+HDR+PTOP+i*PGAP+PGAP/2}));
   b.ports_out=outs.map((n,i)=>({name:n,x:b.x+b.w,y:b.y+HDR+PTOP+i*PGAP+PGAP/2}));
   b.h=HDR+PTOP+Math.max(ins.length,outs.length,1)*PGAP+8;
+}
+
+function updPortsBoolean(b){
+  const nIn  = Math.min(6, Math.max(1, parseInt(b.params.n_in)||4));
+  const nOut = Math.min(2, Math.max(1, parseInt(b.params.n_out)||1));
+  const ins=[], outs=[];
+  for(let i=1;i<=nIn; i++) ins.push(`I${i}`);
+  for(let i=1;i<=nOut;i++) outs.push(`O${i}`);
+  b.ports_in =ins.map( (n,i)=>({name:n,x:b.x,    y:b.y+HDR+PTOP+i*PGAP+PGAP/2}));
+  b.ports_out=outs.map((n,i)=>({name:n,x:b.x+b.w,y:b.y+HDR+PTOP+i*PGAP+PGAP/2}));
+  b.h=HDR+PTOP+Math.max(nIn,nOut,1)*PGAP+8;
+  // Initialiser la table de vérité si absente ou mauvaise taille
+  const rows=1<<nIn;
+  if(!b.params.truth_table||b.params.truth_table.length!==rows){
+    b.params.truth_table=Array.from({length:rows},()=>Array.from({length:nOut},()=>0));
+  }
 }
 
 function moveBlock(b,nx,ny){
@@ -1039,15 +1343,98 @@ function addWire(sBid,sPort,dBid,dPort){
   pushUndo();
   const w={id:`W${idCtr++}`,src:{bid:sBid,port:sPort},dst:{bid:dBid,port:dPort}};
   recalcW(w);p.wires.push(w);
+  // ── Auto-assignation RF ────────────────────────────────────────────────────
+  _assignWireRF(p, sBid, sPort, dBid, dPort);
+  // ── Fin auto-assignation ───────────────────────────────────────────────────
   notifyChange();render();
 }
 
 function delWire(w){
   pushUndo();
+  // ── Libérer le RF auto-assigné avant de supprimer le fil ──────────────────
+  _releaseWireRF(pg(), w);
+  // ── Fin libération ────────────────────────────────────────────────────────
   pg().wires=pg().wires.filter(x=>x!==w);
   if(selW===w){selW=null;showEmptyProps();}
   notifyChange();render();
 }
+
+
+// ════════════════════════════════════════════════════════════
+// POPUP CHOIX CONNEXION (Fil ou Étiquettes)
+// ════════════════════════════════════════════════════════════
+function showConnectPopup(sBid,sPort,dBid,dPort,cx,cy){
+  const old=document.getElementById('_wire_popup');
+  if(old)old.remove();
+
+  const pop=document.createElement('div');
+  pop.id='_wire_popup';
+  const W=192, H=116;
+  const left=Math.min(cx-W/2, window.innerWidth-W-8);
+  const top=Math.min(cy-H-18, window.innerHeight-H-8);
+  pop.style.cssText=`
+    position:fixed;left:${Math.max(4,left)}px;top:${Math.max(4,top)}px;
+    width:${W}px;
+    background:#161b22;border:1px solid #30363d;border-radius:10px;
+    padding:10px 10px 9px;display:flex;flex-direction:column;gap:7px;
+    z-index:99999;box-shadow:0 6px 28px #000c;
+    font-family:'JetBrains Mono',monospace;
+    animation:_wpIn .12s ease;
+  `;
+
+  const connPreview=`C${_nextConnNum()}`;
+
+  pop.innerHTML=`
+    <style>
+      @keyframes _wpIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+      #_wp_wire:hover{background:#2f81f7!important;}
+      #_wp_conn:hover{background:#1a3a25!important;}
+    </style>
+    <div style="font-size:10px;color:#8b949e;text-align:center;letter-spacing:.06em;margin-bottom:1px;">
+      TYPE DE CONNEXION
+    </div>
+    <button id="_wp_wire" style="background:#1f6feb;color:#e6edf3;border:none;border-radius:6px;
+      padding:8px 0;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;
+      display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;">
+      <span style="font-size:15px;line-height:1;letter-spacing:-2px;">━━</span>&nbsp;Fil direct
+    </button>
+    <button id="_wp_conn" style="background:#0d2016;color:#3fb950;border:1px solid #238636;border-radius:6px;
+      padding:8px 0;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;
+      display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s;">
+      <span style="font-size:14px;line-height:1;">⊙</span>
+      CONN
+      <span style="font-size:9px;color:#39d353;font-weight:normal;opacity:.85;">${connPreview}</span>
+    </button>
+  `;
+  document.body.appendChild(pop);
+
+  function close(){
+    pop.style.opacity='0'; pop.style.transform='scale(.92)';
+    pop.style.transition='opacity .09s,transform .09s';
+    setTimeout(()=>pop.remove(),100);
+    document.removeEventListener('keydown',onEsc);
+  }
+  function onEsc(ev){if(ev.key==='Escape')close();}
+  document.addEventListener('keydown',onEsc);
+
+  setTimeout(()=>{
+    document.addEventListener('click',function h(ev){
+      if(!pop.contains(ev.target)){close();document.removeEventListener('click',h);}
+    },true);
+  },80);
+
+  document.getElementById('_wp_wire').addEventListener('click',ev=>{
+    ev.stopPropagation(); close();
+    addWire(sBid,sPort,dBid,dPort);
+  });
+  document.getElementById('_wp_conn').addEventListener('click',ev=>{
+    ev.stopPropagation(); close();
+    addConnPair(sBid,sPort,dBid,dPort);
+  });
+}
+
+// Canvas infini : addLabelPair/_nextSigName supprimés
+// (plus de PAGE_IN/PAGE_OUT — les fils traversent le canvas sans limite)
 
 // ════════════════════════════════════════════════════════════
 // RENDU
@@ -1083,17 +1470,209 @@ function bp(a,b,c,d,t){const m=1-t;return m*m*m*a+3*m*m*t*b+3*m*t*t*c+t*t*t*d;}
 function drawWire(w,sel){
   if(!('sx'in w))recalcW(w);
   const sb=pg().blocks.find(b=>b.id===w.src.bid);
-  const active=sb&&sb.active;
-  ctx.strokeStyle=sel?'#f0883e':active?'#3fb950':'#58a6ff';
-  ctx.lineWidth=(sel?2.5:1.5)/vp.scale;ctx.setLineDash([]);
+  // FIX: si le bloc source est un OR/INV/XOR logique dont active est faux mais
+  // dont le bit M temp correspondant est actif dans state.memory → fil vert.
+  let digitalOn = sb&&sb.active;
+  if(!digitalOn && sb && _LOGIC_WIRE_TYPES.has(sb.type)){
+    // 1) Lire le bit M temp associé (stocké dans sb._mbit si disponible)
+    if(sb._mbit && _simState.memory && _simState.memory[sb._mbit]){
+      digitalOn = true;
+    }
+    // 2) Lire reg_out RF* directement dans _simState.registers
+    if(!digitalOn){
+      const _sro=(sb.params||{}).reg_out;
+      if(_sro && typeof _sro==='string' && _sro.startsWith('RF') && _simState.registers){
+        const _srv=_simState.registers[_sro];
+        if(_srv!=null && Math.abs(parseFloat(_srv))>0.01) digitalOn=true;
+      }
+    }
+  }
+  const anaVal    = !digitalOn&&sb?_getSimValue(sb):null;  // valeur analogique
+  const hasData   = anaVal!==null&&anaVal!==undefined;
+
+  const col = sel?'#f0883e'
+            : digitalOn?'#3fb950'
+            : hasData?'#00d4ff'
+            : '#58a6ff';
+
+  // ── Halo vert : signal numérique ON ─────────────────────────
+  if(digitalOn&&!sel){
+    ctx.save();
+    ctx.strokeStyle='#3fb95055';ctx.lineWidth=6/vp.scale;
+    ctx.shadowColor='#3fb950';ctx.shadowBlur=10/vp.scale;
+    ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(w.sx,w.sy);bez(ctx,w.sx,w.sy,w.dx,w.dy);ctx.stroke();
+    ctx.restore();
+  }
+  // ── Halo cyan léger : données analogiques ───────────────────
+  if(hasData&&!sel&&!digitalOn){
+    ctx.save();
+    ctx.strokeStyle='#00d4ff33';ctx.lineWidth=4/vp.scale;
+    ctx.shadowColor='#00d4ff';ctx.shadowBlur=5/vp.scale;
+    ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(w.sx,w.sy);bez(ctx,w.sx,w.sy,w.dx,w.dy);ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Fil principal ───────────────────────────────────────────
+  ctx.strokeStyle=col;
+  ctx.lineWidth=(sel?2.5:digitalOn?2:hasData?1.8:1.5)/vp.scale;
+  ctx.shadowColor=sel?'#f0883e':digitalOn?'#3fb950':hasData?'#00d4ff55':'transparent';
+  ctx.shadowBlur=sel?6/vp.scale:digitalOn?4/vp.scale:hasData?2/vp.scale:0;
+  ctx.setLineDash([]);
   ctx.beginPath();ctx.moveTo(w.sx,w.sy);bez(ctx,w.sx,w.sy,w.dx,w.dy);ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // ── Points aux extrémités ───────────────────────────────────
   [[w.sx,w.sy],[w.dx,w.dy]].forEach(([x,y])=>{
     ctx.beginPath();ctx.arc(x,y,3/vp.scale,0,Math.PI*2);
-    ctx.fillStyle=ctx.strokeStyle;ctx.fill();
+    ctx.fillStyle=col;ctx.fill();
   });
 }
 
+
+// ════════════════════════════════════════════════════════════
+// RENDU CARTOUCHE (cadre de dessin industriel)
+// ════════════════════════════════════════════════════════════
+function _drawCartouche(b, sel){
+  const p = b.params||{};
+  const sc = vp.scale;
+  const CART_H   = 100;  // hauteur du bloc cartouche en bas
+  const MARGIN   = 12;   // marge intérieure double cadre
+
+  // ── Fond très légèrement teinté ────────────────────────────
+  ctx.fillStyle = sel ? '#12192e' : '#0d1421';
+  ctx.globalAlpha = 0.35;
+  _rr(b.x, b.y, b.w, b.h, 0);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // ── Cadre extérieur ────────────────────────────────────────
+  const lw = (sel ? 2.5 : 1.5) / sc;
+  ctx.strokeStyle = sel ? '#58a6ff' : '#3d5070';
+  ctx.lineWidth   = lw;
+  ctx.setLineDash(sel ? [] : [8/sc, 4/sc]);
+  ctx.beginPath();
+  ctx.rect(b.x, b.y, b.w, b.h);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── Cadre intérieur (marge double) ─────────────────────────
+  ctx.strokeStyle = sel ? '#3a5a8a' : '#243040';
+  ctx.lineWidth   = 0.8 / sc;
+  ctx.beginPath();
+  ctx.rect(b.x + MARGIN/sc, b.y + MARGIN/sc,
+           b.w - 2*MARGIN/sc, b.h - 2*MARGIN/sc);
+  ctx.stroke();
+
+  // ── Bloc titre en bas à droite (cartouche IEC) ────────────
+  const ch   = CART_H / sc;
+  const cx   = b.x + b.w - 400/sc;
+  const cy   = b.y + b.h - ch;
+
+  // Fond cartouche
+  ctx.fillStyle = '#0d1828';
+  ctx.fillRect(cx, cy, 400/sc, ch);
+  ctx.strokeStyle = sel ? '#58a6ff' : '#3d5070';
+  ctx.lineWidth   = lw;
+  ctx.strokeRect(cx, cy, 400/sc, ch);
+
+  // Séparateurs verticaux
+  const col1w = 240/sc, col2w = 80/sc;
+  ctx.lineWidth = 0.8/sc;
+  ctx.strokeStyle = '#2d4060';
+  ctx.beginPath();
+  ctx.moveTo(cx + col1w, cy);  ctx.lineTo(cx + col1w, cy + ch);
+  ctx.moveTo(cx + col1w + col2w, cy); ctx.lineTo(cx + col1w + col2w, cy + ch);
+  ctx.stroke();
+
+  // Séparateur horizontal milieu
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + ch/2); ctx.lineTo(cx + 400/sc, cy + ch/2);
+  ctx.stroke();
+
+  // Textes
+  const fs  = b => `${b/sc}px 'JetBrains Mono',monospace`;
+  ctx.textBaseline = 'middle';
+
+  // Titre (grand, col1 haut)
+  ctx.fillStyle  = '#e6edf3';
+  ctx.font       = `bold ${fs(14)}`;
+  ctx.textAlign  = 'left';
+  _clipText(ctx, p.title||'Sans titre',
+            cx + 6/sc, cy + ch/4, col1w - 10/sc);
+
+  // Subtitle (col1 bas)
+  ctx.fillStyle = '#8b949e';
+  ctx.font      = fs(9);
+  _clipText(ctx, p.subtitle||'',
+            cx + 6/sc, cy + 3*ch/4, col1w - 10/sc);
+
+  // Rev (col2 haut)
+  ctx.fillStyle  = '#d29922';
+  ctx.font       = `bold ${fs(10)}`;
+  ctx.textAlign  = 'center';
+  ctx.fillText(`Rev ${p.rev||'1'}`, cx + col1w + col2w/2, cy + ch/4);
+
+  // Date (col2 bas)
+  ctx.fillStyle = '#8b949e';
+  ctx.font      = fs(9);
+  ctx.fillText(p.date||'', cx + col1w + col2w/2, cy + 3*ch/4);
+
+  // Sheet (col3 haut)
+  ctx.fillStyle  = '#58a6ff';
+  ctx.font       = `bold ${fs(12)}`;
+  ctx.textAlign  = 'center';
+  ctx.fillText(p.sheet||'1', cx + col1w + col2w + (400/sc - col1w - col2w)/2, cy + ch/4);
+
+  // Author (col3 bas)
+  ctx.fillStyle = '#8b949e';
+  ctx.font      = fs(9);
+  ctx.fillText(p.author||'', cx + col1w + col2w + (400/sc - col1w - col2w)/2, cy + 3*ch/4);
+
+  // Libellés grisés
+  const lbl = (txt, x, y) => {
+    ctx.fillStyle = '#3d5070'; ctx.font = fs(7);
+    ctx.textAlign = 'left';
+    ctx.fillText(txt, x + 3/sc, y + 5/sc);
+  };
+  lbl('TITRE', cx, cy);
+  lbl('REV',   cx + col1w, cy);
+  lbl('FEUILLE', cx + col1w + col2w, cy);
+
+  // Ligne Auteur / Date
+  if(p.author){
+    ctx.fillStyle = '#3d5070'; ctx.font = fs(7); ctx.textAlign='left';
+    ctx.fillText('PAR', cx, cy + ch/2 + 4/sc);
+  }
+
+  // Poignée de redimensionnement
+  if(sel){
+    const hs = 9/sc;
+    ctx.fillStyle = '#1f6feb';
+    ctx.fillRect(b.x+b.w - hs, b.y+b.h - hs, hs, hs);
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.5/sc;
+    ctx.beginPath();
+    ctx.moveTo(b.x+b.w - hs+2/sc, b.y+b.h - 2/sc);
+    ctx.lineTo(b.x+b.w - 2/sc, b.y+b.h - hs+2/sc);
+    ctx.stroke();
+  }
+}
+
+function _clipText(ctx, text, x, y, maxW){
+  ctx.textAlign = 'left';
+  // Tronquer si trop long
+  while(text.length>0 && ctx.measureText(text+'…').width > maxW) text=text.slice(0,-1);
+  ctx.fillText(text.length<(arguments[1]||Infinity) ? text+'…' : text, x, y);
+}
+function _rr(x,y,w,h,r){ ctx.beginPath(); ctx.rect(x,y,w,h); }
+
 function drawBlock(b,sel){
+  // ── Rendu spécial CARTOUCHE ────────────────────────────────────
+  if(b.type==='CARTOUCHE'){
+    _drawCartouche(b,sel);
+    return;
+  }
   const d=DEFS[b.type]||DEFS.AND;
   ctx.shadowColor='#000';ctx.shadowBlur=(sel?12:3)/vp.scale;ctx.shadowOffsetX=ctx.shadowOffsetY=2/vp.scale;
   ctx.fillStyle=b.active?'#0a1f0a':d.col;
@@ -1119,6 +1698,26 @@ function drawBlock(b,sel){
     ctx.fillStyle='#d29922';ctx.font=`${10/vp.scale}px 'JetBrains Mono',monospace`;
     ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(pd,b.x+b.w/2,b.y+b.h/2+HDR/4);
+  }
+
+  // ── Valeur analogique en simulation ──────────────────────────────────────
+  const _anaVal=_getSimValue(b);
+  if(_anaVal!==null){
+    const _av_s=typeof _anaVal==='number'
+      ?(_anaVal%1===0?_anaVal.toFixed(0):_anaVal.toFixed(1))
+      :String(_anaVal);
+    const _unit=b.params&&b.params.unit?b.params.unit:'';
+    // Pour CONN / CONN_TX / CONN_RX : afficher sous le numéro ; pour les autres : en bas du bloc
+    const _valY=(b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX')
+      ?(b.y+b.h/2+HDR/4+11/vp.scale)
+      :(b.y+b.h-10/vp.scale);
+    ctx.save();
+    ctx.fillStyle='#00d4ff';
+    ctx.font=`bold ${9/vp.scale}px 'JetBrains Mono',monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor='#00d4ff';ctx.shadowBlur=4/vp.scale;
+    ctx.fillText(_av_s+_unit, b.x+b.w/2, _valY);
+    ctx.restore();
   }
 
   // Ports entrée
@@ -1161,7 +1760,10 @@ function drawBlock(b,sel){
                  (['TON','TOF','TP','WAIT','WAITH','PULSE'].includes(b.type))?'#bc8cff':
                  (['CTU','CTD','CTUD','RUNTIMCNT'].includes(b.type))?'#39d353':
                  (['PID','PT_IN','ANA_IN','SENSOR'].includes(b.type))?'#00d4ff':
-                 (b.type==='DV')?'#f0883e':'#3fb950';
+                 (b.type==='DV')?'#f0883e':
+                 (b.type==='CONN')?'#00eaff':
+                 (b.type==='CONN_TX')?'#f0883e':
+                 (b.type==='CONN_RX')?'#39d3b0':'#3fb950';
     const lr=5/vp.scale;
     // Halo
     ctx.shadowColor=ledC; ctx.shadowBlur=8/vp.scale;
@@ -1209,6 +1811,18 @@ function drawBlock(b,sel){
     ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(b.params.num||'?',b.x+b.w/2,b.y+b.h/2+HDR/4);
   }
+  if(b.type==='CONN_TX'){
+    ctx.font=`bold ${14/vp.scale}px 'JetBrains Mono',monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#f0883e';
+    ctx.fillText('→'+(b.params.num||'?'),b.x+b.w/2,b.y+b.h/2+HDR/4);
+  }
+  if(b.type==='CONN_RX'){
+    ctx.font=`bold ${14/vp.scale}px 'JetBrains Mono',monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#39d3b0';
+    ctx.fillText('←'+(b.params.num||'?'),b.x+b.w/2,b.y+b.h/2+HDR/4);
+  }
   // Poignée de redimensionnement — EN DEHORS du bloc (coin SE externe)
   if(sel){
     const hs=7/vp.scale;  // taille du carré
@@ -1228,6 +1842,83 @@ function drawBlock(b,sel){
   }
 }
 
+// Retourne la valeur analogique simulée d'un bloc, ou null si non applicable
+function _getSimValue(b){
+  if(!_simState||!b.params)return null;
+  const p=b.params;
+  const ANALOG_TYPES=['SENSOR','PT_IN','ANA_IN','ADD','SUB','MUL','DIV',
+    'AVG','MIN','MAX','ABS','SQRT','MOD','POW','SCALE','FILT1','INTEG',
+    'DERIV','DEADB','RAMP','CLAMP','BACKUP','AV','STOAV','CONN','CONN_TX','CONN_RX'];
+  if(!ANALOG_TYPES.includes(b.type))return null;
+
+  // CONN → remonter le fil entrant pour trouver la valeur source
+  if(b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX'){
+    // 1. Registres compilés (si dispo depuis le serveur)
+    const ri=p.reg_in, ro=p.reg_out;
+    const regs=_simState.registers||{};
+    if(ri&&regs[ri]!=null) return regs[ri];
+    if(ro&&regs[ro]!=null) return regs[ro];
+    // 2. Remonter via le fil branché sur IN
+    const pageC=pg();
+    const inW=pageC.wires.find(w=>w.dst.bid===b.id&&w.dst.port==='IN');
+    if(inW){
+      const src=pageC.blocks.find(x=>x.id===inW.src.bid);
+      if(src) return _getSimValue(src);
+    }
+    // 3. Trouver le CONN pair (même num) qui a un fil entrant
+    const peer=pageC.blocks.find(x=>
+      (x.type==='CONN'||x.type==='CONN_TX'||x.type==='CONN_RX')&&x.params.num===b.params.num&&x.id!==b.id&&
+      pageC.wires.some(w=>w.dst.bid===x.id&&w.dst.port==='IN'));
+    if(peer) return _getSimValue(peer);
+    return null;
+  }
+
+  // SENSOR / PT_IN / ANA_IN → valeur °C ou tension
+  if(['SENSOR','PT_IN','ANA_IN'].includes(b.type)){
+    const ref=p.analog_ref||p.reg_out;
+    if(ref&&_simState.analog&&_simState.analog[ref]!=null){
+      const celsius=_simState.analog[ref].celsius??_simState.analog[ref];
+      return typeof celsius==='number'?celsius:null;
+    }
+    if(ref&&_simState.registers&&_simState.registers[ref]!=null)
+      return _simState.registers[ref];
+    return null;
+  }
+
+  // AV / STOAV → dv_vars ou av_vars
+  if(['AV','STOAV'].includes(b.type)){
+    const vn=(p.varname||'').toLowerCase();
+    if(_simState.av_vars&&_simState.av_vars[vn]!=null) return _simState.av_vars[vn];
+    if(_simState.dv_vars&&_simState.dv_vars[vn]!=null) return _simState.dv_vars[vn];
+    return null;
+  }
+
+  // BACKUP → registre ou variable
+  if(b.type==='BACKUP'){
+    const vn=(p.varname||'').toLowerCase();
+    if(_simState.dv_vars&&_simState.dv_vars[vn]!=null) return _simState.dv_vars[vn];
+    if(p.reg_out&&_simState.registers&&_simState.registers[p.reg_out]!=null)
+      return _simState.registers[p.reg_out];
+    return null;
+  }
+
+  // ADD, AVG, SCALE, etc. → registre de sortie (params ou directement sur le bloc)
+  const rout=p.reg_out||p.reg_c||b.reg_out;
+  if(rout&&_simState.registers&&_simState.registers[rout]!=null)
+    return _simState.registers[rout];
+
+  // Fallback : remonter via les fils entrants (propagation depuis la source)
+  {
+    const pageF=pg();
+    const inWs=pageF.wires.filter(w=>w.dst.bid===b.id);
+    for(const w of inWs){
+      const src=pageF.blocks.find(x=>x.id===w.src.bid);
+      if(src){const v=_getSimValue(src);if(v!==null)return v;}
+    }
+  }
+  return null;
+}
+
 function drawPort(cx,cy,isOut,hover){
   ctx.beginPath();ctx.arc(cx,cy,PR/vp.scale,0,Math.PI*2);
   ctx.fillStyle=hover?'#f0883e':isOut?'#3fb950':'#58a6ff';
@@ -1245,7 +1936,7 @@ function pdisp(b){
   if(b.type==='CONST')  return`= ${p.value}`;
   if(b.type==='MEM')    return p.bit;
   if(b.type==='PAGE_IN'||b.type==='PAGE_OUT')return'';
-  if(b.type==='CONN')   return'';
+  if(b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX') return'';
   if(['TON','TOF','TP'].includes(b.type))return`${p.preset_ms}ms`;
   if(['CTU','CTD','CTUD'].includes(b.type))return`PV=${p.preset}`;
   if(b.type==='PT_IN')  return p.name||p.analog_ref||'PT0';
@@ -1282,6 +1973,9 @@ function pdisp(b){
   if(b.type==='ECS_BLOC')   return p.name||'ECS';
   if(b.type==='CARITHM') return p.name||'Code C';
   if(b.type==='PYBLOCK')  return p.name||'Python';
+  if(b.type==='NAND')     return 'NAND';
+  if(b.type==='NOR')      return 'NOR';
+  if(b.type==='BOOLEAN')  return `BOOL ${b.params.n_in||4}→${b.params.n_out||1}`;
   if(b.type==='CONTACTOR')return p.name||'K1';
   if(b.type==='VALVE3V') return p.name||'V3V';
   if(b.type==='RUNTIMCNT')return p.name||'Cpt';
@@ -1315,13 +2009,15 @@ function hitPort(wx,wy){
   }return null;
 }
 function hitWire(wx,wy){
+  let best=null, bestDist=12/vp.scale;
   for(const w of pg().wires){
     if(!('sx'in w))continue;
-    for(let i=0;i<32;i++){
-      const pt=bezPt(w.sx,w.sy,w.dx,w.dy,i/32);
-      if(Math.hypot(wx-pt.x,wy-pt.y)<7/vp.scale)return w;
+    for(let i=0;i<=64;i++){
+      const pt=bezPt(w.sx,w.sy,w.dx,w.dy,i/64);
+      const d=Math.hypot(wx-pt.x,wy-pt.y);
+      if(d<bestDist){bestDist=d;best=w;}
     }
-  }return null;
+  }return best;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1383,6 +2079,9 @@ cvs.addEventListener('mousedown',e=>{
   }
   const ph=hitPort(w.x,w.y);
   if(ph){wireFrom={bid:ph.block.id,port:ph.port.name,portType:ph.type,wx:ph.port.x,wy:ph.port.y};drag='wire';return;}
+  // ── Fils : priorité AVANT les blocs (un fil fin est plus difficile à cliquer)
+  const wh=hitWire(w.x,w.y);
+  if(wh){selW=wh;selB=null;multiSel.clear();showWireProps(wh);render();return;}
   const bh=hitBlock(w.x,w.y);
   if(bh){
     if(e.ctrlKey||e.metaKey){
@@ -1405,8 +2104,6 @@ cvs.addEventListener('mousedown',e=>{
     pg().blocks=[...pg().blocks.filter(b=>b!==bh),bh];
     showBlockProps(bh); render(); return;
   }
-  const wh=hitWire(w.x,w.y);
-  if(wh){selW=wh;selB=null;multiSel.clear();showWireProps(wh);render();return;}
   // Clic sur fond vide
   if(!e.ctrlKey && !e.metaKey) multiSel.clear();
   selB=null; selW=null; showEmptyProps();
@@ -1489,7 +2186,7 @@ cvs.addEventListener('mouseup',e=>{
       let sb,sp,db,dp;
       if(wireFrom.portType==='out'&&ph.type==='in'){sb=wireFrom.bid;sp=wireFrom.port;db=ph.block.id;dp=ph.port.name;}
       else if(wireFrom.portType==='in'&&ph.type==='out'){sb=ph.block.id;sp=ph.port.name;db=wireFrom.bid;dp=wireFrom.port;}
-      if(sb)addWire(sb,sp,db,dp);
+      if(sb)showConnectPopup(sb,sp,db,dp,e.clientX,e.clientY);
     }
     wireFrom=null;
   }
@@ -1511,7 +2208,7 @@ cvs.addEventListener('dblclick',e=>{
   if(hit && hit.type==='PYBLOCK'){ openPyblockEditor(hit); return; }
   const _metierTypes=['PLANCHER','CHAUDIERE','SOLAR','ZONE_CHAUF','ECS_BLOC',
     'SENSOR','CONTACTOR','VALVE3V','RUNTIMCNT','TON','TOF','TP','WAIT','WAITH',
-    'PULSE','BACKUP','AV','DV','PID','COMPH','COMPL','SR_R','SR_S'];
+    'PULSE','BACKUP','AV','DV','PID','COMPH','COMPL','SR_R','SR_S','BOOLEAN'];
   if(hit && _metierTypes.includes(hit.type)){ openBlockEditor(hit); return; }
   if(!hit)showQMenu(e.clientX,e.clientY,w.x,w.y);
 });
@@ -1764,6 +2461,7 @@ function showEmptyProps(){
 
 function showBlockProps(b){
   const d=DEFS[b.type]||{};
+  const p=b.params||{};   // alias court — utilisé par tous les panneaux blocs métier
   let h=`<div class="pr"><span class="pl">Type</span>
     <div style="color:${d.bdg||'#58a6ff'};font-weight:bold;font-size:12px">${b.type}</div>
     <div style="color:var(--fbd-text2);font-size:9px;margin-top:1px">${d.desc||''}</div></div>
@@ -1780,21 +2478,22 @@ function showBlockProps(b){
     h+=pNum('value','Valeur',b.params.value||0,-9999,9999);
   }else if(b.type==='MEM'){
     h+=pSel('bit','Bit mémoire',b.params.bit,MEMS.map(m=>({v:m,l:m})));
-  }else if(b.type==='PAGE_IN'||b.type==='PAGE_OUT'){
-    h+=pTxt('signal','Nom du signal',b.params.signal||'SIG1');
-    const avail=findSignalPeers(b);
-    h+=`<hr class="psep"><span class="pl">Signal présent sur</span>`;
-    if(!avail.length){
-      h+=`<div style="color:var(--fbd-text3);font-size:9px">Aucune correspondance.</div>`;
-    } else {
-      avail.forEach(c=>{
-        h+=`<div class="conn-row" onclick="goPage(${c.pageIdx})">
-          <span>${c.signal}</span>
-          <span><span class="conn-chip" style="background:#1a2f45;color:#58a6ff">${c.pageName}</span>
-          <span class="conn-jump">→</span></span></div>`;
-      });
-    }
-  }else if(b.type==='CONN'){
+  }else if(b.type==='CARTOUCHE'){
+    html=`<div class='pr'><label class='pl'>TITRE</label>
+      <input class='pi' value='${ep(p.title||'')}' onchange="_upd(b,'title',this.value)"></div>
+      <div class='pr'><label class='pl'>SOUS-TITRE</label>
+      <input class='pi' value='${ep(p.subtitle||'')}' onchange="_upd(b,'subtitle',this.value)"></div>
+      <div class='pr'><label class='pl'>AUTEUR</label>
+      <input class='pi' value='${ep(p.author||'')}' onchange="_upd(b,'author',this.value)"></div>
+      <div class='pr'><label class='pl'>RÉVISION</label>
+      <input class='pi' value='${ep(p.rev||'1')}' onchange="_upd(b,'rev',this.value)"></div>
+      <div class='pr'><label class='pl'>DATE</label>
+      <input class='pi' type='date' value='${p.date||''}' onchange="_upd(b,'date',this.value)"></div>
+      <div class='pr'><label class='pl'>N° FEUILLE</label>
+      <input class='pi' value='${ep(p.sheet||'1')}' onchange="_upd(b,'sheet',this.value)"></div>
+      <hr class='psep'>
+      <button class='pb' onclick="_printCartouche('${b.id}')">🖨 Imprimer cette zone</button>`;
+  }else if(b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX'){
     h+=pNum('num','Numéro',b.params.num||1,1,999);
     h+=pTxt('label','Étiquette',b.params.label||'C1');
     const avail=findConnPeers(b);
@@ -1803,8 +2502,10 @@ function showBlockProps(b){
       h+=`<div style="color:var(--fbd-text3);font-size:9px">Aucun #${b.params.num}.</div>`;
     } else {
       avail.forEach(c=>{
+        const typeColor=c.btype==='CONN_TX'?'#f0883e':c.btype==='CONN_RX'?'#39d3b0':'#58a6ff';
+        const typeLabel=c.btype==='CONN_TX'?'TX':c.btype==='CONN_RX'?'RX':'⇄';
         h+=`<div class="conn-row" onclick="goPage(${c.pageIdx})">
-          <span>#${c.num} ${c.label}</span>
+          <span>#${c.num} ${c.label} <span style="font-size:8px;color:${typeColor}">[${typeLabel}]</span></span>
           <span class="conn-chip" style="background:#1a2f45;color:#58a6ff">${c.pageName}</span>
           <span class="conn-jump">→</span></div>`;
       });
@@ -1818,7 +2519,7 @@ function showBlockProps(b){
     h+=pSel('pt_type','Type sonde',b.params.pt_type||'pt100',PT_TYPES);
     h+=pSel('spi_ch','Port SPI',b.params.spi_ch||0,SPI_CH);
     h+=pNum('wires','Câblage (fils)',b.params.wires||3,2,4);
-    h+=pSel('reg_out','Registre sortie (°C)',b.params.reg_out||'RF0',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_out','Registre sortie (°C)',b.params.reg_out||'RF0');
     h+=`<hr class="psep"><span class="pl">Simulation — Valeur °C</span>`;
     h+=`<div style="display:flex;gap:6px;align-items:center">
       <input class="pi" id="sim_val_${b.id}" type="range" min="-50" max="200" step="0.5"
@@ -1828,7 +2529,7 @@ function showBlockProps(b){
   }else if(b.type==='ANA_IN'){
     h+=pTxt('name','Nom entrée',b.params.name||'Entrée ANA');
     h+=pSel('ads_ch','Canal ADS1115',b.params.ads_ch||0,ADS_CH);
-    h+=pSel('reg_out','Registre sortie',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_out','Registre sortie',b.params.reg_out||'RF1');
     h+=`<hr class="psep"><span class="pl">Simulation — Valeur (V)</span>`;
     h+=`<div style="display:flex;gap:6px;align-items:center">
       <input class="pi" id="sim_val_${b.id}" type="range" min="0" max="5" step="0.01"
@@ -1836,7 +2537,7 @@ function showBlockProps(b){
       <span id="sim_lbl_${b.id}" style="color:#58cfff;min-width:50px">${(b._simVal||0).toFixed(3)}V</span>
     </div>`;
   }else if(b.type==='COMPARE_F'){
-    h+=pSel('reg_ref','Registre mesuré',b.params.reg_ref||'RF0',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_ref','Registre mesuré',b.params.reg_ref||'RF0');
     h+=pNum('threshold','Seuil',b.params.threshold||80.0,-9999,9999,0.1);
     h+=pNum('hysteresis','Hystérésis',b.params.hysteresis||1.0,0,100,0.1);
     h+=pSel('op','Opération',b.params.op||'gt',[
@@ -1845,8 +2546,8 @@ function showBlockProps(b){
       {v:'eq',l:'= (égal +/-hyst)'}
     ]);
   }else if(b.type==='SCALE'){
-    h+=pSel('reg_ref','Registre source',b.params.reg_ref||'RF1',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Registre sortie',b.params.reg_out||'RF2',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_ref','Registre source',b.params.reg_ref||'RF1');
+    h+=pRF('reg_out','Registre sortie',b.params.reg_out||'RF2');
     h+=`<hr class="psep"><span class="pl">Entrée brute</span>`;
     h+=pNum('in_lo','Min entrée',b.params.in_lo||0,-99999,99999,0.001);
     h+=pNum('in_hi','Max entrée',b.params.in_hi||5.0,-99999,99999,0.001);
@@ -1854,7 +2555,7 @@ function showBlockProps(b){
     h+=pNum('out_lo','Min sortie',b.params.out_lo||0,-99999,99999,0.1);
     h+=pNum('out_hi','Max sortie',b.params.out_hi||100.0,-99999,99999,0.1);
   }else if(b.type==='PID'){
-    h+=pSel('pv_ref','Mesure (PV)',b.params.pv_ref||'RF0',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('pv_ref','Mesure (PV)',b.params.pv_ref||'RF0');
     h+=pNum('setpoint','Consigne (SP)',b.params.setpoint||50.0,-9999,9999,0.1);
     h+=`<hr class="psep"><span class="pl">Gains PID</span>`;
     h+=pNum('kp','Kp (proportionnel)',b.params.kp||1.0,0,9999,0.01);
@@ -1863,105 +2564,105 @@ function showBlockProps(b){
     h+=`<hr class="psep"><span class="pl">Sortie</span>`;
     h+=pNum('out_min','Min sortie (%)',b.params.out_min||0,-100,100,0.1);
     h+=pNum('out_max','Max sortie (%)',b.params.out_max||100,0,200,0.1);
-    h+=pSel('reg_out','Registre sortie',b.params.reg_out||'RF3',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_out','Registre sortie',b.params.reg_out||'RF3');
   }else if(b.type==='SENSOR'){
     h+=pTxt('name','Nom capteur',b.params.name||'Capteur');
-    h+=pSel('ref','Entrée analogique',b.params.ref||'ANA0',
-      Array.from({length:12},(_,i)=>({v:`ANA${i}`,l:`ANA${i} — Sonde ${i+1}`})));
+    h+=pSel('ref','Entrée analogique',b.params.ref||'ANA0',_anaOptions());
     h+=pNum('correction','Correction (deg)',b.params.correction||0.0,-20,20,0.1);
+    h+=pRF('reg_out','Registre sortie (RF)',b.params.reg_out||'RF0');
   }else if(b.type==='ADD'||b.type==='SUB'||b.type==='MUL'||b.type==='DIV'){
     const ops={ADD:'+',SUB:'-',MUL:'x',DIV:'/'};
     h+=`<span class="pl">RF_A ${ops[b.type]} RF_B vers RF_OUT</span>`;
-    h+=pSel('reg_a','Opérande A',b.params.reg_a||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_b','Opérande B',b.params.reg_b||'RF1',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Résultat',b.params.reg_out||'RF2',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_a','Opérande A',b.params.reg_a||'RF0');
+    h+=pRF('reg_b','Opérande B',b.params.reg_b||'RF1');
+    h+=pRF('reg_out','Résultat',b.params.reg_out||'RF2');
   }else if(b.type==='MUX'){
     h+=pSel('idx_ref','Index (bit mémoire)',b.params.idx_ref||'M0',MEMS.map(m=>({v:m,l:m})));
-    h+=pSel('in0','In0 (idx=0)',b.params.in0||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('in1','In1 (idx=1)',b.params.in1||'RF1',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('in2','In2 (idx=2)',b.params.in2||'RF2',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('in3','In3 (idx=3)',b.params.in3||'RF3',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'RF4',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('in0','In0 (idx=0)',b.params.in0||'RF0');
+    h+=pRF('in1','In1 (idx=1)',b.params.in1||'RF1');
+    h+=pRF('in2','In2 (idx=2)',b.params.in2||'RF2');
+    h+=pRF('in3','In3 (idx=3)',b.params.in3||'RF3');
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'RF4');
   }else if(b.type==='COMPH'){
-    h+=pSel('ref','Registre mesuré',b.params.ref||'RF0',[...REG_REFS,...ANA_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('ref','Registre mesuré',b.params.ref||'RF0');
     h+=pNum('high','Seuil HAUT',b.params.high??80.0,-9999,9999,0.1);
     h+=pNum('hyst','Hystérésis',b.params.hyst??0.5,0,100,0.1);
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'M0',[...MEMS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'M0');
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">ON si IN≥HAUT, OFF si IN&lt;(HAUT−hyst)</div>`;
   }else if(b.type==='COMPL'){
-    h+=pSel('ref','Registre mesuré',b.params.ref||'RF0',[...REG_REFS,...ANA_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('ref','Registre mesuré',b.params.ref||'RF0');
     h+=pNum('low','Seuil BAS',b.params.low??10.0,-9999,9999,0.1);
     h+=pNum('hyst','Hystérésis',b.params.hyst??0.5,0,100,0.1);
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'M1',[...MEMS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'M1');
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">ON si IN≤BAS, OFF si IN>(BAS+hyst)</div>`;
   }else if(b.type==='ABS'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie |IN|',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie |IN|',b.params.reg_out||'RF1');
   }else if(b.type==='MIN'||b.type==='MAX'){
-    h+=pSel('reg_a','Entrée A',b.params.reg_a||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_b','Entrée B',b.params.reg_b||'RF1',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'RF2',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_a','Entrée A',b.params.reg_a||'RF0');
+    h+=pRF('reg_b','Entrée B',b.params.reg_b||'RF1');
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'RF2');
   }else if(b.type==='MOD'||b.type==='POW'){
-    h+=pSel('reg_a',b.type==='POW'?'Base':'Dividende',b.params.reg_a||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_b',b.type==='POW'?'Exposant':'Diviseur',b.params.reg_b||'RF1',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'RF2',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_a',b.type==='POW'?'Base':'Dividende',b.params.reg_a||'RF0');
+    h+=pRF('reg_b',b.type==='POW'?'Exposant':'Diviseur',b.params.reg_b||'RF1');
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'RF2');
   }else if(b.type==='SQRT'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie √IN',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie √IN',b.params.reg_out||'RF1');
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">√max(0, IN)</div>`;
   }else if(b.type==='CLAMP'||b.type==='CLAMP_A'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie clampée',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie clampée',b.params.reg_out||'RF1');
     h+=pNum('lo','Minimum',b.params.lo??0.0,-9999,9999,0.1);
     h+=pNum('hi','Maximum',b.params.hi??100.0,-9999,9999,0.1);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">Sortie CLIP=TRUE si IN hors plage</div>`;
   }else if(b.type==='SEL'){
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:2px 0">G=0 → IN0 · G=1 → IN1</div>`;
-    h+=pSel('in0','IN0 (G=0)',b.params.in0||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('in1','IN1 (G=1)',b.params.in1||'RF1',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'RF2',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('in0','IN0 (G=0)',b.params.in0||'RF0');
+    h+=pRF('in1','IN1 (G=1)',b.params.in1||'RF1');
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'RF2');
   }else if(b.type==='FILT1'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie filtrée',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie filtrée',b.params.reg_out||'RF1');
     h+=pNum('tc_s','Constante de temps (s)',b.params.tc_s??10.0,0.01,3600,0.1);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">α=dt/(tc+dt) — plus tc grand = plus lent</div>`;
   }else if(b.type==='AVG'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie moyenne',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie moyenne',b.params.reg_out||'RF1');
     h+=pNum('n','Nb échantillons',b.params.n??10,2,200,1);
   }else if(b.type==='INTEG'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie intégrale',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie intégrale',b.params.reg_out||'RF1');
     h+=pNum('ki','Gain Ki',b.params.ki??1.0,-100,100,0.01);
     h+=pNum('lo','Min sortie',b.params.lo??-1000,-1e6,0,0.1);
     h+=pNum('hi','Max sortie',b.params.hi??1000,0,1e6,0.1);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">OUT=MAX si saturé · RES remet à 0</div>`;
   }else if(b.type==='DERIV'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie dérivée',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie dérivée',b.params.reg_out||'RF1');
     h+=pNum('kd','Gain Kd',b.params.kd??1.0,-100,100,0.01);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">OUT = Kd × ΔIN/Δt</div>`;
   }else if(b.type==='DEADB'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
+    h+=pRF('reg_out','Sortie',b.params.reg_out||'RF1');
     h+=pNum('dead','Bande morte (±)',b.params.dead??1.0,0,1000,0.1);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">|IN|≤dead → OUT=0 · DEAD=TRUE si actif</div>`;
   }else if(b.type==='RAMP'){
-    h+=pSel('reg_sp','Consigne (cible)',b.params.reg_sp||'RF0',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie rampée',b.params.reg_out||'RF1',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_sp','Consigne (cible)',b.params.reg_sp||'RF0');
+    h+=pRF('reg_out','Sortie rampée',b.params.reg_out||'RF1');
     h+=pNum('rate','Vitesse max (/s)',b.params.rate??1.0,0.001,10000,0.1);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">DONE=TRUE quand OUT a atteint SP</div>`;
   }else if(b.type==='HYST'){
-    h+=pSel('reg_in','Entrée',b.params.reg_in||'RF0',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_in','Entrée',b.params.reg_in||'RF0');
     h+=pNum('sp','Point milieu',b.params.sp??50.0,-9999,9999,0.1);
     h+=pNum('band','Bande totale',b.params.band??2.0,0,1000,0.1);
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">ON si IN≥sp+band/2 · OFF si IN≤sp−band/2</div>`;
   }else if(b.type==='MUX'){
-    h+=pSel('idx_ref','Index (RF ou M)',b.params.idx_ref||'RF0',[...REG_REFS,...MEMS].map(r=>({v:r,l:r})));
+    h+=pRF('idx_ref','Index (RF ou M)',b.params.idx_ref||'RF0');
     h+=pNum('n_in','Nb entrées',b.params.n_in||4,2,8,1);
     for(let i=0;i<(b.params.n_in||4);i++)
-      h+=pSel(`in${i}`,`IN${i}`,b.params[`in${i}`]||`RF${i}`,REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_out','Sortie VAL',b.params.reg_out||'RF4',REG_REFS.map(r=>({v:r,l:r})));
+      h+=pRF(`in${i}`,`IN${i}`,b.params[`in${i}`]||`RF${i}`);
+    h+=pRF('reg_out','Sortie VAL',b.params.reg_out||'RF4');
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">Sélectionne IN[idx] → VAL</div>`;
   }else if(b.type==='WAIT'){
     h+=pTxt('name','Nom',b.params.name||'Attente');
@@ -2009,7 +2710,7 @@ function showBlockProps(b){
     const refs=[{v:'',l:'— non câblé —'},...ANA_REFS,...REG_REFS].map(r=>typeof r==='string'?({v:r,l:r}):r);
     h+=pTxt('name','Nom',p.name||'Plancher');
     h+=`<hr class="psep"><span class="pl">🌡 Sondes</span>`;
-    h+=pSel('pv_ref_amb','Sonde ambiante (PV principal)',p.pv_ref_amb||'RF0',[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('pv_ref_amb','Sonde ambiante (PV principal)',p.pv_ref_amb||'RF0');
     h+=pSel('pv_ref_depart','Sonde départ eau chaude',p.pv_ref_depart||'',refs);
     h+=pSel('pv_ref_retour','Sonde retour plancher',p.pv_ref_retour||'',refs);
     h+=`<hr class="psep"><span class="pl">🎯 Consignes</span>`;
@@ -2026,10 +2727,10 @@ function showBlockProps(b){
     h+=pSel('out_v3v_fer','V3V → Ferme',p.out_v3v_fer||'k8',dvOpts);
     h+=pSel('out_circ','Circulateur plancher',p.out_circ||'k9',dvOpts);
     h+=`<hr class="psep"><span class="pl">📊 Registres diagnostic</span>`;
-    h+=pSel('reg_out','Sortie PID (%)',p.reg_out||'RF8',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_depart','Registre T départ',p.reg_depart||'RF9',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_retour','Registre T retour',p.reg_retour||'RF10',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_delta','Registre Δ dép−ret',p.reg_delta||'RF11',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_out','Sortie PID (%)',p.reg_out||'RF8');
+    h+=pRF('reg_depart','Registre T départ',p.reg_depart||'RF9');
+    h+=pRF('reg_retour','Registre T retour',p.reg_retour||'RF10');
+    h+=pRF('reg_delta','Registre Δ dép−ret',p.reg_delta||'RF11');
     h+=pNum('min_temp','Sécurité gel (°C)',p.min_temp??5.0,-10,15,0.5);
     h+=pNum('max_temp','Sécurité max ambiante (°C)',p.max_temp??35.0,25,45,0.5);
     h+=`<div style="color:#ff7043;font-size:9px;padding:6px 0;line-height:1.5">
@@ -2041,8 +2742,8 @@ function showBlockProps(b){
     const dvOpts=[...[...Array(10)].map((_,i)=>({v:`k${i+1}`,l:`K${i+1}`})),{v:'',l:'— aucun —'}];
     h+=pTxt('name','Nom',p.name||'Chaudière');
     h+=`<hr class="psep"><span class="pl">🌡 Températures</span>`;
-    h+=pSel('pv_ref_retour','Sonde retour',p.pv_ref_retour||'RF1',[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
-    h+=pSel('pv_ref_depart','Sonde départ',p.pv_ref_depart||'RF2',[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('pv_ref_retour','Sonde retour',p.pv_ref_retour||'RF1');
+    h+=pRF('pv_ref_depart','Sonde départ',p.pv_ref_depart||'RF2');
     h+=pNum('sp','Consigne départ (°C)',p.sp??65.0,40,90,1);
     h+=pNum('hysteresis','Hystérésis (°C)',p.hysteresis??3.0,0.5,10,0.5);
     h+=`<hr class="psep"><span class="pl">⏱ Anti-cyclage</span>`;
@@ -2060,8 +2761,8 @@ function showBlockProps(b){
     const refs=[{v:'',l:'— non câblé —'},...ANA_REFS,...REG_REFS].map(r=>typeof r==='string'?({v:r,l:r}):r);
     h+=pTxt('name','Nom',p.name||'Solaire');
     h+=`<hr class="psep"><span class="pl">☀ Sondes</span>`;
-    h+=pSel('pv_ref_capteur','Sonde capteur solaire',(p.pv_ref_capteur||'RF0'),[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
-    h+=pSel('pv_ref_ecs','Sonde ballon ECS',(p.pv_ref_ecs||'RF3'),[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('pv_ref_capteur','Sonde capteur solaire',(p.pv_ref_capteur||'RF0'));
+    h+=pRF('pv_ref_ecs','Sonde ballon ECS',(p.pv_ref_ecs||'RF3'));
     h+=pSel('pv_ref_chauf','Sonde ballon chauffage',(p.pv_ref_chauf||''),refs);
     h+=`<hr class="psep"><span class="pl">🌡 ΔT démarrage pompe</span>`;
     h+=pNum('delta_on','ΔT ON — démarrage pompe (°C)',p.delta_on??8.0,2,30,0.5);
@@ -2123,8 +2824,8 @@ function showBlockProps(b){
       Pompe solaire activée si source ≥ T° mini.</div>`;
     h+=`</div>`;
     h+=`<hr class="psep"><span class="pl">📊 Registres diagnostic</span>`;
-    h+=pSel('reg_delta','Registre ΔT capteur−ballon',p.reg_delta||'RF12',REG_REFS.map(r=>({v:r,l:r})));
-    h+=pSel('reg_rendement','Registre énergie captée (%)',p.reg_rendement||'RF13',REG_REFS.map(r=>({v:r,l:r})));
+    h+=pRF('reg_delta','Registre ΔT capteur−ballon',p.reg_delta||'RF12');
+    h+=pRF('reg_rendement','Registre énergie captée (%)',p.reg_rendement||'RF13');
     h+=`<div style="color:#69f0ae;font-size:9px;padding:4px 0;line-height:1.5">
       Vanne ECS ON = solaire vers ECS. Vanne Chauf ON = solaire vers plancher/chaudière.<br>
       Les deux vannes ne s'ouvrent jamais simultanément.</div>`;
@@ -2133,7 +2834,7 @@ function showBlockProps(b){
     const dvOpts=[...[...Array(10)].map((_,i)=>({v:`k${i+1}`,l:`K${i+1}`})),{v:'',l:'— aucun —'}];
     h+=pTxt('name','Nom zone',p.name||'Zone');
     h+=`<hr class="psep"><span class="pl">🌡 Régulation</span>`;
-    h+=pSel('pv_ref','Sonde température',p.pv_ref||'RF0',[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('pv_ref','Sonde température',p.pv_ref||'RF0');
     h+=pNum('sp','Consigne (°C)',p.sp??20.0,5,35,0.5);
     h+=pNum('hysteresis','Hystérésis (°C)',p.hysteresis??0.5,0.1,5,0.1);
     h+=`<hr class="psep"><span class="pl">🔧 Vanne & Délais</span>`;
@@ -2147,8 +2848,8 @@ function showBlockProps(b){
     const dvOpts=[...[...Array(10)].map((_,i)=>({v:`k${i+1}`,l:`K${i+1}`})),{v:'',l:'— aucun —'}];
     h+=pTxt('name','Nom',p.name||'ECS');
     h+=`<hr class="psep"><span class="pl">🌡 Températures</span>`;
-    h+=pSel('pv_ref_ecs','Sonde ballon ECS',p.pv_ref_ecs||'RF3',[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
-    h+=pSel('pv_ref_prim','Sonde primaire',p.pv_ref_prim||'RF4',[...ANA_REFS,...REG_REFS].map(r=>({v:r,l:r})));
+    h+=pRF('pv_ref_ecs','Sonde ballon ECS',p.pv_ref_ecs||'RF3');
+    h+=pRF('pv_ref_prim','Sonde primaire',p.pv_ref_prim||'RF4');
     h+=pNum('sp_ecs','Consigne ECS (°C)',p.sp_ecs??55.0,40,70,0.5);
     h+=pNum('hysteresis','Hystérésis (°C)',p.hysteresis??2.0,0.5,10,0.5);
     h+=`<hr class="psep"><span class="pl">🦠 Anti-légionellose</span>`;
@@ -2161,6 +2862,119 @@ function showBlockProps(b){
     h+=pSel('out_pompe','Sortie pompe ECS',p.out_pompe||'k6',dvOpts);
     h+=`<div style="color:#40c4ff;font-size:9px;padding:4px 0">
       Pompe active si T_ECS&lt;SP et T_prim>T_ECS+3°C. Anti-légio hebdomadaire automatique.</div>`;
+
+  }else if(b.type==='PROG_H'){
+    const p=b.params;
+    const fH=v=>String(v??0).padStart(2,'0');
+    const hOpts=(k,val)=>[...Array(24)].map((_,i)=>`<option value="${i}" ${parseInt(val??0)===i?'selected':''}>${fH(i)}</option>`).join('');
+    const mOpts=(k,val)=>[0,15,30,45].map(i=>`<option value="${i}" ${parseInt(val??0)===i?'selected':''}>${fH(i)}</option>`).join('');
+    const isHebdo=!!p.hebdo_mode;
+    h+=pTxt('name','Nom du planning',p.name||'Planning');
+
+    // Sélecteur de mode
+    h+=`<hr class="psep">
+    <div class="prop-row"><div class="prop-label">Mode</div>
+      <select class="prop-input" id="prog_h_mode_sel" onchange="
+        const h=this.value==='hebdo';
+        b.params.hebdo_mode=h;
+        document.getElementById('prog_h_simple').style.display=h?'none':'block';
+        document.getElementById('prog_h_hebdo').style.display=h?'block':'none';
+        wProp(b.id,'hebdo_mode',h);notifyChange();">
+        <option value="simple" ${!isHebdo?'selected':''}>⏱ Simple — même plage tous les jours</option>
+        <option value="hebdo"  ${isHebdo?'selected':''}>📅 Hebdomadaire — par jour de semaine</option>
+      </select></div>`;
+
+    // ── Mode simple ────────────────────────────────────────────────
+    h+=`<div id="prog_h_simple" style="display:${isHebdo?'none':'block'}">`;
+    h+=`<span class="pl">☀ Plage JOUR (tous les jours)</span>`;
+    h+=`<div class="prop-row"><div class="prop-label">Début</div>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <select class="prop-input" data-key="h_debut_j" style="width:56px">${hOpts('h_debut_j',p.h_debut_j??6)}</select>
+        <span style="color:var(--fbd-text2);font-size:11px">h</span>
+        <select class="prop-input" data-key="m_debut_j" style="width:56px">${mOpts('m_debut_j',p.m_debut_j??30)}</select>
+        <span style="color:var(--fbd-text2);font-size:11px">min</span>
+      </div></div>`;
+    h+=`<div class="prop-row"><div class="prop-label">Fin</div>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <select class="prop-input" data-key="h_fin_j" style="width:56px">${hOpts('h_fin_j',p.h_fin_j??22)}</select>
+        <span style="color:var(--fbd-text2);font-size:11px">h</span>
+        <select class="prop-input" data-key="m_fin_j" style="width:56px">${mOpts('m_fin_j',p.m_fin_j??0)}</select>
+        <span style="color:var(--fbd-text2);font-size:11px">min</span>
+      </div></div>`;
+    h+=`</div>`;
+
+    // ── Mode hebdomadaire ──────────────────────────────────────────
+    const JOURS=[['d0','Lun'],['d1','Mar'],['d2','Mer'],['d3','Jeu'],['d4','Ven'],['d5','Sam'],['d6','Dim']];
+    h+=`<div id="prog_h_hebdo" style="display:${isHebdo?'block':'none'}">`;
+    h+=`<div style="color:#ffb300;font-size:9px;padding:2px 0 4px;">Cocher les jours actifs · Sam/Dim inactifs par défaut</div>`;
+    JOURS.forEach(([dk,label])=>{
+      const dc=p[dk]||{active:true,h_deb:6,m_deb:30,h_fin:22,m_fin:0,sp_jour:20,sp_nuit:17};
+      const act=dc.active!==false;
+      h+=`<div style="margin:4px 0;padding:6px 8px;background:${act?'#1a1000':'#0d1117'};border:1px solid ${act?'#ffb30060':'#30363d'};border-radius:6px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:${act?'4px':'0'}">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:bold;color:${act?'#ffb300':'#484f58'}">
+            <input type="checkbox" ${act?'checked':''} style="cursor:pointer"
+              onchange="
+                const row=this.closest('[data-dkey]');
+                const dk=row.dataset.dkey;
+                if(!b.params[dk])b.params[dk]={};
+                b.params[dk].active=this.checked;
+                row.style.background=this.checked?'#1a1000':'#0d1117';
+                row.style.borderColor=this.checked?'#ffb30060':'#30363d';
+                const detail=row.querySelector('.day-detail');
+                if(detail)detail.style.display=this.checked?'flex':'none';
+                row.querySelector('label').style.color=this.checked?'#ffb300':'#484f58';
+                notifyChange();renderAll();">
+            ${label}
+          </label>
+        </div>
+        <div class="day-detail" data-dk="${dk}" style="display:${act?'flex':'none'};flex-direction:column;gap:3px">
+          <div style="display:flex;gap:4px;align-items:center;font-size:10px">
+            <span style="color:var(--fbd-text2);width:32px">Début</span>
+            <select style="background:var(--fbd-bg4);color:var(--fbd-text);border:1px solid var(--fbd-border);border-radius:3px;padding:1px;font-size:10px;width:48px"
+              onchange="if(!b.params['${dk}'])b.params['${dk}']={};b.params['${dk}'].h_deb=parseInt(this.value);notifyChange();">
+              ${[...Array(24)].map((_,i)=>`<option value="${i}" ${parseInt(dc.h_deb??6)===i?'selected':''}>${fH(i)}</option>`).join('')}
+            </select>h
+            <select style="background:var(--fbd-bg4);color:var(--fbd-text);border:1px solid var(--fbd-border);border-radius:3px;padding:1px;font-size:10px;width:48px"
+              onchange="if(!b.params['${dk}'])b.params['${dk}']={};b.params['${dk}'].m_deb=parseInt(this.value);notifyChange();">
+              ${[0,15,30,45].map(i=>`<option value="${i}" ${parseInt(dc.m_deb??30)===i?'selected':''}>${fH(i)}</option>`).join('')}
+            </select>min
+            <span style="color:var(--fbd-text2);margin-left:6px;width:24px">Fin</span>
+            <select style="background:var(--fbd-bg4);color:var(--fbd-text);border:1px solid var(--fbd-border);border-radius:3px;padding:1px;font-size:10px;width:48px"
+              onchange="if(!b.params['${dk}'])b.params['${dk}']={};b.params['${dk}'].h_fin=parseInt(this.value);notifyChange();">
+              ${[...Array(24)].map((_,i)=>`<option value="${i}" ${parseInt(dc.h_fin??22)===i?'selected':''}>${fH(i)}</option>`).join('')}
+            </select>h
+            <select style="background:var(--fbd-bg4);color:var(--fbd-text);border:1px solid var(--fbd-border);border-radius:3px;padding:1px;font-size:10px;width:48px"
+              onchange="if(!b.params['${dk}'])b.params['${dk}']={};b.params['${dk}'].m_fin=parseInt(this.value);notifyChange();">
+              ${[0,15,30,45].map(i=>`<option value="${i}" ${parseInt(dc.m_fin??0)===i?'selected':''}>${fH(i)}</option>`).join('')}
+            </select>min
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;font-size:10px">
+            <span style="color:#ffb300;width:32px">SP☀</span>
+            <input type="number" min="5" max="35" step="0.5" value="${dc.sp_jour??20}" style="width:50px;background:var(--fbd-bg4);color:#ffb300;border:1px solid #ffb30060;border-radius:3px;padding:1px 3px;font-size:10px"
+              onchange="if(!b.params['${dk}'])b.params['${dk}']={};b.params['${dk}'].sp_jour=parseFloat(this.value);notifyChange();">°C
+            <span style="color:#5c6bc0;margin-left:6px;width:32px">SP🌙</span>
+            <input type="number" min="5" max="30" step="0.5" value="${dc.sp_nuit??17}" style="width:50px;background:var(--fbd-bg4);color:#5c6bc0;border:1px solid #5c6bc060;border-radius:3px;padding:1px 3px;font-size:10px"
+              onchange="if(!b.params['${dk}'])b.params['${dk}']={};b.params['${dk}'].sp_nuit=parseFloat(this.value);notifyChange();">°C
+          </div>
+        </div>
+      </div>`.replace(/data-dkey="[^"]*"/,'data-dkey="'+dk+'"');
+    });
+    h+=`</div>`;
+
+    // ── Consignes globales & sorties ──────────────────────────────
+    h+=`<hr class="psep"><span class="pl">🌡 Consignes globales</span>`;
+    h+=pNum('sp_jour','SP JOUR par défaut (°C)',p.sp_jour??20.0,5,35,0.5);
+    h+=pNum('sp_nuit','SP NUIT par défaut (°C)',p.sp_nuit??17.0,5,30,0.5);
+    h+=pNum('sp_vac', 'SP VACANCES (°C)',       p.sp_vac??15.0, 5,25,0.5);
+    h+=`<hr class="psep"><span class="pl">📊 Sorties</span>`;
+    h+=pRF('reg_sp','Registre SP actif (RF)',p.reg_sp||'RF5');
+    h+=pTxt('out_jour',  'Variable DV JOUR (bool)',   p.out_jour||'');
+    h+=pTxt('out_vac_dv','Variable DV VAC (bool)',    p.out_vac_dv||'');
+    h+=pTxt('out_actif', 'Variable DV ACTIF ce jour', p.out_actif||'');
+    h+=`<div style="color:#40c4ff;font-size:9px;padding:4px 0;line-height:1.6">
+      Port <b>EN</b>=enable · <b>VAC</b>=forcer vacances<br>
+      <b>JOUR</b>=plage active · <b>SP_ACT</b>=reg RF · <b>ACTIF</b>=jour actif</div>`;
 
   }else if(b.type==='PYBLOCK'){
     h+=pTxt('name','Nom du bloc',b.params.name||'PyBlock');
@@ -2216,11 +3030,80 @@ function showBlockProps(b){
     h+=pSel('pin_dec','GPIO +ferme',b.params.pin_dec||21,GPIO_OUT.map(p=>({v:p,l:`GPIO ${p}${GPIO_NAMES[p]?' — '+GPIO_NAMES[p]:''}`})));
   }else if(b.type==='RUNTIMCNT'){
     h+=pTxt('name','Nom compteur',b.params.name||'Compteur1');
-    h+=pTxt('reg_starts','RF → nb démarrages',b.params.reg_starts||'');
-    h+=pTxt('reg_total','RF → heures totales',b.params.reg_total||'');
-    h+=pTxt('reg_runtime','RF → session (s)',b.params.reg_runtime||'');
-    h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0;line-height:1.6"><b>RUN</b>=marche <b>RST</b>=reset<br><span style="color:#50ff50">ID bloc: ${b.id}</span></div>`;
+    // Registres : affichés en lecture seule si auto-assignés (RF>=100), éditables sinon
+    const _rfInfo = (rf,lbl)=>{
+      const isAuto = rf && rf.startsWith('RF') && parseInt(rf.slice(2))>=100;
+      return `<div class="pr"><span class="pl">${lbl}</span>
+        <div style="color:${isAuto?'#50ff50':'#d29922'};font-family:monospace;font-size:11px">
+          ${rf||'<i style="color:var(--fbd-text3)">câbler le port</i>'}</div></div>`;
+    };
+    h+=_rfInfo(b.params.reg_starts,'→ nb démarrages (RF)');
+    h+=_rfInfo(b.params.reg_total, '→ heures totales (RF)');
+    h+=_rfInfo(b.params.reg_runtime,'→ session (s) (RF)');
+    h+=`<div style="color:#50ff50;font-size:9px;padding:4px 0;line-height:1.6;border-top:1px solid var(--fbd-border);margin-top:4px">
+      ✓ Les registres RF sont assignés <b>automatiquement</b> quand vous câblez<br>
+      les ports <b>STARTS / TOTAL / RUNTIME</b> vers un widget synoptique.<br>
+      <span style="color:var(--fbd-text2)">ID: ${b.id}</span></div>`;
+  }else if(b.type==='BOOLEAN'){
+    h+=pNum('n_in','Nb entrées (I)',b.params.n_in||4,1,6,1);
+    h+=pNum('n_out','Nb sorties (O)',b.params.n_out||1,1,2,1);
+    h+=`<div style="display:flex;gap:6px;margin:6px 0;">
+      <label style="font-size:10px;color:var(--fbd-text2);display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" data-key="invert_o1" ${b.params.invert_o1?'checked':''} style="margin:0">
+        O1 inversée</label>
+      <label style="font-size:10px;color:var(--fbd-text2);display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" data-key="invert_o2" ${b.params.invert_o2?'checked':''} style="margin:0">
+        O2 inversée</label>
+    </div>`;
+    // Table de vérité éditable
+    const nIn2=Math.min(6,Math.max(1,parseInt(b.params.n_in)||4));
+    const nOut2=Math.min(2,Math.max(1,parseInt(b.params.n_out)||1));
+    const rows2=1<<nIn2;
+    if(!b.params.truth_table||b.params.truth_table.length!==rows2){
+      b.params.truth_table=Array.from({length:rows2},()=>Array.from({length:nOut2},()=>0));
+    }
+    let tt=b.params.truth_table;
+    let tbl=`<div style="margin-top:8px;overflow-x:auto;max-height:220px;overflow-y:auto;">
+      <table style="border-collapse:collapse;font-family:monospace;font-size:10px;width:100%">
+      <tr style="background:var(--fbd-bg3)">`;
+    for(let i=1;i<=nIn2;i++) tbl+=`<th style="padding:2px 5px;color:#58a6ff;border:1px solid var(--fbd-border)">I${i}</th>`;
+    tbl+=`<th style="padding:2px 5px;color:var(--fbd-border);border:1px solid var(--fbd-border)">│</th>`;
+    for(let o=1;o<=nOut2;o++) tbl+=`<th style="padding:2px 5px;color:#3fb950;border:1px solid var(--fbd-border)">O${o}</th>`;
+    tbl+='</tr>';
+    for(let r=0;r<rows2;r++){
+      const rowBg=r%2===0?'var(--fbd-bg2)':'var(--fbd-bg3)';
+      tbl+=`<tr style="background:${rowBg}">`;
+      for(let i=0;i<nIn2;i++){
+        const v=(r>>i)&1;
+        tbl+=`<td style="padding:2px 5px;text-align:center;color:${v?'#3fb950':'var(--fbd-text3)'};border:1px solid var(--fbd-border)">${v}</td>`;
+      }
+      tbl+=`<td style="padding:2px 5px;border:1px solid var(--fbd-border);color:var(--fbd-border)">│</td>`;
+      for(let o=0;o<nOut2;o++){
+        const ov=tt[r]&&tt[r][o]!=null?tt[r][o]:0;
+        tbl+=`<td style="padding:2px 5px;text-align:center;cursor:pointer;font-weight:bold;
+          color:${ov?'#3fb950':'var(--fbd-text3)'};border:1px solid var(--fbd-border);
+          background:${ov?'#0a2010':'transparent'}"
+          onclick="window.toggleBoolCell('${b.id}',${r},${o})">${ov}</td>`;
+      }
+      tbl+='</tr>';
+    }
+    tbl+='</table></div>';
+    h+=tbl;
   }
+
+  // ── Panneau "Connexions RF auto" ─────────────────────────────────────────
+  const _autoRFs = Object.entries(b.params||{}).filter(([k,v])=>
+    typeof v==='string' && v.startsWith('RF') && parseInt(v.slice(2))>=100
+  );
+  if(_autoRFs.length){
+    h+=`<hr class="psep"><div style="font-size:9px;color:var(--fbd-text2);margin-bottom:2px">📡 Registres câblés auto</div>
+      <div style="font-family:monospace;font-size:10px;line-height:1.8">`;
+    _autoRFs.forEach(([k,v])=>{
+      h+=`<div><span style="color:var(--fbd-text3)">${k}</span> → <span style="color:#50ff50">${v}</span></div>`;
+    });
+    h+=`</div>`;
+  }
+  // ── Fin panneau RF ────────────────────────────────────────────────────────
 
   h+=`<hr class="psep">
     <div style="color:var(--fbd-text3);font-size:9px;margin-bottom:6px">
@@ -2244,12 +3127,23 @@ function showBlockProps(b){
       // Champs spéciaux _bw/_bh = largeur/hauteur du bloc
       if(k==='_bw'){ b.w=Math.max(60,Number(el.value)); _updPortsPos(b); _rewireBlock(b); notifyChange(); render(); return; }
       if(k==='_bh'){ b.h=Math.max(30,Number(el.value)); _updPortsPos(b); _rewireBlock(b); notifyChange(); render(); return; }
-      b.params[k]=el.type==='number'?Number(el.value):(el.type==='range'?Number(el.value):el.value);
+      const PIN_KEYS = ['pin','pin_inc','pin_dec'];
+      const rawVal = el.type==='number'||el.type==='range' ? Number(el.value)
+                   : PIN_KEYS.includes(k) ? parseInt(el.value)
+                   : el.value;
+      b.params[k] = rawVal;
+      // Auto-sync nom quand le pin change (INPUT / OUTPUT / CONTACTOR)
+      if(k==='pin' && ['INPUT','OUTPUT','CONTACTOR'].includes(b.type)){
+        const autoName = GPIO_NAMES[rawVal] || ('GPIO'+rawVal);
+        b.params.name = autoName;
+        // Rafraîchir le champ name dans le panneau latéral
+        const nameEl = document.getElementById('props-body').querySelector('[data-key="name"]');
+        if(nameEl) nameEl.value = autoName;
+      }
       notifyChange(); render();
-      if(b.type==='PAGE_IN'||b.type==='PAGE_OUT'||b.type==='CONN') showBlockProps(b);
+      if(b.type==='PAGE_IN'||b.type==='PAGE_OUT'||b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX') showBlockProps(b);
+      if(b.type==='BOOLEAN')  { updPortsBoolean(b);  notifyChange(); render(); showBlockProps(b); return; }
       if(b.type==='CARITHM') { updPortsCarithm(b); render(); }
-      if(b.type==='PYBLOCK')  { updPortsPyblock(b);  render(); }
-      if(b.type==='PYBLOCK')  { updPortsPyblock(b);  render(); }
       if(b.type==='PYBLOCK')  { updPortsPyblock(b);  render(); }
     });
   });
@@ -2303,12 +3197,164 @@ function showWireProps(w){
     <div class="pr"><span class="pl">Source</span><div>${sb?sb.type:'?'} [${w.src.bid}].${w.src.port}</div></div>
     <div class="pr"><span class="pl">Destination</span><div>${db?db.type:'?'} [${w.dst.bid}].${w.dst.port}</div></div>
     <hr class="psep">
+    <button class="pb" style="background:#0d2016;color:#3fb950;border:1px solid #238636;margin-bottom:4px"
+      onclick="replaceWireWithCONN(selW)">⊙ Remplacer par CONN</button>
     <button class="pb danger" onclick="delSel()">✕ Supprimer</button>`;
 }
 
+// ────────────────────────────────────────────────────────────
+// Numéro CONN libre (sur toutes les pages)
+// ────────────────────────────────────────────────────────────
+function _nextConnNum(){
+  let max=0;
+  pages.forEach(p=>p.blocks.forEach(b=>{
+    if(b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX'){const n=parseInt(b.params.num)||0;if(n>max)max=n;}
+  }));
+  return max+1;
+}
+
+// ────────────────────────────────────────────────────────────
+// Remplace un fil sélectionné par une paire de blocs CONN
+// ────────────────────────────────────────────────────────────
+function replaceWireWithCONN(w){
+  if(!w)return;
+  const p=pg();
+  const srcBlock=p.blocks.find(b=>b.id===w.src.bid);
+  const dstBlock=p.blocks.find(b=>b.id===w.dst.bid);
+  if(!srcBlock||!dstBlock)return;
+
+  const srcPortObj=srcBlock.ports_out.find(pp=>pp.name===w.src.port);
+  const dstPortObj=dstBlock.ports_in.find(pp=>pp.name===w.dst.port);
+  if(!srcPortObj||!dstPortObj)return;
+
+  const num=_nextConnNum();
+  const label=`C${num}`;
+  pushUndo();
+
+  // Supprimer le fil original
+  _releaseWireRF(p, w);
+  p.wires=p.wires.filter(x=>x!==w);
+
+  const connH=computeH('CONN');
+
+  // CONN "sortie" : juste à droite du bloc source
+  const aBid=`B${idCtr++}`;
+  const aBlock={
+    id:aBid, type:'CONN',
+    x:sn(srcBlock.x+srcBlock.w+20),
+    y:sn(srcPortObj.y - connH/2),
+    w:BW, h:connH,
+    params:{num, label}, ports_in:[], ports_out:[], active:false
+  };
+  updPorts(aBlock);
+  p.blocks.push(aBlock);
+
+  // CONN "entrée" : juste à gauche du bloc destination
+  const bBid=`B${idCtr++}`;
+  const bBlock={
+    id:bBid, type:'CONN',
+    x:sn(dstBlock.x - BW - 20),
+    y:sn(dstPortObj.y - connH/2),
+    w:BW, h:connH,
+    params:{num, label}, ports_in:[], ports_out:[], active:false
+  };
+  updPorts(bBlock);
+  p.blocks.push(bBlock);
+
+  // Fil : source → IN du premier CONN
+  const w1={id:`W${idCtr++}`,src:{bid:w.src.bid,port:w.src.port},dst:{bid:aBid,port:'IN'}};
+  recalcW(w1); p.wires.push(w1);
+  _assignWireRF(p, w.src.bid, w.src.port, aBid, 'IN');
+
+  // Fil : OUT du second CONN → destination
+  const w2={id:`W${idCtr++}`,src:{bid:bBid,port:'OUT'},dst:{bid:w.dst.bid,port:w.dst.port}};
+  recalcW(w2); p.wires.push(w2);
+  _assignWireRF(p, bBid, 'OUT', w.dst.bid, w.dst.port);
+
+  selW=null; selB=null; showEmptyProps();
+  notifyChange(); render();
+}
+
+// ────────────────────────────────────────────────────────────
+// Crée une paire de blocs CONN entre deux ports (sans fil préexistant)
+// ────────────────────────────────────────────────────────────
+function addConnPair(sBid,sPort,dBid,dPort){
+  const p=pg();
+  const srcBlock=p.blocks.find(b=>b.id===sBid);
+  const dstBlock=p.blocks.find(b=>b.id===dBid);
+  if(!srcBlock||!dstBlock)return;
+
+  const srcPortObj=srcBlock.ports_out.find(pp=>pp.name===sPort);
+  const dstPortObj=dstBlock.ports_in.find(pp=>pp.name===dPort);
+  if(!srcPortObj||!dstPortObj)return;
+
+  const num=_nextConnNum();
+  const label=`C${num}`;
+  pushUndo();
+
+  const connH=computeH('CONN');
+
+  // CONN côté source
+  const aBid=`B${idCtr++}`;
+  const aBlock={
+    id:aBid, type:'CONN',
+    x:sn(srcBlock.x+srcBlock.w+20),
+    y:sn(srcPortObj.y - connH/2),
+    w:BW, h:connH,
+    params:{num, label}, ports_in:[], ports_out:[], active:false
+  };
+  updPorts(aBlock);
+  p.blocks.push(aBlock);
+
+  // CONN côté destination
+  const bBid=`B${idCtr++}`;
+  const bBlock={
+    id:bBid, type:'CONN',
+    x:sn(dstBlock.x - BW - 20),
+    y:sn(dstPortObj.y - connH/2),
+    w:BW, h:connH,
+    params:{num, label}, ports_in:[], ports_out:[], active:false
+  };
+  updPorts(bBlock);
+  p.blocks.push(bBlock);
+
+  // Fil : source → IN du CONN source
+  const w1={id:`W${idCtr++}`,src:{bid:sBid,port:sPort},dst:{bid:aBid,port:'IN'}};
+  recalcW(w1); p.wires.push(w1);
+  _assignWireRF(p, sBid, sPort, aBid, 'IN');
+
+  // Fil : OUT du CONN destination → destination
+  const w2={id:`W${idCtr++}`,src:{bid:bBid,port:'OUT'},dst:{bid:dBid,port:dPort}};
+  recalcW(w2); p.wires.push(w2);
+  _assignWireRF(p, bBid, 'OUT', dBid, dPort);
+
+  selW=null; selB=null; showEmptyProps();
+  notifyChange(); render();
+}
+
 function pSel(k,l,v,opts){
+  // Si la valeur actuelle n'est pas dans la liste, l'ajouter en tête
+  const hasVal = opts.some(o=>String(o.v)===String(v));
+  const safeOpts = hasVal ? opts : [{v:v, l:`${v} ★ auto`}, ...opts];
   return`<div class="pr"><span class="pl">${l}</span>
-    <select class="ps" data-key="${k}">${opts.map(o=>`<option value="${o.v}" ${o.v==v?'selected':''}>${o.l}</option>`).join('')}</select></div>`;
+    <select class="ps" data-key="${k}">${safeOpts.map(o=>`<option value="${o.v}" ${String(o.v)===String(v)?'selected':''}>${o.l}</option>`).join('')}</select></div>`;
+}
+// Datalist RF partagé — généré UNE seule fois (évite 256 options × N calls = gel WebView)
+const _RF_DL_ID = 'rf-global-datalist';
+function _ensureRFDatalist(){
+  if(!document.getElementById(_RF_DL_ID)){
+    const dl=document.createElement('datalist');
+    dl.id=_RF_DL_ID;
+    for(let i=0;i<512;i++){const o=document.createElement('option');o.value=`RF${i}`;dl.appendChild(o);}
+    document.body.appendChild(dl);
+  }
+}
+function pRF(k,l,v){
+  // Champ texte libre + datalist partagé RF0..RF511
+  _ensureRFDatalist();
+  return`<div class="pr"><span class="pl">${l}</span>
+    <input class="pi" type="text" list="${_RF_DL_ID}" data-key="${k}" value="${v||'RF0'}"
+      placeholder="RF0…RF511 ou plus" style="width:100%;box-sizing:border-box"></div>`;
 }
 function pTxt(k,l,v){
   return`<div class="pr"><span class="pl">${l}</span><input class="pi" data-key="${k}" type="text" value="${v}"></div>`;
@@ -2341,8 +3387,8 @@ function findConnPeers(b){
   pages.forEach((pg,i)=>{
     if(i===cur)return;
     pg.blocks.forEach(ob=>{
-      if(ob.type==='CONN'&&ob.params.num===num)
-        res.push({num,label:ob.params.label||'',pageName:pg.name,pageIdx:i,bid:ob.id});
+      if((ob.type==='CONN'||ob.type==='CONN_TX'||ob.type==='CONN_RX')&&ob.params.num===num)
+        res.push({num,label:ob.params.label||'',pageName:pg.name,pageIdx:i,bid:ob.id,btype:ob.type});
     });
   });
   return res;
@@ -2352,11 +3398,20 @@ function findConnPeers(b){
 // FIT VIEW
 // ════════════════════════════════════════════════════════════
 function fitView(){
+  // FIX: si le canvas n'a pas encore de taille (transition Qt), reporter à la prochaine frame
+  if(cvs.width<10||cvs.height<10){requestAnimationFrame(fitView);return;}
   const p=pg();if(!p||!p.blocks.length){vp.x=40;vp.y=40;vp.scale=1;drawGrid();render();return;}
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
-  p.blocks.forEach(b=>{x0=Math.min(x0,b.x);y0=Math.min(y0,b.y);x1=Math.max(x1,b.x+b.w);y1=Math.max(y1,b.y+b.h);});
+  // FIX: ignorer les blocs avec coordonnées manquantes/NaN pour éviter la propagation de NaN
+  p.blocks.forEach(b=>{
+    if(b.x==null||b.y==null||isNaN(b.x)||isNaN(b.y)||isNaN(b.w)||isNaN(b.h))return;
+    x0=Math.min(x0,b.x);y0=Math.min(y0,b.y);x1=Math.max(x1,b.x+b.w);y1=Math.max(y1,b.y+b.h);
+  });
+  // FIX: si aucun bloc valide trouvé, vue par défaut
+  if(!isFinite(x0)||!isFinite(y0)||!isFinite(x1)||!isFinite(y1)){vp.x=40;vp.y=40;vp.scale=1;drawGrid();render();return;}
   const W=cvs.width-60,H=cvs.height-60;
-  vp.scale=Math.max(.2,Math.min(Math.min(W/(x1-x0+80),H/(y1-y0+80)),2.5));
+  // FIX: zoom min 0.1 pour les grandes pages (PYBLOCK avec beaucoup d'entrées)
+  vp.scale=Math.max(.1,Math.min(Math.min(W/(x1-x0+80),H/(y1-y0+80)),2.5));
   vp.x=30-x0*vp.scale+40;vp.y=30-y0*vp.scale+40;
   drawGrid();render();
 }
@@ -2379,24 +3434,177 @@ function getDiagram(){
   };
 }
 
+
+// ════════════════════════════════════════════════════════════
+// MIGRATION MULTI-PAGES → CANVAS INFINI
+// Résout PAGE_OUT/PAGE_IN en fils RF directs et dispose chaque
+// ancienne page comme une section horizontale avec cartouche.
+// ════════════════════════════════════════════════════════════
+function _migrateToSingleCanvas(data){
+  const PAGE_GAP   = 2400;  // px entre les sections
+  const COL_WIDTH  = 1800;  // largeur estimée d'une section
+  const CART_H     = 160;   // hauteur cartouche
+  const CART_W     = 1600;  // largeur cartouche
+  const CART_PAD   = 40;    // marge sous les blocs
+
+  const realPages  = data.pages.filter(p=>!p.id.startsWith('__grp_'));
+  const grpPages   = data.pages.filter(p=> p.id.startsWith('__grp_'));
+
+  let allBlocks = [];
+  let allWires  = [];
+  let maxId     = 1;
+
+  // Collecter tous les RF déjà assignés (PAGE_OUT→source) pour
+  // construire une map signal→RF et ainsi créer des fils virtuels
+  // propres sans passer par le compilateur.
+  const signalRF = {};   // signal_name → RF string (depuis params.reg_out du src)
+  const sigSrcRF = {};   // signal_name → {bid, port} côté source réelle
+
+  // ── Passe 1 : disposition spatiale + collecte signaux ──────────
+  realPages.forEach((pg, pi) => {
+    const offsetX = pi * PAGE_GAP;
+    // Centrer verticalement (les blocs peuvent avoir des y négatifs)
+    const ys = pg.blocks.map(b=>b.y||0);
+    const minY = ys.length ? Math.min(...ys) : 0;
+    const offsetY = minY < 0 ? -minY + 80 : 80;
+
+    pg.blocks.forEach(b => {
+      b.x = (b.x||0) + offsetX;
+      b.y = (b.y||0) + offsetY;
+      const n = parseInt((b.id||'').replace(/\D/g,''));
+      if (!isNaN(n) && n > maxId) maxId = n + 1;
+    });
+
+    // Identifier PAGE_OUT : récupérer le RF déjà dans params
+    pg.blocks.forEach(b => {
+      if (b.type === 'PAGE_OUT') {
+        const sig = (b.params||{}).signal||'';
+        if (!sig) return;
+        // Trouver le fil entrant → bloc source
+        const inWire = pg.wires.find(w => w.dst && w.dst.bid === b.id);
+        if (inWire) {
+          sigSrcRF[sig] = { bid: inWire.src.bid, port: inWire.src.port };
+          // Si le bloc source a déjà un reg_out (assigné par _assignWireRF)
+          const srcBlk = pg.blocks.find(bb => bb.id === inWire.src.bid);
+          if (srcBlk) {
+            const rf = (srcBlk.params||{}).reg_out;
+            if (rf) signalRF[sig] = rf;
+          }
+        }
+      }
+    });
+  });
+
+  // ── Passe 2 : fils virtuels PAGE_IN → consommateurs ────────────
+  // On ajoute des fils directs src.bid:src.port → dst.bid:dst.port
+  const extraWires = [];
+  let wireId = maxId + 10000;
+
+  realPages.forEach(pg => {
+    pg.blocks.forEach(b => {
+      if (b.type === 'PAGE_IN') {
+        const sig = (b.params||{}).signal||'';
+        const src = sigSrcRF[sig];
+        if (!src) return;
+        // Fil sortant du PAGE_IN
+        const outWires = pg.wires.filter(w => w.src && w.src.bid === b.id);
+        outWires.forEach(ow => {
+          extraWires.push({
+            id: `WM${wireId++}`,
+            src: { bid: src.bid, port: src.port },
+            dst: { bid: ow.dst.bid, port: ow.dst.port }
+          });
+        });
+      }
+    });
+  });
+
+  // ── Passe 3 : filtrer blocs/fils PAGE_IN/PAGE_OUT ──────────────
+  realPages.forEach(pg => {
+    const pageInOutIds = new Set(
+      pg.blocks.filter(b => b.type==='PAGE_IN'||b.type==='PAGE_OUT').map(b=>b.id)
+    );
+    pg.blocks = pg.blocks.filter(b => b.type!=='PAGE_IN' && b.type!=='PAGE_OUT');
+    pg.wires  = pg.wires.filter(w =>
+      !pageInOutIds.has((w.src||{}).bid) && !pageInOutIds.has((w.dst||{}).bid)
+    );
+  });
+
+  // ── Passe 4 : ajouter cartouches ───────────────────────────────
+  const cartouches = [];
+  realPages.forEach((pg, pi) => {
+    const offsetX = pi * PAGE_GAP;
+    const xs = pg.blocks.map(b=>b.x||0);
+    const ys = pg.blocks.map(b=>(b.y||0)+(b.h||60));
+    const x0 = xs.length ? Math.min(...xs) - 60 : offsetX;
+    const y0 = 0;
+    const x1 = xs.length ? Math.max(...xs) + 160 : offsetX + CART_W;
+    const y1 = ys.length ? Math.max(...ys) + CART_PAD : 600;
+    const cId = `BC${maxId++}`;
+    cartouches.push({
+      id: cId, type: 'CARTOUCHE',
+      x: Math.min(x0, offsetX - 60),
+      y: y0,
+      w: Math.max(x1 - x0, CART_W),
+      h: y1 - y0 + CART_H,
+      params: {
+        title: pg.name,
+        subtitle: '',
+        rev: '1',
+        date: new Date().toISOString().slice(0,10),
+        author: '',
+        sheet: `${pi+1}/${realPages.length}`
+      },
+      ports_in:[], ports_out:[], active:false
+    });
+  });
+
+  // ── Assembler ──────────────────────────────────────────────────
+  realPages.forEach(pg => {
+    allBlocks.push(...pg.blocks);
+    allWires .push(...pg.wires);
+  });
+  allBlocks.push(...cartouches);
+  allWires .push(...extraWires);
+
+  return {
+    pages: [
+      { id:'P1', name:'Programme', blocks:allBlocks, wires:allWires },
+      ...grpPages
+    ],
+    curPage: 0
+  };
+}
+
 function loadDiagram(data){
   if(!data||!data.pages)return;
+  // Initialiser le compteur RF depuis les registres existants
+  _initRFCounter(data);
+  // ── Migration automatique multi-pages → canvas infini ──────────
+  if(data.pages && data.pages.filter(p=>!p.id.startsWith('__grp_')).length>1){
+    data = _migrateToSingleCanvas(data);
+  }
   pages=[];idCtr=1;
   data.pages.filter(pd=>!pd.id.startsWith('__grp_')).forEach(pd=>{
     const p={id:pd.id,name:pd.name,blocks:[],wires:[]};
     pgVP[pd.id]={x:40,y:40,scale:1};
     pd.blocks.forEach(bd=>{
-      const _params = {...defParams(bd.type),...bd.params};
+      // FIX: normaliser le type en majuscules (ex: 'runtimecnt' → 'RUNTIMCNT')
+      const _type = (bd.type||'').toUpperCase();
+      const _params = {...defParams(_type),...bd.params};
       // h : utiliser la valeur sauvegardée si elle est explicitement > valeur calculée
       // (permet le redimensionnement manuel), sinon recalculer
-      const _computedH = computeH(bd.type);
+      const _computedH = computeH(_type);
       const _savedH = (bd.h && bd.h > _computedH) ? bd.h : _computedH;
       const _savedW = bd.w || BW;
-      const b={id:bd.id,type:bd.type,x:bd.x,y:bd.y,w:_savedW,h:_savedH,
+      // FIX: coordonnées manquantes/NaN → position par défaut pour éviter NaN dans fitView/render
+      const _x = (bd.x != null && !isNaN(bd.x)) ? bd.x : 100;
+      const _y = (bd.y != null && !isNaN(bd.y)) ? bd.y : 100;
+      const b={id:bd.id,type:_type,x:_x,y:_y,w:_savedW,h:_savedH,
                params:_params,ports_in:[],ports_out:[],active:false};
       updPorts(b);  // updPorts recalcule h pour GROUP/CARITHM/PYBLOCK
       // Réappliquer les dimensions manuelles après updPorts si nécessaire
-      if(bd.h && bd.h > computeH(bd.type)) { b.h=_savedH; _updPortsPos(b); }
+      if(bd.h && bd.h > computeH(_type)) { b.h=_savedH; _updPortsPos(b); }
       if(bd.w && bd.w !== BW) { b.w=_savedW; _updPortsPos(b); }
       p.blocks.push(b);
       const n=parseInt(bd.id.replace(/\D/g,''));if(n>=idCtr)idCtr=n+1;
@@ -2430,8 +3638,27 @@ function loadDiagram(data){
   });
 }
 
+let _simState={}; // dernier état de simulation reçu
+
+// Types de blocs logiques dont le fil de sortie doit lire le bit M temp
+const _LOGIC_WIRE_TYPES = new Set(['AND','OR','NOT','XOR','INV','NAND','NOR']);
+
+// Cache: block_id → bit M temp (ex: "or1" → "M24"), envoyé par block_editor.py
+let _logicMbits = {};
+
 function updateActiveStates(state){
   if(!state||!pg())return;
+  _simState=state;
+  // Mémoriser la carte block→M-bit et la stocker sur chaque bloc pour drawWire
+  if(state.logic_mbits){
+    _logicMbits=state.logic_mbits;
+    // Stocker _mbit sur chaque bloc pour lecture dans drawWire
+    for(const pg2 of pages){
+      for(const b of pg2.blocks){
+        if(_logicMbits[b.id]) b._mbit=_logicMbits[b.id];
+      }
+    }
+  }
   pg().blocks.forEach(b=>{
     const p=b.params||{};
     switch(b.type){
@@ -2454,7 +3681,7 @@ function updateActiveStates(state){
       case'CTD':
       case'CTUD':{const c=state.counters&&state.counters[b.id];b.active=c?!!c.done:false;break;}
       case'RUNTIMCNT':{const c=state.pids&&state.pids[b.id];b.active=c?c.output>0:false;break;}
-      // ── Logique booléenne (lire GPIO de sortie câblé) ────────────
+      // ── Logique booléenne : lire le bit M temp si disponible, sinon traceActive ──
       case'AND':
       case'OR':
       case'NOT':
@@ -2463,6 +3690,8 @@ function updateActiveStates(state){
       case'COIL':
       case'SET':
       case'RESET':
+      case'SR_R':
+      case'SR_S':
       case'SR':
       case'RS':
       case'MOVE':
@@ -2470,21 +3699,105 @@ function updateActiveStates(state){
       case'COMPL':
       case'HYST':
       case'COMPARE_F':{
-        // Trouver la sortie GPIO ou M* câblée depuis ce bloc
         b.active=false;
-        const page=pg();
-        for(const w of page.wires){
-          if(w.src.bid!==b.id) continue;
-          const dst=page.blocks.find(x=>x.id===w.dst.bid);
-          if(!dst) continue;
-          if(dst.type==='OUTPUT'){
-            const v=state.gpio&&state.gpio[String(dst.params.pin||0)];
-            if(v&&v.value){b.active=true;break;}
+        // 1) Lecture directe du bit M temp (M24-M31) stocké par block_editor
+        if(b._mbit && state.memory && state.memory[b._mbit]!==undefined){
+          b.active=!!state.memory[b._mbit];
+          break;
+        }
+        // 2) FIX: lire reg_out RF* directement dans state.registers
+        //    (cas XOR/OR câblé via RF sans coil implicite)
+        {
+          const _ro=(b.params||{}).reg_out;
+          if(_ro&&_ro.startsWith&&_ro.startsWith('RF')&&state.registers){
+            const _rv=state.registers[_ro];
+            if(_rv!=null){b.active=Math.abs(parseFloat(_rv))>0.01;break;}
           }
-          if(dst.type==='MEM'){
-            if(state.memory&&state.memory[dst.params.bit]){b.active=true;break;}
+          // 3) FIX2: reg_out absent dans params → chercher dans les fils sortants
+          // Le bloc canvas OR/XOR a toujours params.reg_out assigné par _assignWireRF
+          // mais si absent, chercher le RF via les fils de sortie
+          if(!_ro||!_ro.startsWith||!_ro.startsWith('RF')){
+            for(const w of (pg().wires||[])){
+              if(w.src.bid===b.id){
+                const _db=pg().blocks.find(x=>x.id===w.dst.bid);
+                if(_db){
+                  const _dp=_db.params||{};
+                  // Lire le rf de destination (a{n}_ref ou d{n}_ref)
+                  const _pkey=w.dst.port.toLowerCase()+'_ref';
+                  const _drf=_dp[_pkey];
+                  if(_drf&&_drf.startsWith&&_drf.startsWith('RF')&&state.registers){
+                    const _rv2=state.registers[_drf];
+                    if(_rv2!=null){b.active=Math.abs(parseFloat(_rv2))>0.01;break;}
+                  }
+                }
+              }
+            }
           }
         }
+        // Fallback : traceActive traverse blocs logiques, CONN TX/RX inter-pages, CARITHM/PYBLOCK
+        function traceActive(srcId, visited, inPage){
+          if(visited.has(srcId))return false;
+          visited.add(srcId);
+          for(const w of inPage.wires){
+            if(w.src.bid!==srcId)continue;
+            const dst=inPage.blocks.find(x=>x.id===w.dst.bid);
+            if(!dst)continue;
+            // ── GPIO sortie ──────────────────────────────────────────────
+            if(dst.type==='OUTPUT'){
+              const v=state.gpio&&state.gpio[String(dst.params.pin||0)];
+              if(v&&v.value)return true;
+              // FIX: OUTPUT sur variable (val_ref RF* ou M*)
+              const vr=dst.params&&(dst.params.val_ref||dst.params.reg_out);
+              if(vr&&state.registers&&vr.startsWith&&vr.startsWith('RF')){
+                if(Math.abs(parseFloat(state.registers[vr]||0))>0.01)return true;
+              }
+              if(vr&&state.memory&&vr.startsWith&&vr.startsWith('M')){
+                if(state.memory[vr])return true;
+              }
+            }
+            // ── Bit mémoire ──────────────────────────────────────────────
+            if(dst.type==='MEM'){
+              if(state.memory&&state.memory[dst.params.bit])return true;
+            }
+            // ── Blocs logiques : récursion sur même page ─────────────────
+            if(['AND','OR','NOT','XOR','INV','NAND','NOR','COIL','SET','RESET'].includes(dst.type)){
+              if(traceActive(dst.id,visited,inPage))return true;
+            }
+            // ── CONN / CONN_TX / CONN_RX : traversée inter-pages ────────
+            if(dst.type==='CONN'||dst.type==='CONN_TX'||dst.type==='CONN_RX'){
+              // Continuer sur la page courante (sortie OUT du CONN)
+              if(traceActive(dst.id,visited,inPage))return true;
+              // Chercher le jumeau (même num) sur TOUTES les pages
+              const num=dst.params&&dst.params.num;
+              if(num!=null){
+                for(const pg2 of pages){
+                  for(const peer of pg2.blocks){
+                    if(peer.id===dst.id)continue;
+                    if((peer.type==='CONN'||peer.type==='CONN_TX'||peer.type==='CONN_RX')
+                        && peer.params&&peer.params.num===num){
+                      if(traceActive(peer.id,new Set([...visited]),pg2))return true;
+                    }
+                  }
+                }
+              }
+            }
+            // ── CARITHM / PYBLOCK : vérifier registres od ────────────────
+            if(dst.type==='CARITHM'||dst.type==='PYBLOCK'){
+              const dp=dst.params||{};
+              for(let n=1;n<=8;n++){
+                const rf=dp[`od${n}_ref`];
+                if(!rf)continue;
+                if(rf.startsWith('M')&&state.memory&&state.memory[rf])return true;
+                if(state.registers&&state.registers[rf]!=null&&
+                   Math.abs(parseFloat(state.registers[rf]))>0.01)return true;
+              }
+              // Continuer vers les sorties câblées du CARITHM/PYBLOCK
+              if(traceActive(dst.id,visited,inPage))return true;
+            }
+          }
+          return false;
+        }
+        b.active=traceActive(b.id,new Set(),pg());
         break;
       }
       // ── Analogique : actif si sortie non nulle ───────────────────
@@ -2496,15 +3809,186 @@ function updateActiveStates(state){
         const rv=state.registers&&state.registers[ref];
         b.active=rv!=null&&Math.abs(parseFloat(rv))>0.01;
         break;}
-      default: b.active=false;
+      case'NAND':
+      case'NOR':{
+        b.active=false;
+        const pageNNOR=pg();
+        for(const w of pageNNOR.wires){
+          if(w.src.bid!==b.id)continue;
+          const dst=pageNNOR.blocks.find(x=>x.id===w.dst.bid);
+          if(!dst)continue;
+          if(dst.type==='OUTPUT'){const v=state.gpio&&state.gpio[String(dst.params.pin||0)];if(v&&v.value){b.active=true;break;}}
+          if(dst.type==='MEM'){if(state.memory&&state.memory[dst.params.bit]){b.active=true;break;}}
+        }
+        break;
+      }
+      case'BOOLEAN':{
+        // Actif si O1 (ou O2) est câblé sur un GPIO actif
+        b.active=false;
+        const pageBOOL=pg();
+        for(const w of pageBOOL.wires){
+          if(w.src.bid!==b.id)continue;
+          const dst=pageBOOL.blocks.find(x=>x.id===w.dst.bid);
+          if(!dst)continue;
+          if(dst.type==='OUTPUT'){const v=state.gpio&&state.gpio[String(dst.params.pin||0)];if(v&&v.value){b.active=true;break;}}
+        }
+        break;
+      }
+      // ── CONN / CONN_TX / CONN_RX : passe 1 — sera affiné en passe 2
+      //    On initialise seulement ici ; la vraie propagation est faite en passe 2
+      //    pour garantir que les blocs logiques amont sont déjà calculés.
+      case'CONN':
+      case'CONN_TX':
+      case'CONN_RX':{
+        b.active=false; // sera calculé en passe 2
+        break;
+      }
+      // ── Blocs analogiques (ADD, AV, AVG…) : jamais "actifs" au sens numérique
+      // Le vert ne s'allume que sur les signaux numériques ON/OFF.
+      // Les blocs analogiques restent neutres (pas de surbrillance verte).
+      // ── CARITHM / PYBLOCK : actif si au moins un od{n}_ref est non nul
+      case'CARITHM':
+      case'PYBLOCK':{
+        b.active=false;
+        const _cp=b.params||{};
+        for(let _n=1;_n<=8;_n++){
+          const _rf=_cp['od'+_n+'_ref'];
+          if(!_rf)continue;
+          if(state.registers&&state.registers[_rf]!=null&&Math.abs(parseFloat(state.registers[_rf]))>0.01){b.active=true;break;}
+          if(state.memory&&state.memory[_rf]){b.active=true;break;}
+        }
+        break;
+      }
+      default:{ b.active=false; break; }
     }
   });
+
+  // ── CONN / CONN_TX / CONN_RX passe 2 : propager l'état aux blocs sans fil entrant
+  //    Cherche le jumeau (même num) sur TOUTES les pages, pas seulement la page courante.
+  //    Ex: OR → CONN_TX(-49) page1  →  CONN_RX(-49) page2 doit être actif si OR l'est.
+  pages.forEach(pg2=>{
+    pg2.blocks.filter(b=>b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX').forEach(b=>{
+      const inW=pg2.wires.find(w=>w.dst.bid===b.id&&w.dst.port==='IN');
+      if(inW){
+        // Ce bloc a un fil entrant : son active est déjà calculé en passe 1.
+        // S'assurer que les blocs logiques amont sans OUTPUT câblé sont bien propagés.
+        const src=pg2.blocks.find(x=>x.id===inW.src.bid);
+        if(src) b.active=!!src.active;
+      } else {
+        // Pas de fil entrant : chercher le pair (même num) sur TOUTES les pages
+        const num=b.params&&b.params.num;
+        if(num==null)return;
+        let peerActive=false;
+        for(const pg3 of pages){
+          const peer=pg3.blocks.find(x=>
+            x.id!==b.id&&
+            (x.type==='CONN'||x.type==='CONN_TX'||x.type==='CONN_RX')&&
+            x.params&&x.params.num===num&&
+            pg3.wires.some(w=>w.dst.bid===x.id&&w.dst.port==='IN'));
+          if(peer){peerActive=!!peer.active;break;}
+        }
+        b.active=peerActive;
+      }
+    });
+  });
+
   render();
 }
+
+// ── toggleBoolCell : bascule une cellule de la table de vérité BOOLEAN ──────
+window.toggleBoolCell = function(bid, row, col){
+  const p2=pg(); if(!p2) return;
+  const b2=p2.blocks.find(x=>x.id===bid); if(!b2) return;
+  pushUndo();
+  const tt2=b2.params.truth_table;
+  if(tt2&&tt2[row]!=null){
+    tt2[row][col]=tt2[row][col]?0:1;
+    notifyChange(); render();
+    if(selB&&selB.id===bid) showBlockProps(b2);
+  }
+};
 
 function notifyChange(){
   if(window.pybridge)window.pybridge.on_diagram_changed(JSON.stringify(getDiagram()));
   setTimeout(showValidationResults, 200);
+}
+
+
+// ════════════════════════════════════════════════════════════
+// AJOUT D'UN CARTOUCHE
+// ════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+// IMPRESSION D'UNE ZONE CARTOUCHE
+// ════════════════════════════════════════════════════════════
+function _printCartouche(bid){
+  const p = pg(); if(!p) return;
+  const b = p.blocks.find(bl=>bl.id===bid);
+  if(!b) return;
+
+  // Sauvegarder viewport
+  const savedVP = {...vp};
+
+  // Calculer le scale pour que b rentre dans la fenêtre
+  const scaleX = (cvs.width  * 0.92) / b.w;
+  const scaleY = (cvs.height * 0.92) / b.h;
+  const printScale = Math.min(scaleX, scaleY);
+
+  vp.scale = printScale;
+  vp.x = cvs.width/2  - (b.x + b.w/2) * printScale;
+  vp.y = cvs.height/2 - (b.y + b.h/2) * printScale;
+  drawGrid(); render();
+
+  // Capture canvas → nouvelle fenêtre → print
+  const dataUrl = cvs.toDataURL('image/png');
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>${b.params.title||'Impression'}</title>
+    <style>
+      body{margin:0;padding:0;background:#fff;}
+      img{width:100%;height:auto;display:block;}
+      @media print{
+        @page{size:A3 landscape;margin:5mm;}
+        body{margin:0;}
+      }
+    </style>
+  </head><body>
+    <img src="${dataUrl}">
+    <script>window.onload=()=>window.print();<\/script>
+  </body></html>`);
+  win.document.close();
+
+  // Restaurer viewport
+  setTimeout(()=>{
+    vp.x=savedVP.x; vp.y=savedVP.y; vp.scale=savedVP.scale;
+    drawGrid(); render();
+  }, 500);
+}
+
+function addCartouche(){
+  const p = pg(); if(!p) return;
+  pushUndo();
+  // Positionner au centre de la vue actuelle
+  const cx = (cvs.width/2  - vp.x) / vp.scale;
+  const cy = (cvs.height/2 - vp.y) / vp.scale;
+  const bid = `B${idCtr++}`;
+  const blk = {
+    id: bid, type:'CARTOUCHE',
+    x: Math.round(cx - 800), y: Math.round(cy - 300),
+    w: 1600, h: 800,
+    params:{
+      title: 'Nouvelle section',
+      subtitle: '',
+      rev: '1',
+      date: new Date().toISOString().slice(0,10),
+      author: '',
+      sheet: `${p.blocks.filter(b=>b.type==='CARTOUCHE').length+1}`
+    },
+    ports_in:[], ports_out:[], active:false
+  };
+  p.blocks.unshift(blk);   // mettre en arrière-plan
+  selB = blk;
+  notifyChange(); render(); showBlockProps(blk);
 }
 
 function clearAll(){pages=[];idCtr=1;multiSel=new Set();selB=null;selW=null;addPage('Page 1');}
@@ -2672,15 +4156,21 @@ function setGpioConfig(gpioConfig){
   let updated = 0;
   pages.forEach(pg=>{
     pg.blocks.forEach(b=>{
-      if(b.type==='INPUT' && !GPIO_IN.includes(b.params.pin)){
-        b.params.pin = GPIO_IN[0] || b.params.pin;
-        b.params.name = GPIO_NAMES[b.params.pin] || ('GPIO'+b.params.pin);
-        updated++;
+      if(b.type==='INPUT'){
+        b.params.pin = parseInt(b.params.pin);  // normalise string→int (bug select onchange)
+        if(!GPIO_IN.includes(b.params.pin)){
+          b.params.pin = GPIO_IN[0] || b.params.pin;
+          b.params.name = GPIO_NAMES[b.params.pin] || ('GPIO'+b.params.pin);
+          updated++;
+        }
       }
-      if(b.type==='OUTPUT' && !GPIO_OUT.includes(b.params.pin)){
-        b.params.pin = GPIO_OUT[0] || b.params.pin;
-        b.params.name = GPIO_NAMES[b.params.pin] || ('GPIO'+b.params.pin);
-        updated++;
+      if(b.type==='OUTPUT'){
+        b.params.pin = parseInt(b.params.pin);  // normalise string→int (bug select onchange)
+        if(!GPIO_OUT.includes(b.params.pin)){
+          b.params.pin = GPIO_OUT[0] || b.params.pin;
+          b.params.name = GPIO_NAMES[b.params.pin] || ('GPIO'+b.params.pin);
+          updated++;
+        }
       }
     });
   });
@@ -2691,7 +4181,7 @@ function setGpioConfig(gpioConfig){
   return {GPIO_IN, GPIO_OUT, updated};
 }
 
-window.fbdAPI={loadDiagram,getDiagram,importBlocks,updateActiveStates,fitView,clearAll,addPage,setGridSize,toggleSnap,undo,redo,setGpioConfig,exportGroupToLibrary,importGroupFromLibrary,getGroupLibrary:()=>_groupLibrary,initCanvas:_initCanvas};
+window.fbdAPI={loadDiagram,getDiagram,importBlocks,updateActiveStates,fitView,clearAll,addPage,addCartouche,setGridSize,toggleSnap,undo,redo,setGpioConfig,exportGroupToLibrary,importGroupFromLibrary,getGroupLibrary:()=>_groupLibrary,initCanvas:_initCanvas};
 
 // buildPalette : appels multiples pour garantir l'exécution dans Qt WebEngine
 function _initCanvas(){
@@ -2790,16 +4280,7 @@ function validateProgram() {
       }
     });
 
-    // 5. PAGE_OUT sans PAGE_IN correspondant sur les autres pages
-    blocks.filter(b => b.type === 'PAGE_OUT').forEach(b => {
-      const sig = b.params.signal;
-      const found = allPages.some((pg, idx) =>
-        idx !== pi && pg.blocks.some(bb => bb.type === 'PAGE_IN' && bb.params.signal === sig));
-      if (!found) {
-        warnings.push({ page: pi, bid: b.id,
-          msg: `[${page.name}] PAGE_OUT "${sig}" sans PAGE_IN correspondant` });
-      }
-    });
+    // 5. (PAGE_OUT/PAGE_IN supprimés — canvas infini)
 
     // 6. Bloc PID sans PV connecté
     blocks.filter(b => b.type === 'PID').forEach(b => {
@@ -2891,6 +4372,12 @@ window.wProp = function(bid, key, value){
   const b = p ? p.blocks.find(b=>b.id===bid) : null;
   if(!b) return;
   b.params[key] = value;
+  // Auto-sync du nom quand le pin change
+  if(key === 'pin' && ['INPUT','OUTPUT','CONTACTOR'].includes(b.type)){
+    const pinInt = parseInt(value);
+    b.params.pin = pinInt;
+    b.params.name = GPIO_NAMES[pinInt] || ('GPIO'+pinInt);
+  }
   if(window._editBlock && window._editBlock.id === bid) window._editBlock.params[key] = value;
   notifyChange(); render();
   if(document.getElementById('block-editor-modal') && window._editBlock && window._editBlock.id===bid)
@@ -2906,8 +4393,25 @@ function _bemLoadParams(b, targetDiv){
   targetDiv.querySelectorAll('[data-key]').forEach(el=>{
     const handler = ()=>{
       const k = el.dataset.key; if(!k) return;
-      const val = el.type==='number'||el.type==='range' ? Number(el.value) : el.value;
+      // Les clés 'pin*' sont des entiers GPIO — parseInt évite le bug string vs number
+      const PIN_KEYS = ['pin','pin_inc','pin_dec'];
+      const val = (el.type==='number'||el.type==='range') ? Number(el.value)
+                : PIN_KEYS.includes(k) ? parseInt(el.value)
+                : el.value;
       b.params[k] = val;
+      // Auto-sync du nom quand le pin change pour INPUT / OUTPUT / CONTACTOR
+      if(k === 'pin' && ['INPUT','OUTPUT','CONTACTOR'].includes(b.type)){
+        const autoName = GPIO_NAMES[val] || ('GPIO'+val);
+        b.params.name = autoName;
+        // Mettre à jour le champ name visible dans le panneau
+        const nameEl = targetDiv.querySelector('[data-key="name"]');
+        if(nameEl) nameEl.value = autoName;
+        // Mettre à jour le titre de la modale (bem-name)
+        const bemName = document.getElementById('bem-name');
+        if(bemName) bemName.textContent = autoName;
+      }
+      if(b.type==='BOOLEAN')  { updPortsBoolean(b); notifyChange(); render();
+        if(window.bemRefreshParams) window.bemRefreshParams(b.id); }
       if(b.type==='CARITHM') updPortsCarithm(b);
       if(b.type==='PYBLOCK')  updPortsPyblock(b);
       notifyChange(); render();

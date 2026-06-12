@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Testeur PLC — Supervision Chauffage Solaire</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:       #080e14;
+    --panel:    #0d1a24;
+    --border:   #1a3040;
+    --accent:   #00e5ff;
+    --green:    #00e676;
+    --red:      #ff1744;
+    --orange:   #ff9100;
+    --yellow:   #ffd740;
+    --dim:      #2a4a5e;
+    --text:     #cde8f5;
+    --muted:    #4a7a96;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui:   'Exo 2', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, #00263a55 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, #001a2a55 0%, transparent 60%);
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+    background: #0a141ccc;
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 {
+    font-size: 1.1rem; font-weight: 600; letter-spacing: .08em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  header p { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--dim); flex-shrink: 0;
+    transition: background .3s, box-shadow .3s;
+  }
+  .status-dot.ok  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.err { background: var(--red);   box-shadow: 0 0 8px var(--red);   animation: blink 1s infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .host-row { display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .host-row input {
+    background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 10px; border-radius: 4px;
+    font-family: var(--font-mono); font-size:.85rem; width: 250px;
+  }
+  .host-row input:focus { outline: none; border-color: var(--accent); }
+  button {
+    font-family: var(--font-ui); font-size:.8rem; font-weight:600;
+    letter-spacing:.06em; text-transform:uppercase;
+    padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer;
+    transition: background .15s, transform .1s;
+  }
+  button:active { transform: scale(.96); }
+  .btn-cyan  { background: var(--accent);  color:#001a24; }
+  .btn-green { background: var(--green);   color:#001a24; }
+  .btn-red   { background: var(--red);     color:#fff; }
+  .btn-dim   { background: var(--dim);     color: var(--text); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 480px 1fr;
+    gap: 0;
+    align-items: start;
+  }
+
+  /* ── LEFT SIDEBAR : sticky + scroll independant ── */
+  aside {
+    position: sticky;
+    top: 57px;
+    height: calc(100vh - 57px);
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  /* ── RIGHT MAIN : defile avec la page ── */
+  main {
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 16px;
+    min-height: calc(100vh - 57px);
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside {
+      position: static;
+      height: auto;
+      overflow-y: visible;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+    main { min-height: unset; }
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden;
+    flex-shrink: 0;   /* ne pas comprimer dans un flex column */
+  }
+  .card-title {
+    padding: 8px 12px;
+    font-size: .72rem; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-body { padding: 12px 14px; }
+
+  /* ── SONDES GRID ── */
+  .sondes-grid { display: flex; flex-direction: column; gap: 6px; }
+  .sonde-row {
+    display: flex; align-items: center; gap: 8px;
+    background: #0a1520; border: 1px solid var(--border);
+    border-radius: 4px; padding: 7px 10px;
+  }
+  .sonde-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing:.06em; min-width:110px; flex-shrink:0; }
+  .sonde-ctrl { display: flex; align-items: center; gap: 6px; flex:1; }
+  .sonde-ctrl input[type=range] {
+    flex: 1; accent-color: var(--accent); height: 4px; cursor:pointer;
+  }
+  .sonde-val {
+    font-family: var(--font-mono); font-size: .9rem; color: var(--accent);
+    min-width: 56px; text-align: right;
+  }
+
+  /* ── RELAY STATUS ── */
+  .relay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .relay-badge {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 4px;
+    background: #0a1520; border: 1px solid var(--border);
+    font-size: .76rem; transition: border-color .3s, background .3s;
+    word-break: break-word;
+  }
+  .relay-badge.active {
+    border-color: var(--green); background: #001a0a;
+  }
+  .relay-led {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--dim); flex-shrink: 0;
+    transition: background .3s, box-shadow .3s;
+  }
+  .relay-badge.active .relay-led {
+    background: var(--green); box-shadow: 0 0 6px var(--green);
+  }
+
+  /* ── SCENARIOS ── */
+  .scenario-list { display: flex; flex-direction: column; gap: 6px; }
+  .scenario-btn {
+    width: 100%; text-align: left; padding: 10px 14px;
+    background: #0a1520; border: 1px solid var(--border);
+    color: var(--text); border-radius: 4px;
+    font-family: var(--font-ui); font-size: .83rem;
+    display: flex; align-items: center; justify-content: space-between;
+    transition: border-color .2s, background .2s;
+    text-transform: none; letter-spacing: 0;
+  }
+  .scenario-btn:hover { border-color: var(--accent); background: #0d1f2e; }
+  .scenario-btn .badge {
+    font-size:.68rem; padding: 2px 7px; border-radius:3px;
+    font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  }
+  .badge-chaud   { background:#ff4400; color:#fff; }
+  .badge-sol     { background:#ff9100; color:#000; }
+  .badge-circ    { background:#00b0ff; color:#000; }
+  .badge-planch  { background:#00e676; color:#000; }
+  .badge-ecs     { background:#ea80fc; color:#000; }
+  .badge-reset   { background:#607d8b; color:#fff; }
+
+  /* ── PROGRESS STEP ── */
+  .progress-bar {
+    height: 3px; background: var(--border); border-radius:2px; overflow:hidden;
+  }
+  .progress-fill {
+    height: 100%; background: var(--accent);
+    width: 0%; transition: width .4s ease;
+  }
+
+  /* ── LOG ── */
+  .log-box {
+    background: #04090d; border: 1px solid var(--border);
+    border-radius: 4px; font-family: var(--font-mono);
+    font-size: .76rem; line-height: 1.6;
+    height: 280px; overflow-y: auto; padding: 10px 12px;
+  }
+  .log-box p { border-bottom: 1px solid #0d1a2430; padding: 1px 0; }
+  .log-ok   { color: var(--green); }
+  .log-err  { color: var(--red); }
+  .log-warn { color: var(--orange); }
+  .log-info { color: var(--muted); }
+  .log-step { color: var(--accent); }
+
+  /* ── LIVE VALUES ── */
+  .live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+  .live-tile {
+    background: #04090d; border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .live-tile .lname { font-size:.68rem; color: var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+  .live-tile .lval  { font-family: var(--font-mono); font-size:1.15rem; color: var(--accent); margin-top: 2px; }
+  .live-tile .lval.hot { color: var(--red); }
+  .live-tile .lval.warm { color: var(--orange); }
+  .live-tile .lval.cold { color: #4fc3f7; }
+
+  /* ── RESULT SUMMARY ── */
+  .result-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 4px;
+    font-size: .82rem;
+  }
+  .result-row.pass { background:#001a0a; border:1px solid var(--green); color:var(--green); }
+  .result-row.fail { background:#1a0008; border:1px solid var(--red);   color:var(--red); }
+  .result-row.skip { background:#1a1a0a; border:1px solid var(--dim);   color:var(--muted); }
+
+  scrollbar-width: thin;
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status-dot" id="connDot"></div>
+  <div>
+    <h1>🔬 Testeur PLC — Chauffage Solaire</h1>
+    <p id="connLabel">Non connecté</p>
+  </div>
+  <div class="host-row">
+    <input id="hostInput" value="http://192.168.1.49:5000" placeholder="http://IP:5000"/>
+    <button class="btn-cyan" onclick="connect()">Connecter</button>
+  </div>
+</header>
+
+<div class="layout">
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside>
+
+  <!-- Simulation sondes -->
+  <div class="card">
+    <div class="card-title">
+      🌡 Simulation sondes (°C)
+      <button class="btn-dim" style="padding:3px 8px;font-size:.68rem" onclick="resetSondes()">Reset</button>
+    </div>
+    <div class="card-body">
+      <div class="sondes-grid" id="sondesGrid"></div>
+    </div>
+  </div>
+
+  <!-- Commandes DV -->
+  <div class="card">
+    <div class="card-title">🔘 Commandes (DV)</div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:6px" id="dvBtns"></div>
+  </div>
+
+  <!-- Relais état temps réel -->
+  <div class="card">
+    <div class="card-title">⚡ État relais (temps réel)</div>
+    <div class="card-body">
+      <div class="relay-grid" id="relayGrid"></div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main>
+
+  <!-- Live temperatures -->
+  <div class="card">
+    <div class="card-title">📊 Températures en direct
+      <span id="cycleInfo" style="font-size:.7rem;color:var(--dim)">—</span>
+    </div>
+    <div class="card-body">
+      <div class="live-grid" id="liveTemps"></div>
+    </div>
+  </div>
+
+  <!-- Scénarios de test -->
+  <div class="card">
+    <div class="card-title">
+      🧪 Scénarios de test automatisés
+      <div style="display:flex;gap:6px">
+        <button class="btn-green" id="btnRunAll" onclick="runAllTests()">▶ Lancer tous</button>
+        <button class="btn-red" id="btnStop" onclick="stopTests()" disabled>■ Stop</button>
+      </div>
+    </div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+      <div class="progress-bar"><div class="progress-fill" id="progressBar"></div></div>
+      <div class="scenario-list" id="scenarioList"></div>
+    </div>
+  </div>
+
+  <!-- Résultats -->
+  <div class="card" id="resultsCard" style="display:none">
+    <div class="card-title">✅ Résultats des tests</div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:4px" id="resultsList"></div>
+  </div>
+
+  <!-- Log console -->
+  <div class="card">
+    <div class="card-title">
+      📟 Console
+      <button class="btn-dim" style="padding:3px 8px;font-size:.68rem" onclick="clearLog()">Effacer</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+// CONFIGURATION
+// ════════════════════════════════════════════════
+// Si la page est servie depuis le RPi lui-même (/testeur), utiliser l'origine courante
+let HOST = (location.protocol === 'file:') ? 'http://192.168.1.49:5000' : location.origin;
+let polling = null;
+let running = false;
+let stopFlag = false;
+
+// Mapping complet des sondes
+const SONDES = [
+  { id:'ANA0', label:'Ambiance',      min:-10, max:40,  def:20 },  // ANA0→RF250→RF266
+  { id:'ANA1', label:'Extérieur',     min:-15, max:40,  def:5  },  // ANA1→RF103→RF255
+  { id:'ANA2', label:'Capteurs sol.', min:0,   max:120, def:25 },  // ANA2→RF106→RF108
+  { id:'ANA3', label:'Chaudière',     min:0,   max:90,  def:60 },  // ANA3→RF109→RF247
+  { id:'ANA4', label:'Ballon Haut',   min:10,  max:80,  def:50 },  // ANA4→RF112→RF114
+  { id:'ANA5', label:'Ballon Bas',    min:10,  max:80,  def:45 },  // ANA5→RF115→RF268
+  { id:'ANA6', label:'Départ',        min:10,  max:70,  def:35 },  // ANA6→RF118→RF257
+  { id:'ANA7', label:'Retour',        min:10,  max:60,  def:30 },  // ANA7→RF121→RF123
+  { id:'ANA8', label:'Bouclage',      min:10,  max:65,  def:35 },  // ANA8→RF124→RF270
+];
+
+const RELAYS = [
+  { gpio:'5',  label:'K1 Auth.Chaudière'   },
+  { gpio:'11', label:'K2 V3V Sol.Solaire'  },
+  { gpio:'10', label:'K4 Cir.Réhausse'     },
+  { gpio:'22', label:'K5 Circ.ECS Sol.'    },
+  { gpio:'27', label:'K6 Circ.ECS Chaud.'  },
+  { gpio:'17', label:'K7 V3V Planch.↑'     },
+  { gpio:'4',  label:'K8 V3V Planch.↓'     },
+  { gpio:'6',  label:'K9 Circ.Plancher'    },
+  { gpio:'13', label:'K10 V3V Sol.Chaud.'  },
+];
+
+const DVS = [
+  { varname:'BP_Marche',                 label:'▶ Marche PLC'          },
+  { varname:'BP_Marche_Arret_Chauffage', label:'🔥 Chauffage'          },
+  { varname:'BP_Marche_ECS_Chaudiere',   label:'🚿 ECS Chaudière'      },
+  { varname:'BP_Marche_ECS_Solaire',      label:'☀ ECS Solaire'         },
+  { varname:'BP_Marche_Cauffage_Solaire',label:'🌞 Chauf. Solaire'     },
+  { varname:'Arret_Chaudiere',           label:'🛑 Arrêt Chaudière'    },
+  { varname:'Reset',                     label:'↺ Reset général'       },
+];
+
+// ════════════════════════════════════════════════
+// SCÉNARIOS DE TEST
+// ════════════════════════════════════════════════
+const SCENARIOS = [
+  {
+    id:'init',
+    label:'Initialisation système',
+    badge:'badge-reset',
+    badgeText:'INIT',
+    steps: async () => {
+      log('Mise en marche PLC...', 'step');
+      await setDV('BP_Marche', true);
+      await sleep(400);
+
+      log('Initialisation des consignes AV...', 'step');
+      // AV critiques — doivent être à leurs valeurs nominales avant tout test
+      await writeAV('Conssigne_Ballons',            75);  // RF186 — seuil ECS gestion_ecs
+      await writeAV('Conssigne_Ballons_Max',         85);  // RF199
+      await writeAV('Conssigne_MINI_Ballons_S_CH',  35);  // RF187
+      await writeAV('Cons_Temp_de_Marche_Chaudiere',75);  // RF227 — T_marche chaudière
+      await writeAV('Cons_temp_de_marche_Circulateur',60);// RF229
+      await writeAV('Cons_temp_de_marche_Degommage', 30);  // RF228
+      await writeAV('Hyst_Ballon_Bas',               5);  // RF182
+      await writeAV('Hyst_Ballon_Haut',              5);  // RF185
+      await writeAV('Conssigne_Ambiance',            19);  // RF205 — consigne ambiance loi_eau
+      await writeAV('Correction_Jour_Nuit',          -1);  // RF206
+      await writeAV('Corection_Depart_V3V_Solaire',   5);  // RF207
+      await writeAV('Conssigne_Depart_V3V_Max',      50);  // RF208
+      await writeAV('Secu_Panneaux_Solaire_Max',    100);  // RF170
+      await writeAV('Secu_Paneaux_Solaire_Mini',    -10);  // RF171
+      await writeAV('Conssigne_Panneaux_Solaire_Mini',40); // RF172
+      await writeAV('Hyst_RetourFroid_Solaire',       5);  // RF173
+      log('Consignes AV initialisées ✓', 'ok');
+      await sleep(300);
+
+      // Sondes nominales
+      await setSonde('ANA0', 20); // Ambiance 20°
+      await setSonde('ANA1', 5);  // Extérieur 5°
+      await setSonde('ANA2', 25); // Capteurs solaires bas
+      await setSonde('ANA3', 60); // Chaudière en temp
+      await setSonde('ANA4', 50); // Ballon Haut
+      await setSonde('ANA5', 45); // Ballon Bas
+      await setSonde('ANA6', 35); // Départ
+      await setSonde('ANA7', 30); // Retour
+      await setSonde('ANA8', 35); // Bouclage
+      log('Sondes initialisées', 'ok');
+      await sleep(1000);
+    },
+    expect: null
+  },
+  {
+    id:'chaudiere_marche',
+    label:'Départ chaudière (Ballon froid < consigne)',
+    badge:'badge-chaud',
+    badgeText:'CHAUD',
+    steps: async () => {
+      log('Activation mode chauffage + ECS chaudière...', 'step');
+      await setDV('BP_Marche_Arret_Chauffage', true);
+      await setDV('BP_Marche_ECS_Chaudiere', true);
+      await sleep(300);
+      // Forcer ballon froid (35°C) sous consigne (75°C) → déclenche sr_ecs dans gestion_ecs
+      log('Ballon refroidi à 35°C (sous consigne 75°C)...', 'step');
+      await setSonde('ANA4', 35); // Ballon Haut froid
+      await setSonde('ANA5', 30); // Ballon Bas froid
+      await setSonde('ANA3', 70); // Chaudière chaude et valide (T_valid=True)
+      await setSonde('ANA8', 35); // Bouclage 35°C < T_marche 75°C → bouclage_froid=True
+      // Attente: gestion_ecs doit propager od4→RF310 → chaudière d1=dem_ecs → K1
+      // Délai w26 (12s) dans gestion_ecs pour K6, mais od4 (sr_ecs) est IMMÉDIAT
+      // 3 cycles PLC suffisent normalement (300-500ms), on attend 4s par sécurité
+      log('Attente propagation (4s)...', 'info');
+      await sleep(4000);
+    },
+    expect: async (state) => {
+      const k1 = gpioActive(state, '5');
+      const gpio5 = state.gpio?.['5'];
+      const errCount = state.error_count ?? 0;
+      const debugInfo = `gpio5=${JSON.stringify(gpio5)} erreurs=${errCount}`;
+      if (!k1) return { ok: false, msg: `K1 ARRÊT — ${debugInfo}` };
+      return { ok: true, msg: 'K1 Auth.Chaudière actif ✓' };
+    }
+  },
+  {
+    id:'chaudiere_arret',
+    label:'Arrêt chaudière (Ballon chaud > consigne)',
+    badge:'badge-chaud',
+    badgeText:'CHAUD',
+    steps: async () => {
+      log('Ballon rempli à 68°C (au-dessus consigne)...', 'step');
+      await setSonde('ANA4', 68); // Ballon Haut chaud
+      await setSonde('ANA5', 65); // Ballon Bas chaud
+      await sleep(2500);
+    },
+    expect: async (state) => {
+      const k1 = gpioActive(state, '5');
+      if (k1) return { ok: false, msg: 'K1 devrait s\'éteindre (ballon atteint consigne)' };
+      return { ok: true, msg: 'K1 Auth.Chaudière éteint ✓ — ballon atteint consigne' };
+    }
+  },
+  {
+    id:'solaire_marche',
+    label:'Départ solaire (Capteurs > Ballon + delta)',
+    badge:'badge-sol',
+    badgeText:'SOLAIRE',
+    steps: async () => {
+      log('Activation ECS Solaire + Chauf. Solaire...', 'step');
+      await setDV('BP_Marche_ECS_Solaire', true);
+      await setDV('BP_Marche_Cauffage_Solaire', true);
+      await sleep(300);
+      log('Capteurs solaires très chauds (85°C), ballon froid...', 'step');
+      await setSonde('ANA2', 85); // Capteurs très chauds → delta > hyst(5°) vs retour(30°)
+      await setSonde('ANA7', 30); // Retour froid → T_cap(85) > T_ret(30)+hyst(5) → cond_dt=True
+      await setSonde('ANA4', 40); // Ballon Haut froid
+      await setSonde('ANA5', 38); // Ballon Bas froid
+      // ⚠ solaire_thermique a un délai de 120s (t2 >= 120s) avant d'autoriser la V3V
+      // On bypasse avec BP_Forcage_V3V_Solaire pour le test
+      log('⚡ Forçage V3V solaire (bypass délai 120s)...', 'step');
+      await setDV('BP_Forcage_V3V_Solaire', true);
+      await sleep(300);
+      // K5 (gestion_ecs od1): délai w17 >= 5s avant démarrage
+      log('Attente délai anti-micro-démarrage K5 (6s)...', 'info');
+      await sleep(6000);
+    },
+    expect: async (state) => {
+      const k5 = gpioActive(state, '22'); // K5 Circ.ECS Sol
+      const k2 = gpioActive(state, '11'); // K2 V3V Sol.Solaire
+      if (!k5 && !k2) return { ok: false, msg: 'K5 et/ou K2 devraient démarrer (solaire disponible, ballon froid)' };
+      const parts = [];
+      if (k5) parts.push('K5 Circ.ECS Sol ✓');
+      if (k2) parts.push('K2 V3V Sol ✓');
+      return { ok: true, msg: parts.join(', ') };
+    }
+  },
+  {
+    id:'solaire_arret',
+    label:'Arrêt solaire (Capteurs froids)',
+    badge:'badge-sol',
+    badgeText:'SOLAIRE',
+    steps: async () => {
+      log('Désactivation forçage V3V...', 'step');
+      await setDV('BP_Forcage_V3V_Solaire', false);
+      log('Panneaux refroidis (nuage) → 15°C...', 'step');
+      await setSonde('ANA2', 15); // Capteurs froids → cond_dt=False
+      // Anti-court-cycle: 15s avant arrêt définitif (waith_off)
+      log('Attente anti-court-cycle arrêt (16s)...', 'info');
+      await sleep(16000);
+    },
+    expect: async (state) => {
+      const k5 = gpioActive(state, '22');
+      const ana2 = state.analog?.['ANA2'];
+      const ana2C = ana2?.celsius ?? '?';
+      if (k5) return { ok: false, msg: `K5 toujours actif — ANA2=${ana2C}°C — vérif logique solaire` };
+      return { ok: true, msg: 'K5 Circ.ECS Sol éteint ✓ — capteurs froids' };
+    }
+  },
+  {
+    id:'plancher_marche',
+    label:'Départ circulateur plancher chauffant',
+    badge:'badge-planch',
+    badgeText:'PLANCH',
+    steps: async () => {
+      log('Ambiance froide (16°C < consigne 19°C) + chauffage ON...', 'step');
+      await setDV('BP_Marche_Arret_Chauffage', true);
+      await setSonde('ANA0', 16); // Ambiance 16°C < Conssigne_Ambiance(19°C) → demande_chauff=True
+      await setSonde('ANA6', 40); // Départ chaud dispo
+      await setSonde('ANA3', 72); // Chaudière chaude (T_valid=True)
+      // loi_eau: od1(circ_pl) = circ_ch OR circ_sol OR forcage_circ
+      //   circ_ch = NOT v3v_sol_pos AND marche_ch AND demande_chauff
+      //   → True si marche_ch=True et T_amb(16)<OA3(19-1=18 en nuit, 19 en jour)
+      // loi_eau: od4(dem_planch) = demande_chauff AND marche_ch AND NOT v3v_sol_pos
+      // Pas de délai — direct. K9 dépend de loi_eau od1 (circ_pl via RF218)
+      // mais loi_eau od4 → RF316 → chaudiere d3 → sr_s9 → auto_ch → K1 aussi
+      await sleep(3000);
+    },
+    expect: async (state) => {
+      const k9 = gpioActive(state, '6'); // K9 Circ.Plancher
+      if (!k9) return { ok: false, msg: 'K9 Circ.Plancher devrait démarrer (ambiance sous consigne, chaudière chaude)' };
+      return { ok: true, msg: 'K9 Circ.Plancher actif ✓' };
+    }
+  },
+  {
+    id:'plancher_arret',
+    label:'Arrêt circulateur plancher (ambiance atteinte)',
+    badge:'badge-planch',
+    badgeText:'PLANCH',
+    steps: async () => {
+      log('Ambiance atteinte (21.5°C)...', 'step');
+      await setSonde('ANA0', 21.5);
+      await sleep(2500);
+    },
+    expect: async (state) => {
+      const k9 = gpioActive(state, '6');
+      if (k9) return { ok: false, msg: 'K9 devrait s\'arrêter (ambiance atteinte)' };
+      return { ok: true, msg: 'K9 Circ.Plancher éteint ✓ — ambiance OK' };
+    }
+  },
+  {
+    id:'ecs_chaud',
+    label:'ECS via Chaudière (ballon ECS froid)',
+    badge:'badge-ecs',
+    badgeText:'ECS',
+    steps: async () => {
+      log('ECS Chaudière: T_chaud=75°C > T_ball_haut=40°C, marche_ch=True...', 'step');
+      await setDV('BP_Marche_ECS_Chaudiere', true);
+      await setSonde('ANA3', 75); // Chaudière chaude (T_chaud=75°C > 60°C threshold)
+      await setSonde('ANA4', 40); // Ballon Haut froid (40°C < T_chaud=75°C) → od2_cond=True
+      await setSonde('ANA5', 25); // Ballon Bas très froid
+      // gestion_ecs od2: délai w26 >= 12s avant activation K6
+      // aussi: V3V doit être en position chaudière (NOT v3v_sol_on)
+      await setDV('BP_Forcage_V3V_Solaire', false); // s'assurer que V3V n'est pas en solaire
+      log('Attente délai 12s gestion_ecs (od2)...', 'info');
+      await sleep(13000);
+    },
+    expect: async (state) => {
+      const k6 = gpioActive(state, '27'); // K6 Circ.ECS Chaud
+      if (!k6) return { ok: false, msg: 'K6 Circ.ECS Chaud devrait démarrer (ECS froide, chaudière chaude)' };
+      return { ok: true, msg: 'K6 Circ.ECS Chaud actif ✓' };
+    }
+  },
+  {
+    id:'securite_max',
+    label:'Sécurité haute température panneaux',
+    badge:'badge-sol',
+    badgeText:'SÉCU',
+    steps: async () => {
+      log('Simulation surchauffe panneaux (>110°C, sécu max)...', 'step');
+      await setSonde('ANA2', 115); // Dépasse sécurité max panneaux
+      await sleep(2500);
+    },
+    expect: async (state) => {
+      const k5 = gpioActive(state, '22'); // K5 doit s'arrêter
+      const k2 = gpioActive(state, '11'); // K2 doit s'arrêter
+      if (k5 || k2) return { ok: false, msg: `Sécu max non déclenchée ! K5=${k5}, K2=${k2} — les circulateurs solaires devraient être coupés` };
+      return { ok: true, msg: 'Sécurité haute temp. active ✓ — circulateurs solaires coupés' };
+    }
+  },
+  {
+    id:'reset',
+    label:'Remise en état nominal',
+    badge:'badge-reset',
+    badgeText:'RESET',
+    steps: async () => {
+      log('Désactivation forçages...', 'step');
+      await setDV('BP_Forcage_V3V_Solaire', false);
+      await setDV('Arret_Chaudiere', false);
+      await sleep(300);
+      log('Remise à zéro → sondes nominales...', 'step');
+      await setSonde('ANA0', 20);
+      await setSonde('ANA1', 5);
+      await setSonde('ANA2', 25);
+      await setSonde('ANA3', 60);
+      await setSonde('ANA4', 50);
+      await setSonde('ANA5', 45);
+      await setSonde('ANA6', 35);
+      await setSonde('ANA7', 30);
+      await setSonde('ANA8', 35);
+      await sleep(800);
+      log('État nominal restauré', 'ok');
+    },
+    expect: null
+  },
+];
+
+// ════════════════════════════════════════════════
+// API HELPERS
+// ════════════════════════════════════════════════
+async function apiPost(path, body) {
+  const r = await fetch(HOST + path, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+async function apiGet(path) {
+  const r = await fetch(HOST + path);
+  return r.json();
+}
+
+async function writeAV(varname, value) {
+  try {
+    await apiPost('/api/av/write', { varname, value: parseFloat(value) });
+    log(`  → AV ${varname} = ${value}`, 'info');
+  } catch(e) { log(`  ✗ Erreur AV ${varname}: ${e.message}`, 'err'); }
+}
+
+async function writeRF(ref, value) {
+  try {
+    await apiPost('/api/register/write', { ref, value: parseFloat(value) });
+    log(`  → RF ${ref} = ${value}`, 'info');
+  } catch(e) { log(`  ✗ Erreur RF ${ref}: ${e.message}`, 'err'); }
+}
+
+async function setSonde(ref, celsius) {
+  try {
+    await apiPost('/api/analog/sim', { ref, celsius: parseFloat(celsius) });
+    // update slider
+    const sl = document.getElementById('sl_' + ref);
+    const vl = document.getElementById('vl_' + ref);
+    if (sl) { sl.value = celsius; vl.textContent = parseFloat(celsius).toFixed(1)+'°'; }
+    log(`  → ${ref} = ${celsius}°C`, 'info');
+  } catch(e) { log(`  ✗ Erreur setSonde ${ref}: ${e.message}`, 'err'); }
+}
+
+async function setDV(varname, value) {
+  try {
+    await apiPost('/api/dv/write', { varname, value });
+    log(`  → DV ${varname} = ${value}`, 'info');
+    updateDVButton(varname, value);
+  } catch(e) { log(`  ✗ Erreur setDV ${varname}: ${e.message}`, 'err'); }
+}
+
+function gpioActive(state, gpio) {
+  const g = state.gpio?.[gpio];
+  if (!g) return false;
+  // active_low=true → state.value=false means relay ON
+  if (g.active_low) return g.value === false || g.value === 0;
+  return g.value === true || g.value === 1;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ════════════════════════════════════════════════
+// CONNECT / POLLING
+// ════════════════════════════════════════════════
+async function connect() {
+  HOST = document.getElementById('hostInput').value.trim().replace(/\/$/, '');
+  log(`Connexion à ${HOST}...`, 'step');
+  try {
+    const s = await apiGet('/api/status');
+    if (s.ok) {
+      setConnected(true);
+      log(`Connecté ✓ — PLC ${s.running ? 'EN MARCHE' : 'ARRÊTÉ'} — cycle #${s.cycle}`, 'ok');
+      startPolling();
+    }
+  } catch(e) {
+    setConnected(false);
+    log(`✗ Impossible de joindre le RPi : ${e.message}`, 'err');
+  }
+}
+
+function setConnected(ok) {
+  document.getElementById('connDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
+  document.getElementById('connLabel').textContent = ok ? `Connecté — ${HOST}` : 'Non connecté';
+}
+
+function startPolling() {
+  if (polling) clearInterval(polling);
+  polling = setInterval(pollState, 800);
+  pollState();
+}
+
+async function pollState() {
+  try {
+    const state = await apiGet('/api/state');
+    updateRelays(state);
+    updateLiveTemps(state);
+    const cycle = state.cycle ?? '?';
+    const err = state.error_count ?? 0;
+    // Show error count prominently
+    if (state.error_count > 0) {
+      document.getElementById('cycleInfo').style.color = 'var(--red)';
+    } else {
+      document.getElementById('cycleInfo').style.color = 'var(--dim)';
+    }
+    document.getElementById('cycleInfo').textContent =
+      `Cycle #${cycle}${err > 0 ? ' ⚠ '+err+' erreurs' : ''}`;
+    setConnected(true);
+  } catch(e) {
+    setConnected(false);
+  }
+}
+
+// ════════════════════════════════════════════════
+// UI UPDATES
+// ════════════════════════════════════════════════
+function updateRelays(state) {
+  RELAYS.forEach(r => {
+    const el = document.getElementById('relay_' + r.gpio);
+    if (!el) return;
+    const active = gpioActive(state, r.gpio);
+    el.className = 'relay-badge' + (active ? ' active' : '');
+  });
+}
+
+function updateLiveTemps(state) {
+  SONDES.forEach(s => {
+    const el = document.getElementById('live_' + s.id);
+    if (!el) return;
+    const ana = state.analog?.[s.id];
+    if (!ana) return;
+    const v = typeof ana.celsius !== 'undefined' ? ana.celsius : (ana.value ?? null);
+    if (v === null) return;
+    const vn = parseFloat(v).toFixed(1);
+    el.textContent = vn + ' °C';
+    el.className = 'lval' + (v > 70 ? ' hot' : v > 50 ? ' warm' : v < 5 ? ' cold' : '');
+  });
+}
+
+function updateDVButton(varname, val) {
+  const btn = document.getElementById('dv_' + varname);
+  if (!btn) return;
+  btn.style.borderColor = val ? 'var(--green)' : 'var(--border)';
+  btn.style.color = val ? 'var(--green)' : 'var(--text)';
+}
+
+// ════════════════════════════════════════════════
+// RENDER UI
+// ════════════════════════════════════════════════
+function buildSondes() {
+  const grid = document.getElementById('sondesGrid');
+  grid.innerHTML = SONDES.map(s => `
+    <div class="sonde-row">
+      <div class="sonde-label">${s.label}</div>
+      <div class="sonde-ctrl">
+        <input type="range" id="sl_${s.id}" min="${s.min}" max="${s.max}" step="0.5"
+          value="${s.def}" oninput="sliderChange('${s.id}', this.value)">
+        <span class="sonde-val" id="vl_${s.id}">${s.def}°</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function buildRelays() {
+  const grid = document.getElementById('relayGrid');
+  grid.innerHTML = RELAYS.map(r => `
+    <div class="relay-badge" id="relay_${r.gpio}">
+      <div class="relay-led"></div>
+      <span>${r.label}</span>
+    </div>
+  `).join('');
+}
+
+function buildDVButtons() {
+  const box = document.getElementById('dvBtns');
+  box.innerHTML = DVS.map(d => `
+    <button class="scenario-btn" id="dv_${d.varname}" onclick="toggleDV('${d.varname}', this)">
+      ${d.label}
+      <span style="font-size:.7rem;color:var(--muted)" id="dvst_${d.varname}">OFF</span>
+    </button>
+  `).join('');
+}
+
+function buildScenarios() {
+  const list = document.getElementById('scenarioList');
+  list.innerHTML = SCENARIOS.map((s, i) => `
+    <button class="scenario-btn" id="sc_${s.id}" onclick="runSingle(${i})">
+      ${s.label}
+      <span class="badge ${s.badge}">${s.badgeText}</span>
+    </button>
+  `).join('');
+}
+
+function buildLiveTemps() {
+  const grid = document.getElementById('liveTemps');
+  grid.innerHTML = SONDES.map(s => `
+    <div class="live-tile">
+      <div class="lname">${s.label}</div>
+      <div class="lval" id="live_${s.id}">—</div>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════
+// ACTIONS
+// ════════════════════════════════════════════════
+function sliderChange(ref, val) {
+  document.getElementById('vl_' + ref).textContent = parseFloat(val).toFixed(1) + '°';
+  setSonde(ref, parseFloat(val));
+}
+
+let dvState = {};
+async function toggleDV(varname, btn) {
+  dvState[varname] = !dvState[varname];
+  await setDV(varname, dvState[varname]);
+  document.getElementById('dvst_' + varname).textContent = dvState[varname] ? 'ON' : 'OFF';
+  btn.style.borderColor = dvState[varname] ? 'var(--green)' : 'var(--border)';
+  btn.style.color = dvState[varname] ? 'var(--green)' : 'var(--text)';
+}
+
+async function resetSondes() {
+  for (const s of SONDES) await setSonde(s.id, s.def);
+}
+
+// ════════════════════════════════════════════════
+// TEST RUNNER
+// ════════════════════════════════════════════════
+const results = [];
+
+async function runSingle(idx) {
+  if (running) return;
+  running = true;
+  stopFlag = false;
+  document.getElementById('btnStop').disabled = false;
+  await executeScenario(idx);
+  running = false;
+  document.getElementById('btnStop').disabled = true;
+}
+
+async function runAllTests() {
+  if (running) return;
+  running = true; stopFlag = false;
+  document.getElementById('btnRunAll').disabled = true;
+  document.getElementById('btnStop').disabled = false;
+  document.getElementById('resultsCard').style.display = 'block';
+  document.getElementById('resultsList').innerHTML = '';
+  results.length = 0;
+
+  for (let i = 0; i < SCENARIOS.length; i++) {
+    if (stopFlag) { log('⏹ Tests interrompus', 'warn'); break; }
+    document.getElementById('progressBar').style.width = (i / SCENARIOS.length * 100) + '%';
+    await executeScenario(i);
+    await sleep(400);
+  }
+  document.getElementById('progressBar').style.width = '100%';
+
+  // Summary
+  const pass = results.filter(r => r.ok).length;
+  const fail = results.filter(r => r.ok === false).length;
+  const skip = results.filter(r => r.ok === null).length;
+  log(`\n══ RÉSULTAT : ${pass} ✓  ${fail} ✗  ${skip} sans vérification ══`, pass === 0 && fail > 0 ? 'err' : fail === 0 ? 'ok' : 'warn');
+
+  running = false;
+  document.getElementById('btnRunAll').disabled = false;
+  document.getElementById('btnStop').disabled = true;
+}
+
+async function executeScenario(idx) {
+  const sc = SCENARIOS[idx];
+  const btn = document.getElementById('sc_' + sc.id);
+  if (btn) btn.style.borderColor = 'var(--accent)';
+
+  log(`\n▶ ${sc.label}`, 'step');
+  try {
+    await sc.steps();
+    let result = { ok: null, msg: 'Pas de vérification' };
+    if (sc.expect) {
+      const state = await apiGet('/api/state');
+      result = await sc.expect(state);
+    }
+    results.push({ label: sc.label, ...result });
+    addResult(sc.label, result);
+    if (result.ok === true)  log(`  ✓ ${result.msg}`, 'ok');
+    else if (result.ok === false) log(`  ✗ ${result.msg}`, 'err');
+    if (btn) btn.style.borderColor = result.ok === true ? 'var(--green)' : result.ok === false ? 'var(--red)' : 'var(--dim)';
+  } catch(e) {
+    log(`  ✗ Exception : ${e.message}`, 'err');
+    results.push({ label: sc.label, ok: false, msg: e.message });
+    addResult(sc.label, { ok: false, msg: e.message });
+    if (btn) btn.style.borderColor = 'var(--red)';
+  }
+}
+
+function addResult(label, result) {
+  const box = document.getElementById('resultsList');
+  const cls = result.ok === true ? 'pass' : result.ok === false ? 'fail' : 'skip';
+  const icon = result.ok === true ? '✓' : result.ok === false ? '✗' : '—';
+  const div = document.createElement('div');
+  div.className = 'result-row ' + cls;
+  div.innerHTML = `<strong>${icon}</strong> <span style="flex:1">${label}</span> <span style="font-size:.75rem;opacity:.8">${result.msg}</span>`;
+  box.appendChild(div);
+}
+
+function stopTests() { stopFlag = true; }
+
+// ════════════════════════════════════════════════
+// LOG
+// ════════════════════════════════════════════════
+function log(msg, type='info') {
+  const box = document.getElementById('logBox');
+  const p = document.createElement('p');
+  const ts = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  p.className = 'log-' + type;
+  p.textContent = `[${ts}] ${msg}`;
+  box.appendChild(p);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() { document.getElementById('logBox').innerHTML = ''; }
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+buildSondes();
+buildRelays();
+buildDVButtons();
+buildScenarios();
+buildLiveTemps();
+log('Testeur PLC prêt. Entrez l\'IP du RPi et cliquez "Connecter".', 'info');
+log('Conseil : déployez d\'abord le server.py corrigé avant de tester.', 'warn');
+</script>
+</body>
+</html>

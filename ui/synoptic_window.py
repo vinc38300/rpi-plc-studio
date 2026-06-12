@@ -43,7 +43,6 @@ class SynopticWindow(QDialog):
         self.setWindowFlags(
             Qt.Window |
             Qt.WindowMinimizeButtonHint |
-            Qt.WindowMaximizeButtonHint |
             Qt.WindowCloseButtonHint
         )
 
@@ -61,7 +60,7 @@ class SynopticWindow(QDialog):
         header.setStyleSheet(
             "background:#161b22; border-bottom:1px solid #30363d;"
         )
-        header.setFixedHeight(36)
+        header.setFixedHeight(28)
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(12, 0, 12, 0)
         h_lay.setSpacing(10)
@@ -78,17 +77,6 @@ class SynopticWindow(QDialog):
 
         h_lay.addStretch()
 
-        # Bouton "Retour FBD" pour les utilisateurs qui ne connaissent pas Alt+Tab
-        back_btn = QPushButton("← Retour FBD")
-        back_btn.setStyleSheet(
-            "QPushButton{background:#1c2128;border:1px solid #30363d;"
-            "color:#8b949e;border-radius:5px;padding:3px 12px;font-size:11px;}"
-            "QPushButton:hover{border-color:#58a6ff;color:#58a6ff;}"
-        )
-        back_btn.setToolTip("Fermer cette fenêtre (F8)")
-        back_btn.clicked.connect(self.hide)
-        h_lay.addWidget(back_btn)
-
         lay.addWidget(header)
 
         # ── Éditeur principal ─────────────────────────────────────────────────
@@ -99,13 +87,15 @@ class SynopticWindow(QDialog):
     def _build_shortcuts(self):
         # F8 pour ouvrir/fermer depuis n'importe où
         QShortcut(QKeySequence("F8"), self, self.hide)
-        # Escape ferme aussi (comportement naturel)
-        QShortcut(QKeySequence("Escape"), self, self.hide)
 
     # ── API publique (appelée depuis MainWindow) ───────────────────────────────
     def load_synoptic(self, data: dict):
         self.editor.load_synoptic(data)
-        n = len(data.get("widgets", []))
+        # Compter les widgets — format multi-pages ou ancien format plat
+        if isinstance(data.get("pages"), list):
+            n = sum(len(p.get("widgets", [])) for p in data["pages"])
+        else:
+            n = len(data.get("widgets", []))
         self._refresh_info(n)
 
     def get_synoptic(self) -> dict:
@@ -138,7 +128,7 @@ class SynopticWindow(QDialog):
         self.hide()
 
     def show_and_raise(self):
-        """Ouvrir, mettre au premier plan et activer."""
-        self.show()
+        """Ouvrir la fenêtre maximisée et l'activer."""
+        self.showMaximized()
         self.raise_()
         self.activateWindow()

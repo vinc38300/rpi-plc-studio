@@ -12,9 +12,27 @@ Lancer : python3 server.py [--load programme.json] [--no-web] [--port 5000]
 import json, os, sys, time, signal, sqlite3, threading, argparse, logging
 from pathlib import Path
 
-# ── Modules optionnels RPi-PLC ────────────────────────────────────────────────
+# ── TelegramBot — import séparé pour ne pas être masqué par d'autres erreurs ──
 try:
-    from telegram_bot       import TelegramBot
+    from telegram_bot import TelegramBot
+    HAS_TELEGRAM = True
+except ImportError as _te:
+    HAS_TELEGRAM = False
+    import logging as _l; _l.getLogger("rpi-plc").warning(f"telegram_bot non chargé : {_te}")
+    class TelegramBot:
+        def __init__(self,*a,**k): pass
+        def start(self): pass
+        def stop(self,*a,**k): pass
+        def check_alarms(self,*a): pass
+        def check_relay_changes(self,*a): pass
+        def check_plc_state(self,*a): pass
+        def check_daily_report(self): pass
+        def send(self,*a,**k): pass
+        def restart(self,*a,**k): pass
+        def get_updates_for_test(self): return []
+
+# ── Autres modules optionnels RPi-PLC ─────────────────────────────────────────
+try:
     from recipes            import RecipeManager
     from backup_manager     import BackupManager
     from auth               import make_auth_middleware, get_ssl_context
@@ -24,11 +42,6 @@ try:
 except ImportError as _e:
     HAS_MODULES = False
     import logging as _l; _l.getLogger("rpi-plc").debug(f"Modules optionnels : {_e}")
-    class TelegramBot:
-        def __init__(self,*a,**k): pass
-        def start(self): pass
-        def stop(self): pass
-        def check_alarms(self,*a): pass
     class RecipeManager:
         def __init__(self,*a,**k): self._data={}
         def list_names(self): return []
@@ -71,6 +84,7 @@ log = logging.getLogger("rpi-plc")
 BASE_DIR     = Path(os.path.dirname(os.path.abspath(__file__)))
 PROGRAM_FILE = BASE_DIR / "programme.json"
 CONFIG_FILE  = BASE_DIR / "config.json"
+PYBLOCK_STATE_FILE = BASE_DIR / "pyblock_states.json"   # persistence compteurs/timers
 DB_FILE      = BASE_DIR / "history.db"
 RECIPES_FILE = BASE_DIR / "recipes.json"
 BACKUP_DIR   = BASE_DIR / "backups"
@@ -318,13 +332,16 @@ class PLCEngine:
                             "value": False, "pull": pcfg.get("pull", "off")}
 
         self.analog    = {}
-        self.registers = {f"RF{i}": 0.0 for i in range(16)}
+        self.registers = {f"RF{i}": 0.0 for i in range(256)}  # FIX: RF0..RF255 (RF100+ auto-câblés)
         self.pids      = {}
         self.memory    = {f"M{i}": False for i in range(32)}
         self.timers    = {}
         self.counters  = {}
-        self.av_vars   = {}   # Variables AV nommées — modifiables par l'opérateur
-        self.dv_vars   = {}   # Variables DV nommées — modifiables par l'opérateur (bool)
+        self.av_vars      = {}   # Variables AV nommées — modifiables par l'opérateur
+        self.dv_vars      = {}   # Variables DV nommées — modifiables par l'opérateur (bool)
+        self.page_signals = {}   # Bus inter-pages PAGE_OUT → PAGE_IN (float 0/1 pour bool)
+        self._gpio_force  = {}   # {pin: bool} — pins forcés manuellement (non écrasés par le cycle)
+        self._dv_force    = {}   # {varname: bool} — DV forcées manuellement
         self.program   = []
         self.cycle_count  = 0
         self.error        = ""
@@ -445,9 +462,16 @@ class PLCEngine:
         if isinstance(ref, str):
             if ref.startswith("M"):
                 return self.memory.get(ref, False)
+            # FIX : registre RF utilisé comme booléen (PYBLOCK → write_register → eval_cond)
+            if ref.startswith("RF"):
+                return self.registers.get(ref, 0.0) >= 0.5
             if not hasattr(self, 'dv_vars'): self.dv_vars = {}
-            if ref in self.dv_vars:
-                return bool(self.dv_vars[ref])
+            ref_lc = ref.lower()
+            if ref_lc in self.dv_vars:
+                return bool(self.dv_vars[ref_lc])
+            # FIX : signal PAGE_OUT nommé (ex: "RUN_CPT_SOL") → page_signals
+            if hasattr(self, 'page_signals') and ref in self.page_signals:
+                return self.page_signals[ref] >= 0.5
         return False
 
     def write_signal(self, ref, value):
@@ -458,10 +482,19 @@ class PLCEngine:
                 if not hasattr(self, 'memory'): self.memory = {}
                 self.memory[ref] = bool(value)
             return
+        # FIX : registre RF utilisé comme booléen → write_register (cohérence avec read_signal)
+        if isinstance(ref, str) and ref.startswith("RF"):
+            self.write_register(ref, 1.0 if value else 0.0)
+            return
         # GPIO pin → normaliser en entier
         try:
             pin = int(ref)
         except (TypeError, ValueError):
+            # Signal nommé (PAGE signal, DV nommée, etc.) → stocker dans dv_vars
+            if isinstance(ref, str) and ref:
+                with self._lock:
+                    if not hasattr(self, 'dv_vars'): self.dv_vars = {}
+                    self.dv_vars[ref.lower()] = bool(value)
             return
         if pin not in self.gpio: return
         if self.gpio[pin]["mode"] != "output": return
@@ -500,11 +533,20 @@ class PLCEngine:
 
     def read_analog(self, ref):
         if not ref: return 0.0
-        if ref.startswith("RF"): return self.registers.get(ref, 0.0)
+        if isinstance(ref, str) and ref.startswith("RF"): return self.registers.get(ref, 0.0)
         if ref in self.analog: return self.analog[ref].get("celsius") or 0.0
-        # Variable AV nommée (ex: "temp_interieur", "consigne_chauffe")
+        # Variable AV nommée — casse exacte d'abord
         if not hasattr(self, 'av_vars'): self.av_vars = {}
         if ref in self.av_vars: return float(self.av_vars[ref])
+        # FIX: write_av normalise en minuscules → fallback insensible à la casse
+        refL = ref.lower() if isinstance(ref, str) else ref
+        if refL != ref:
+            if refL in self.av_vars: return float(self.av_vars[refL])
+            # FIX2: aussi chercher dans _backup_store (utilisé par set_backup_value)
+            if hasattr(self, '_backup_store') and refL in self._backup_store:
+                v = self._backup_store[refL]
+                if not isinstance(v, bool):
+                    return float(v)
         return 0.0
 
     def write_register(self, ref, value):
@@ -519,7 +561,10 @@ class PLCEngine:
         with self._lock:
             if ref in self.analog:
                 self.analog[ref]["celsius"] = round(float(celsius), 2)
-            elif ref in self.registers:
+            else:
+                # FIX: créer l'entrée pour simulation sans hardware ADS
+                self.analog[ref] = {"celsius": round(float(celsius), 2), "voltage": None, "sim": True}
+            if ref in self.registers:
                 self.registers[ref] = float(celsius)
         # Émettre immédiatement la mise à jour aux clients WebSocket
         if self.on_update:
@@ -605,29 +650,33 @@ class PLCEngine:
             try:
                 data = json.load(open(path))
                 with self._lock:
-                    # Ne restaurer que les DV explicitement persistantes
-                    # Les boutons momentary et autres démarrent à False
                     if persistent_vars:
+                        # Mode sélectif : clés normalisées en minuscules
                         self.dv_vars = {
-                            k: bool(v) for k, v in data.items()
+                            k.lower(): bool(v) for k, v in data.items()
                             if k.lower() in persistent_vars
                         }
-                        log.info(f"[DV] {len(self.dv_vars)} variable(s) DV restaurée(s) : {list(self.dv_vars.keys())}")
+                        log.info(f"[DV] {len(self.dv_vars)} variable(s) DV restaurée(s) (sélectif) : {list(self.dv_vars.keys())}")
                     else:
-                        # Aucune DV persistante configurée → toutes à False au démarrage
-                        self.dv_vars = {}
-                        log.info("[DV] Toutes les DV remises à False au démarrage (état sûr)")
+                        # FIX: dv_persistent non configuré → restaurer TOUTES les DV sauvegardées
+                        # FIX2: normaliser les clés en minuscules (évite 'Mardi' vs 'mardi')
+                        self.dv_vars = {k.lower(): bool(v) for k, v in data.items()}
+                        log.info(f"[DV] {len(self.dv_vars)} variable(s) DV restaurées (tout-persistant) : {list(self.dv_vars.keys())}")
             except Exception as e:
                 log.warning(f"[DV] Erreur chargement dv_vars : {e}")
 
     def _save_av_vars(self):
-        import json
-        try:
-            with self._lock:
-                data = dict(self.av_vars)
-            json.dump(data, open(self._av_vars_path(), 'w'), indent=2)
-        except Exception as e:
-            log.warning(f"[AV] Erreur sauvegarde av_vars : {e}")
+        """Sauvegarde asynchrone — ne bloque JAMAIS le scan cycle."""
+        import json, threading
+        def _do():
+            try:
+                with self._lock:
+                    data = dict(self.av_vars)
+                with open(self._av_vars_path(), 'w') as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                log.warning(f"[AV] Erreur sauvegarde av_vars : {e}")
+        threading.Thread(target=_do, daemon=True).start()
 
     def _save_dv_vars(self):
         import json
@@ -639,7 +688,16 @@ class PLCEngine:
             log.warning(f"[DV] Erreur sauvegarde dv_vars : {e}")
 
     def eval_cond(self, cond, default_if_none=True):
-        if not cond: return default_if_none
+        if cond is None: return default_if_none
+        if cond is False: return False
+        if cond is True:  return True
+        # FIX : condition entière → numéro de pin GPIO (runtimecnt CPT_K*)
+        if isinstance(cond, (int, float)):
+            return self.read_signal(int(cond))
+        # FIX: si la condition est une string brute (ex: "RUN_CPT_SOL", "RF4")
+        # → la convertir en dict {type:input, ref:...} avant traitement
+        if isinstance(cond, str):
+            cond = {"type": "input", "ref": cond}
         t = cond.get("type", "input")
         if t == "input":
             v = self.read_signal(cond.get("ref"))
@@ -679,12 +737,12 @@ class PLCEngine:
         if isinstance(ref, int) or (isinstance(ref, str) and ref.startswith("M")):
             self.write_signal(ref, value)
         elif isinstance(ref, str) and ref:
-            # Variable DV nommée → dv_vars
+            # Variable DV nommée → dv_vars (toujours en minuscules)
             if not hasattr(self, 'dv_vars'): self.dv_vars = {}
-            with self._lock: self.dv_vars[ref] = bool(value)
+            with self._lock: self.dv_vars[ref.lower()] = bool(value)
 
     def exec_block(self, block, dt_ms):
-        btype = block.get("type"); bid = block.get("id","?"); out = block.get("output")
+        btype = (block.get("type") or "").lower(); bid = block.get("id","?"); out = block.get("output")
 
         if btype in ("coil","set","reset"):
             cond = self.eval_cond(block.get("condition"))
@@ -745,19 +803,30 @@ class PLCEngine:
                 self.write_register(out, float(block.get("value", 0.0)))
 
         # ── Blocs logique ──────────────────────────────────────────────────
-        elif btype in ("and", "or", "not", "xor", "inv"):
+        elif btype in ("and", "or", "not", "xor", "inv", "nand", "nor"):
             def _gs(r):
                 if r is None: return False
                 if isinstance(r, int): return self.read_signal(r)
-                if isinstance(r, str) and r.startswith("M"): return self.read_signal(r)
+                if isinstance(r, str) and r.startswith("M"):  return self.read_signal(r)
+                if isinstance(r, str) and r.startswith("RF"): return bool(self.read_analog(r))
+                if isinstance(r, str): return self.read_signal(r)
                 return bool(r)
-            i1 = _gs(block.get("in1") or block.get("input1"))
-            i2 = _gs(block.get("in2") or block.get("input2"))
-            if   btype == "and":             res = i1 and i2
-            elif btype == "or":              res = i1 or  i2
-            elif btype in ("not", "inv"):    res = not _gs(block.get("in") or block.get("in1"))
-            elif btype == "xor":             res = i1 ^ i2
-            else:                            res = False
+            # FIX : lire in1/in2 (compilés par block_editor) ou reg_a/reg_b (legacy canvas)
+            in1_key = block.get("in1") or block.get("input1") or block.get("reg_a") or block.get("in")
+            in2_key = block.get("in2") or block.get("input2") or block.get("reg_b")
+            i1 = _gs(in1_key)
+            i2 = _gs(in2_key)
+            if   btype == "and":              res = i1 and i2
+            elif btype == "or":               res = i1 or  i2
+            elif btype in ("not", "inv"):     res = not i1
+            elif btype == "xor":              res = bool(i1) ^ bool(i2)
+            elif btype == "nand":             res = not (i1 and i2)
+            elif btype == "nor":              res = not (i1 or  i2)
+            else:                             res = False
+            # Écrire dans reg_out (RF*) ET dans out (GPIO/M)
+            reg_out_logic = block.get("reg_out") or block.get("out")
+            if reg_out_logic and str(reg_out_logic).startswith("RF"):
+                self.write_register(reg_out_logic, 1.0 if res else 0.0)
             if out: self.write_signal(out, res)
 
         elif btype in ("sr", "sr_r"):
@@ -878,8 +947,20 @@ class PLCEngine:
             if dst: self.write_register(dst, val)
 
         elif btype in ("add", "sub", "mul", "div"):
-            a   = self.registers.get(block.get("reg_a", "RF0"), 0.0)
-            b_v = self.registers.get(block.get("reg_b", "RF1"), 0.0)
+            # FIX: si reg_a/reg_b n'est pas un RF (ex: varname AV), lire aussi av_vars
+            def _read_reg_or_av(key, default_rf):
+                ref = block.get(key, default_rf)
+                if isinstance(ref, str) and ref.startswith("RF"):
+                    return self.registers.get(ref, 0.0)
+                if isinstance(ref, str) and ref:
+                    # Fallback: chercher dans av_vars (AV varname passé par erreur)
+                    with self._lock:
+                        av = getattr(self, 'av_vars', {})
+                    if ref.lower() in av:
+                        return float(av[ref.lower()])
+                return self.registers.get(ref, 0.0) if ref else 0.0
+            a   = _read_reg_or_av("reg_a", "RF0")
+            b_v = _read_reg_or_av("reg_b", "RF1")
             if   btype == "add": res = a + b_v
             elif btype == "sub": res = a - b_v
             elif btype == "mul": res = a * b_v
@@ -909,7 +990,7 @@ class PLCEngine:
             if reg.startswith("M"):
                 with self._lock: self.memory[reg] = val <= thr
 
-        elif btype in ("gt", "ge", "lt", "eq", "ne", "compare"):
+        elif btype in ("gt", "ge", "lt", "le", "eq", "ne", "compare"):
             def _rv(r):
                 if isinstance(r, str) and (r.startswith("RF") or r.startswith("ANA")):
                     return self.read_analog(r)
@@ -918,7 +999,7 @@ class PLCEngine:
             br = block.get("ref_b") or block.get("in2")
             b  = _rv(br) if br else float(block.get("val_b", 0))
             op = block.get("op", btype)
-            r  = {"gt":a>b,"ge":a>=b,"lt":a<b,"eq":abs(a-b)<1e-9,
+            r  = {"gt":a>b,"ge":a>=b,"lt":a<b,"le":a<=b,"eq":abs(a-b)<1e-9,
                   "ne":abs(a-b)>=1e-9,"compare":a==b}.get(op, False)
             if out: self.write_signal(out, r)
 
@@ -942,7 +1023,7 @@ class PLCEngine:
             if out_dec is not None: self.write_signal(out_dec, cond_dec)
 
         # ── Compteur temps de marche ──────────────────────────────────────
-        elif btype == "runtimcnt":
+        elif btype in ("runtimcnt", "runtimecnt"):
             cond = self.eval_cond(block.get("condition") or block.get("run"))
             rst  = self.eval_cond(block.get("reset_condition"), default_if_none=False)
             if bid not in self.pids:
@@ -957,16 +1038,23 @@ class PLCEngine:
                 with self._lock:
                     self.av_vars[f"_cnt_{bid}_starts"] = 0
                     self.av_vars[f"_cnt_{bid}_total"]  = 0.0
+                self._save_av_vars()   # FIX: persister immédiatement le reset
             else:
                 if cond and not c["_prev"]:
                     c["starts"] += 1
                     with self._lock: self.av_vars[f"_cnt_{bid}_starts"] = c["starts"]
+                    self._save_av_vars()   # FIX: persister chaque nouveau démarrage
                 if cond:
                     c["runtime"] += dt_ms / 1000.0; c["total"] += dt_ms / 1000.0
-                    if int(c["total"]) % 10 == 0:
+                    # FIX: sauvegarder toutes les 30s (était juste en mémoire, jamais persisté)
+                    prev_total = c["total"] - dt_ms / 1000.0
+                    if int(c["total"]) // 30 != int(prev_total) // 30:
                         with self._lock: self.av_vars[f"_cnt_{bid}_total"] = c["total"]
+                        self._save_av_vars()
                 else: c["runtime"] = 0.0
             c["_prev"] = cond
+            # Exposer "output" pour que le canvas FBD sache si le bloc est actif (LED verte)
+            c["output"] = 1.0 if cond else 0.0
             if block.get("reg_starts"):  self.write_register(block["reg_starts"], float(c["starts"]))
             if block.get("reg_total"):   self.write_register(block["reg_total"],  c["total"] / 3600.0)
             if block.get("reg_runtime"): self.write_register(block["reg_runtime"], c["runtime"])
@@ -1041,39 +1129,73 @@ class PLCEngine:
                 self.write_dv(out_circ,    True)   # circulateur reste ON pour refroidir
                 return f"PLANCHER DEP ALM: Tdep={t_depart:.1f}°C > {max_depart}°C"
 
-            # ── PID sur température ambiante ──────────────────────────
+            # ── Paramètres V3V ───────────────────────────────────────
+            travel_time_s = float(block.get("travel_time_s", 133.0))
+            v3v_deadband  = float(block.get("v3v_deadband",  1.5))
+            # ctrl_mode : "pid"  → PID sur T ambiante  (SP = consigne ambiante)
+            #             "prop" → Proportionnel sur T départ (identique PYBLOCK loi_eau)
+            #                      SP = consigne de départ d'eau
+            ctrl_mode = block.get("ctrl_mode", "pid")
+            kv3v      = float(block.get("kv3v", 20.0))   # gain prop : % par °C écart départ
+            sp_amb    = float(block.get("sp_amb", 19.0)) # seuil ambiance (mode prop)
+
             if not hasattr(self, '_plancher_state'): self._plancher_state = {}
-            st = self._plancher_state.setdefault(bid, {"integral": 0.0, "prev_err": 0.0})
+            st = self._plancher_state.setdefault(bid, {
+                "integral": 0.0, "prev_err": 0.0, "v3v_pos": 0.0})
 
-            error  = sp - t_amb
-            active = error > dead_band
-
-            if active:
-                st["integral"] = max(-100.0, min(100.0,
-                    st["integral"] + ki * error * (dt_ms / 1000.0)))
-                derivative = kd * (error - st["prev_err"]) / max(0.001, dt_ms / 1000.0)
-                pid_out = kp * error + st["integral"] + derivative
-                pid_out = max(0.0, min(100.0, pid_out))
+            if ctrl_mode == "prop" and t_depart is not None:
+                # ── Mode PROP — proportionnel sur écart T départ ─────────────
+                # target = (SP_dep - T_dep) × kv3v  clampé 0-100 %
+                # Actif seulement si T_amb < sp_amb (vrai besoin de chauffe)
+                demande   = t_amb < sp_amb
+                ecart_dep = sp - t_depart
+                pid_out   = max(0.0, min(100.0, ecart_dep * kv3v)) if demande else 0.0
+                if t_depart > max_depart: pid_out = 0.0   # sécurité surchauffe
+                st["integral"] = 0.0   # non utilisé en mode prop
             else:
-                pid_out = 0.0
-                st["integral"] = max(0.0, st["integral"])
-            st["prev_err"] = error
+                # ── Mode PID — sur température ambiante (original) ───────────
+                error = sp - t_amb
+                if error > dead_band:
+                    st["integral"] = max(-100.0, min(100.0,
+                        st["integral"] + ki * error * (dt_ms / 1000.0)))
+                    derivative = kd * (error - st["prev_err"]) / max(0.001, dt_ms / 1000.0)
+                    pid_out = kp * error + st["integral"] + derivative
+                    pid_out = max(0.0, min(100.0, pid_out))
+                else:
+                    pid_out = 0.0
+                    st["integral"] = max(0.0, st["integral"])
+                st["prev_err"] = error
+
             self.write_register(reg_out, pid_out)
 
-            # ── Commandes V3V motorisée + circulateur ─────────────────
-            # V3V_OUV = ouvre (chauffage actif), V3V_FER = ferme (pas de chauffage)
-            # Les deux ne sont JAMAIS actifs simultanément
-            self.write_dv(out_v3v_ouv, active)
-            self.write_dv(out_v3v_fer, not active)
-            self.write_dv(out_circ,    active)   # circulateur ON uniquement si chauffe
+            # ── V3V flottant 3 points — intégrateur de position ──────────────
+            pos_step = (100.0 / travel_time_s) * (dt_ms / 1000.0)
+            target   = pid_out
 
-            circ_ok = not (delta is not None and active and abs(delta) < min_delta)
-            dep_str = f" Tdep={t_depart:.1f}°C" if t_depart is not None else ""
-            ret_str = f" Tret={t_retour:.1f}°C" if t_retour is not None else ""
-            dlt_str = f" Δ={delta:.1f}°C{'⚠' if not circ_ok else ''}" if delta is not None else ""
-            return (f"PLANCHER {block.get('name','?')}: "
-                    f"Tamb={t_amb:.1f}°C SP={sp:.1f}°C PID={pid_out:.0f}%"
-                    f"{dep_str}{ret_str}{dlt_str} {'ON' if active else 'OFF'}")
+            if target > st["v3v_pos"] + v3v_deadband:
+                cmd_ouv = True;  cmd_fer = False
+                st["v3v_pos"] = min(100.0, st["v3v_pos"] + pos_step)
+            elif target < st["v3v_pos"] - v3v_deadband:
+                cmd_ouv = False; cmd_fer = True
+                st["v3v_pos"] = max(0.0, st["v3v_pos"] - pos_step)
+            else:
+                cmd_ouv = False; cmd_fer = False   # position atteinte → arrêt
+
+            self.write_dv(out_v3v_ouv, cmd_ouv)
+            self.write_dv(out_v3v_fer, cmd_fer)
+
+            circ_active = st["v3v_pos"] > 2.0
+            self.write_dv(out_circ, circ_active)
+
+            mode_str = "PROP" if ctrl_mode == "prop" else "PID"
+            circ_ok  = not (delta is not None and circ_active and abs(delta) < min_delta)
+            dep_str  = f" Tdep={t_depart:.1f}°C" if t_depart is not None else ""
+            ret_str  = f" Tret={t_retour:.1f}°C" if t_retour is not None else ""
+            dlt_str  = f" Δ={delta:.1f}°C{'⚠' if not circ_ok else ''}" if delta is not None else ""
+            return (f"PLANCHER {block.get('name','?')} [{mode_str}]: "
+                    f"Tamb={t_amb:.1f}°C SP={sp:.1f}°C OUT={pid_out:.0f}% "
+                    f"V3V={st['v3v_pos']:.0f}% {'▲' if cmd_ouv else '▼' if cmd_fer else '■'}"
+                    f"{dep_str}{ret_str}{dlt_str} {'ON' if circ_active else 'OFF'}")
 
 
         
@@ -1338,12 +1460,21 @@ class PLCEngine:
         elif btype == "localtime":
             import datetime as _dt
             now_dt = _dt.datetime.now()
-            self.write_register(block.get("out_hour","RF13"), float(now_dt.hour))
-            self.write_register(block.get("out_mday","RF14"), float(now_dt.day))
-            self.write_register(block.get("out_wday","RF15"), float((now_dt.weekday()+1)%7))
+            # FIX : le projet utilise reg_hour/reg_wday (nouveaux noms canvas)
+            # fallback sur out_hour/out_wday (anciens noms) pour compatibilité
+            r_hour = block.get("reg_hour") or block.get("out_hour", "RF13")
+            r_mday = block.get("reg_mday") or block.get("out_mday", "RF14")
+            r_wday = block.get("reg_wday") or block.get("out_wday", "RF15")
+            r_min  = block.get("reg_min")  or block.get("out_min")
+            r_sec  = block.get("reg_sec")  or block.get("out_sec")
+            self.write_register(r_hour, float(now_dt.hour))
+            self.write_register(r_mday, float(now_dt.day))
+            self.write_register(r_wday, float((now_dt.weekday()+1)%7))
+            if r_min: self.write_register(r_min, float(now_dt.minute))
+            if r_sec: self.write_register(r_sec, float(now_dt.second))
 
         # ── Variables nommées ─────────────────────────────────────────────
-        elif btype in ("backup", "av"):
+        elif btype == "av":
             varname = block.get("varname", "av0").lower()
             default = float(block.get("default", 0.0))
             # Lire depuis av_vars (écrit par l'opérateur) ou valeur par défaut
@@ -1370,11 +1501,24 @@ class PLCEngine:
                 if not hasattr(self, 'dv_vars'):
                     self.dv_vars = {}
                 val = self.dv_vars.get(varname, default)
+            # FIX : écrire vers reg_out (RF register) si câblé par le compilateur de fils
+            reg_out_dv = block.get("reg_out")
+            if reg_out_dv and str(reg_out_dv).startswith("RF"):
+                self.write_register(reg_out_dv, 1.0 if val else 0.0)
             # Écrire GPIO uniquement si valeur changée (évite écrasement en boucle)
             if out is not None:
                 prev_key = f"_dv_prev_{bid}"
                 prev = getattr(self, '_dv_prev', {})
                 if not hasattr(self, '_dv_prev'): self._dv_prev = {}
+                # ── Forçage manuel DV : ne pas écraser ────────────────────
+                varname_dv = block.get("varname","").lower()
+                if varname_dv in self._dv_force:
+                    forced_val = self._dv_force[varname_dv]
+                    if self._dv_prev.get(bid) != forced_val:
+                        self._dv_prev[bid] = forced_val
+                        with self._lock: self.dv_vars[varname_dv] = forced_val
+                        self.write_bool_out(out, forced_val)
+                    return
                 if self._dv_prev.get(bid) != val:
                     self._dv_prev[bid] = val
                     self.write_bool_out(out, val)
@@ -1407,11 +1551,11 @@ class PLCEngine:
 
         # ── Blocs manquants — portés depuis le moteur desktop ─────────────
 
-        elif btype in ("compare", "gt", "ge", "lt", "eq", "ne"):
+        elif btype in ("compare", "gt", "ge", "lt", "le", "eq", "ne"):
             op   = block.get("op", "gt")
             a    = self.read_analog(block.get("ref_a", "RF0"))
             b_v  = self.read_analog(block.get("ref_b")) if block.get("ref_b") else float(block.get("val_b", 0))
-            res  = {"gt":a>b_v,"ge":a>=b_v,"lt":a<b_v,"eq":a==b_v,"ne":a!=b_v}.get(op, False)
+            res  = {"gt":a>b_v,"ge":a>=b_v,"lt":a<b_v,"le":a<=b_v,"eq":a==b_v,"ne":a!=b_v}.get(op, False)
             if out: self.write_signal(out, res)
 
         elif btype == "compare_f":
@@ -1563,32 +1707,52 @@ class PLCEngine:
             varname = block.get("varname", "backup0")
             bktype  = block.get("bktype", "float")
             default = block.get("default", False if bktype == "bool" else 0.0)
-            val_ref = block.get("val_ref")
+            # FIX: accepter val_in (généré par block_editor) ET val_ref (ancien nom)
+            val_ref = block.get("val_ref") or block.get("val_in")
             val_out = block.get("val_out")
             if not hasattr(self, 'av_vars'): self.av_vars = {}
-            if not hasattr(self, 'dv_vars'): self.dv_vars = {}
-            store = self.dv_vars if bktype == "bool" else self.av_vars
-            if varname not in store:
-                with self._lock: store[varname] = bool(default) if bktype == "bool" else float(default)
+            bk_key = f"_bk_{varname}"   # préfixe pour éviter collision avec AV normaux
+            if bk_key not in self.av_vars:
+                with self._lock:
+                    self.av_vars[bk_key] = 1.0 if (bktype=="bool" and bool(default)) else float(bool(default) if bktype=="bool" else default)
             if bktype == "bool":
                 if val_ref is not None:
                     nv = bool(self.read_signal(val_ref))
-                    if nv != self.dv_vars.get(varname):
-                        with self._lock: self.dv_vars[varname] = nv
-                current = bool(self.dv_vars.get(varname, bool(default)))
+                    nv_f = 1.0 if nv else 0.0
+                    if abs(nv_f - self.av_vars.get(bk_key, 0.0)) > 0.5:
+                        with self._lock: self.av_vars[bk_key] = nv_f
+                        self._save_av_vars()
+                current = self.av_vars.get(bk_key, 0.0) >= 0.5
+                # Écrire vers val_out si explicitement câblé
                 if val_out is not None: self.write_bool_out(val_out, current)
+                # FIX: aussi synchroniser dv_vars avec la valeur restaurée
+                # → les blocs DV (Interrupteur) lisent leur état depuis dv_vars
+                if val_ref is not None and isinstance(val_ref, str):
+                    ref_lc = val_ref.lower()
+                    if not ref_lc.startswith("m") and not ref_lc.startswith("rf"):
+                        with self._lock:
+                            if not hasattr(self, 'dv_vars'): self.dv_vars = {}
+                            self.dv_vars[ref_lc] = current
             else:
                 if val_ref is not None:
                     nv = self.read_analog(val_ref)
-                    old_v = float(self.av_vars.get(varname, float(default)))
+                    old_v = self.av_vars.get(bk_key, float(default))
                     if abs(nv - old_v) > 1e-9:
-                        with self._lock: self.av_vars[varname] = nv
-                current = float(self.av_vars.get(varname, float(default)))
+                        with self._lock: self.av_vars[bk_key] = nv
+                        self._save_av_vars()
+                current = self.av_vars.get(bk_key, float(default))
                 if val_out is not None:
                     if isinstance(val_out, str) and val_out.startswith("RF"):
                         self.write_register(val_out, current)
                     elif isinstance(val_out, str):
-                        with self._lock: self.av_vars[val_out] = current
+                        with self._lock: self.av_vars[val_out.lower()] = current
+                # FIX: si val_ref est un nom d'AV, restaurer sa valeur dans av_vars
+                # → les blocs AV lisent leur valeur depuis av_vars
+                if val_ref is not None and isinstance(val_ref, str):
+                    ref_lc = val_ref.lower()
+                    if not ref_lc.startswith("rf") and not ref_lc.startswith("m"):
+                        with self._lock:
+                            self.av_vars[ref_lc] = current
         elif btype == "stoap":
             cond = self.eval_cond(block.get("condition", {"type":"input","ref":True}))
             if cond:
@@ -1636,23 +1800,168 @@ class PLCEngine:
             if dst: self.write_register(dst, val)
 
     # ── CArithm ────────────────────────────────────────────────────────────
+
+        elif btype == "boolean":
+            # ── Table de vérité programmable ──────────────────────────────────
+            n_in      = int(block.get("n_in", 4))
+            n_out     = int(block.get("n_out", 1))
+            tt        = block.get("truth_table") or []
+            invert_o1 = bool(block.get("invert_o1", False))
+            invert_o2 = bool(block.get("invert_o2", False))
+            inputs = []
+            for i in range(1, n_in + 1):
+                ref = block.get(f"in{i}_ref")
+                inputs.append(bool(self.read_signal(ref)) if ref is not None else False)
+            row_idx = sum(int(v) << i for i, v in enumerate(inputs))
+            row = tt[row_idx] if row_idx < len(tt) else [0] * n_out
+            o1 = bool(row[0]) if len(row) > 0 else False
+            o2 = bool(row[1]) if len(row) > 1 else False
+            if invert_o1: o1 = not o1
+            if invert_o2: o2 = not o2
+            out1 = block.get("out1_ref")
+            out2 = block.get("out2_ref")
+            if out1 is not None: self.write_bool_out(out1, o1)
+            if out2 is not None and n_out >= 2: self.write_bool_out(out2, o2)
+
+        elif btype == "prog_h":
+            # ── Planning horaire hebdomadaire ──────────────────────────────────
+            import datetime as _dt
+            sp_jour    = float(block.get("sp_jour", 20.0))
+            sp_nuit    = float(block.get("sp_nuit", 17.0))
+            sp_vac     = float(block.get("sp_vac",  15.0))
+            reg_sp     = block.get("reg_sp",     "RF5")
+            out_jour   = block.get("out_jour",   "")
+            out_vac_dv = block.get("out_vac_dv", "")
+            out_actif  = block.get("out_actif",  "")
+            vac_input  = self.eval_cond(block.get("cond_vac"),  default_if_none=False)
+            en         = self.eval_cond(block.get("condition"), default_if_none=True)
+            now        = _dt.datetime.now()
+            weekday    = now.weekday()
+            now_min    = now.hour * 60 + now.minute
+            hebdo      = block.get("hebdo_mode", False)
+
+            def _in_range(h_deb, m_deb, h_fin, m_fin):
+                deb = int(h_deb) * 60 + int(m_deb)
+                fin = int(h_fin) * 60 + int(m_fin)
+                if deb == fin: return False
+                if deb <= fin: return deb <= now_min < fin
+                return now_min >= deb or now_min < fin
+
+            if hebdo:
+                day_cfg    = block.get(f"d{weekday}", {})
+                day_active = bool(day_cfg.get("active", True))
+                if day_active:
+                    h_deb = day_cfg.get("h_deb", block.get("h_debut_j", 6))
+                    m_deb = day_cfg.get("m_deb", block.get("m_debut_j", 30))
+                    h_fin = day_cfg.get("h_fin", block.get("h_fin_j",   22))
+                    m_fin = day_cfg.get("m_fin", block.get("m_fin_j",    0))
+                    sp_j  = float(day_cfg.get("sp_jour", sp_jour))
+                    sp_n  = float(day_cfg.get("sp_nuit", sp_nuit))
+                    is_jour = _in_range(h_deb, m_deb, h_fin, m_fin)
+                else:
+                    is_jour = False; sp_j, sp_n = sp_jour, sp_nuit
+            else:
+                is_jour    = _in_range(block.get("h_debut_j",6),  block.get("m_debut_j",30),
+                                       block.get("h_fin_j",22), block.get("m_fin_j",0))
+                day_active = True; sp_j, sp_n = sp_jour, sp_nuit
+
+            if not en:       sp_act = sp_n; is_jour = False; vac_input = False
+            elif vac_input:  sp_act = sp_vac
+            elif is_jour:    sp_act = sp_j
+            else:            sp_act = sp_n
+
+            if reg_sp:     self.write_register(reg_sp, sp_act)
+            if out_jour:   self.write_bool_out(out_jour,   is_jour and not vac_input and en)
+            if out_vac_dv: self.write_bool_out(out_vac_dv, vac_input)
+            if out_actif:  self.write_bool_out(out_actif,  day_active and en and not vac_input)
+
+        # ── Bloc entrée numérique GPIO ────────────────────────────────────────
+        elif btype == "input":
+            pin = block.get("pin")
+            if pin is not None:
+                pin = int(pin)
+                val_bool = self.gpio.get(pin, {}).get("value", False)
+                reg_out_i = block.get("reg_out")
+                if reg_out_i and str(reg_out_i).startswith("RF"):
+                    self.write_register(reg_out_i, 1.0 if val_bool else 0.0)
+
+        # ── Bloc sortie numérique GPIO ────────────────────────────────────────
+        elif btype == "output":
+            pin = block.get("pin")
+            val_ref = block.get("val_ref")
+            if pin is not None and val_ref is not None:
+                pin = int(pin)
+                # ── Forçage manuel : ne pas écraser la valeur forcée ──────
+                if pin in self._gpio_force:
+                    self.write_bool_out(pin, self._gpio_force[pin])
+                    return
+                if isinstance(val_ref, str) and val_ref.startswith("RF"):
+                    drv = self.registers.get(val_ref, 0.0) >= 0.5
+                else:
+                    drv = bool(self.read_signal(val_ref))
+                self.write_bool_out(pin, drv)
+
+        # ── PAGE_OUT : publie la valeur sur le bus inter-pages ────────────────
+        # page_in / page_out supprimés — remplacés par les blocs CONN
+
+        # ── CONN : connecteur numéroté — propage le signal entre blocs ──────────
+        elif btype == "conn":
+            reg_in_c  = block.get("reg_in")
+            reg_out_c = block.get("reg_out")
+            num_c     = block.get("num", block.get("params", {}).get("num"))
+            if reg_in_c and str(reg_in_c).startswith("RF"):
+                # Ce CONN reçoit un fil → stocker dans page_signals[num]
+                val_c = self.registers.get(reg_in_c, 0.0)
+                if not hasattr(self, 'page_signals'): self.page_signals = {}
+                with self._lock:
+                    self.page_signals[f"__conn_{num_c}"] = val_c
+            elif reg_out_c and str(reg_out_c).startswith("RF"):
+                # Ce CONN émet → lire depuis page_signals[num]
+                if not hasattr(self, 'page_signals'): self.page_signals = {}
+                val_c = self.page_signals.get(f"__conn_{num_c}", 0.0)
+                self.write_register(reg_out_c, val_c)
+
+        # ── CONN_TX ──────────────────────────────────────────────────────────
+        elif btype == "conn_tx":
+            reg_in_c = block.get("reg_in")
+            num_c = block.get("num", block.get("params", {}).get("num"))
+            if not hasattr(self, "page_signals"): self.page_signals = {}
+            if reg_in_c and str(reg_in_c).startswith("RF") and num_c is not None:
+                with self._lock:
+                    self.page_signals[f"__conn_{num_c}"] = self.registers.get(reg_in_c, 0.0)
+
+        # ── CONN_RX ──────────────────────────────────────────────────────────
+        elif btype == "conn_rx":
+            reg_out_c = block.get("reg_out")
+            num_c = block.get("num", block.get("params", {}).get("num"))
+            if not hasattr(self, "page_signals"): self.page_signals = {}
+            if reg_out_c and str(reg_out_c).startswith("RF") and num_c is not None:
+                self.write_register(reg_out_c, self.page_signals.get(f"__conn_{num_c}", 0.0))
+
     def _exec_carithm(self, block: dict, dt_ms: float):
         import re as _re
         code = block.get("code","").strip()
         if not code: return
 
+        _n_a = max(8, int(block.get("n_a", 8)))  # FIX: supporte A1..A16
+        _n_d = max(8, int(block.get("n_d", 8)))  # FIX: supporte d1..d16
         ctx = {}
-        for i in range(1,9):
+        for i in range(1, _n_a + 1):
             ref = block.get(f"a{i}_ref", f"ANA{i-1}")
             ctx[f"A{i}"] = self.read_analog(ref)
-        for i in range(1,8):
+        for i in range(1,17):  # FIX: était range(1,8), supporte d1..d16
             ref = block.get(f"d{i}_ref")
-            ctx[f"d{i}"] = self.read_signal(ref) if ref else False
+            if ref:
+                ctx[f"d{i}"] = self.read_signal(ref)
+            else:
+                # FIX : fallback sur a{i}_ref si fil logique câblé sur port A
+                a_ref = block.get(f"a{i}_ref")
+                ctx[f"d{i}"] = (self.read_analog(a_ref) != 0.0) if a_ref else False
         for i in range(1,3):
             ref = block.get(f"i{i}_ref", f"RF{12+i}")
             ctx[f"I{i}"] = int(self.read_analog(ref))
-        for i in range(1,9): ctx[f"OA{i}"] = 0.0
-        for i in range(1,9): ctx[f"od{i}"] = 0
+        for i in range(1, _n_a + 1): ctx[f"OA{i}"] = 0.0
+        for i in range(1, _n_d + 1): ctx[f"od{i}"] = 0
         ctx["OI1"] = 0
 
         def _c2py(src):
@@ -1703,13 +2012,15 @@ class PLCEngine:
 
         ctx = {
             **{f"A{i}": self.read_analog(block.get(f"a{i}_ref", f"ANA{i-1}"))
-               for i in range(1, 9)},
-            **{f"d{i}": bool(self.read_signal(block.get(f"d{i}_ref")) if block.get(f"d{i}_ref") else False)
-               for i in range(1, 9)},
+               for i in range(1, max(8,int(block.get("n_a",8))) + 1)},
+            **{f"d{i}": (
+                bool(self.read_signal(block.get(f"d{i}_ref"))) if block.get(f"d{i}_ref")
+                else ((self.read_analog(block.get(f"a{i}_ref")) != 0.0) if block.get(f"a{i}_ref") else False)
+               ) for i in range(1, 17)},  # FIX: était range(1,9), supporte maintenant d1..d16
             **{f"I{i}": int(self.read_analog(block.get(f"i{i}_ref", f"RF{12+i}")))
                for i in range(1, 3)},
-            **{f"OA{i}": 0.0 for i in range(1, 9)},
-            **{f"od{i}": False for i in range(1, 9)},
+            **{f"OA{i}": 0.0 for i in range(1, max(8,int(block.get("n_a",8))) + 1)},
+            **{f"od{i}": False for i in range(1, max(8,int(block.get("n_d",8))) + 1)},
             "OI1": 0,
             "dt": dt_ms / 1000.0,
             "cycle": getattr(self, 'cycle_count', 0),
@@ -1740,7 +2051,12 @@ class PLCEngine:
             if ref: self.write_register(ref, float(ctx.get(f"OA{i}", 0.0)))
         for i in range(1, n_od + 1):
             ref = block.get(f"od{i}_ref")
-            if ref: self.write_signal(ref, bool(ctx.get(f"od{i}", False)))
+            val_od = bool(ctx.get(f"od{i}", False))
+            if ref: self.write_signal(ref, val_od)
+            # FIX: écrire aussi le GPIO si od{i}_gpio défini (od câblé vers OUTPUT et RUNTIMCNT)
+            gpio_od = block.get(f"od{i}_gpio")
+            if gpio_od is not None:
+                self.write_signal(int(gpio_od), val_od)
         if n_oi >= 1:
             oi_ref = block.get("oi1_ref")
             if oi_ref: self.write_register(oi_ref, float(ctx.get("OI1", 0)))
@@ -1781,6 +2097,65 @@ class PLCEngine:
                         self.db.insert(readings); self._last_db = t0
 
                 with self._lock: prog = list(self.program)
+                # Tri priorité d'exécution : sources → calculs → sorties
+                _PRIO = {
+                    'sensor':0,'pt_in':0,'ana_in':0,'av':0,'dv':0,'backup':0,'stoav':0,
+                    'and':1,'or':1,'not':1,'xor':1,'inv':1,'nand':1,'nor':1,
+                    'add':2,'sub':2,'mul':2,'div':2,'abs':2,'sqrt':2,
+                    'min':2,'max':2,'mod':2,'pow':2,'clamp':2,'scale':2,
+                    'filt1':2,'avg':2,'integ':2,'deriv':2,'deadb':2,'ramp':2,
+                    'pid':3,'plancher':3,'regulech':3,'chaudiere':3,
+                    'pyblock':3,'carithm':3,'solaire':3,'zone':3,'ecs':3,
+                    'compare_f':4,'comph':4,'compl':4,'hyst':4,'compare_i':4,
+                    'coil':5,'set':5,'reset':5,'timer':5,'counter':5,
+                    'ctud':5,'runtimcnt':5,'runtimecnt':5,
+                    'prog_h':5,'output':5,
+                    'conn':6,'conn_tx':6,'conn_rx':6,'backup_out':6,
+                    # Blocs logiques : priorité 1 (avant les métiers)
+                    'and':1,'or':1,'not':1,'xor':1,'inv':1,'nand':1,'nor':1,
+                }
+                prog.sort(key=lambda b: _PRIO.get((b.get('type') or '').lower(), 3))
+                # ── Topo-sort pour CARITHM/PYBLOCK enchaînés (même prio=3) ──
+                _CHAIN_T = {'carithm','pyblock','pid','plancher','regulech','chaudiere','solaire','zone','ecs'}
+                try:
+                    _rf_writer = {}
+                    _rf_readers = {}
+                    for _b in prog:
+                        _bt = (_b.get('type') or '').lower()
+                        if _bt not in _CHAIN_T: continue
+                        for _k in ('od1_ref','od2_ref','od3_ref','od4_ref',
+                                   'oa1_ref','oa2_ref','oa3_ref','oa4_ref','reg_out'):
+                            _rf = _b.get(_k)
+                            if _rf: _rf_writer[_rf] = _b['id']
+                        for _k in ('d1_ref','d2_ref','d3_ref','d4_ref',
+                                   'a1_ref','a2_ref','a3_ref','a4_ref'):
+                            _rf = _b.get(_k)
+                            if _rf: _rf_readers.setdefault(_rf,[]).append(_b['id'])
+                    _bid_map = {_b['id']:_b for _b in prog}
+                    _deps = {_b['id']:set() for _b in prog}
+                    for _rf, _readers in _rf_readers.items():
+                        _writer = _rf_writer.get(_rf)
+                        if _writer:
+                            for _r in _readers:
+                                if _r != _writer and _r in _deps:
+                                    _deps[_r].add(_writer)
+                    _p3 = [_b['id'] for _b in prog if _PRIO.get((_b.get('type') or '').lower(),3)==3]
+                    _p3s = set(_p3)
+                    _indeg = {_bid: len(_deps[_bid] & _p3s) for _bid in _p3}
+                    from collections import deque as _dq
+                    _q = _dq(b for b in _p3 if _indeg[b]==0)
+                    _s3 = []
+                    while _q:
+                        _cur = _q.popleft(); _s3.append(_cur)
+                        for _o in _p3:
+                            if _cur in _deps[_o]:
+                                _indeg[_o] -= 1
+                                if _indeg[_o] == 0: _q.append(_o)
+                    if len(_s3) == len(_p3):
+                        _it = iter([_bid_map[b] for b in _s3])
+                        prog = [next(_it) if _b['id'] in _p3s else _b for _b in prog]
+                except Exception:
+                    pass
                 for block in prog: self.exec_block(block, dt_ms)
 
                 self.cycle_count += 1; self.error = ""; self._last_scan = time.monotonic()
@@ -1807,8 +2182,9 @@ class PLCEngine:
 
     def start(self):
         if self._running: return
-        self._load_av_vars()   # Restaurer les consignes opérateur au démarrage
-        self._load_dv_vars()   # Restaurer les variables DV au démarrage
+        self._load_av_vars()          # Restaurer les consignes opérateur
+        self._load_dv_vars()          # Restaurer les variables DV
+        self._load_pyblock_states()   # Restaurer compteurs/timers PYBLOCK
         self._running = True; self._last_scan = time.monotonic()
         self._thread  = threading.Thread(target=self._scan_loop, daemon=True, name="plc-scan")
         self._thread.start()
@@ -1818,6 +2194,37 @@ class PLCEngine:
     def stop(self):
         self._running = False
         if self._thread: self._thread.join(timeout=2)
+        self._save_pyblock_states()   # Sauvegarde compteurs à l'arrêt propre
+        log.info("[STATE] PYBLOCK states sauvegardés à l'arrêt")
+
+    def _load_pyblock_states(self):
+        """Restaure l'état des PYBLOCK depuis le disque.
+        Permet aux compteurs de marche (cpt_sol, cpt_ch, cpt) de
+        survivre aux redémarrages du service rpi-plc.
+        """
+        try:
+            p = PYBLOCK_STATE_FILE
+            if p.exists():
+                data = json.load(open(p))
+                if not hasattr(self, '_pyblock_states'):
+                    self._pyblock_states = {}
+                for bid, st in data.items():
+                    self._pyblock_states[bid] = st
+                log.info(f"[STATE] PYBLOCK states restaurés ({len(data)} blocs)")
+        except Exception as e:
+            log.warning(f"[STATE] Chargement pyblock_states.json : {e}")
+
+    def _save_pyblock_states(self):
+        """Sauvegarde l'état courant des PYBLOCK sur disque.
+        Appelé toutes les 60 s depuis _scan_loop et à l'arrêt propre.
+        """
+        try:
+            if not hasattr(self, '_pyblock_states'):
+                return
+            json.dump(self._pyblock_states,
+                      open(PYBLOCK_STATE_FILE, 'w'), indent=2, default=str)
+        except Exception as e:
+            log.warning(f"[STATE] Sauvegarde pyblock_states : {e}")
 
     def load_program(self, blocks):
         with self._lock:
@@ -1864,56 +2271,164 @@ class PLCEngine:
         return []
 
 
-def flatten_blocks(blocks: list) -> list:
-    """Aplatit récursivement les blocs GROUP dans un programme linéaire.
+def flatten_blocks(blocks_or_program) -> list:
+    """Compilation complète du programme FBD multi-pages → liste plate de blocs câblés.
 
-    Un bloc GROUP encapsule ses blocs internes dans params._inner_blocks (JSON).
-    Les blocs GROUP_IN / GROUP_OUT sont des connecteurs de port internes et ne
-    génèrent aucun code moteur — ils sont supprimés lors de l'aplatissement.
-    Les fils qui traversaient la frontière du groupe sont reconnectés directement.
+    Gère trois formats d'entrée :
+      • dict multi-pages  {"pages":[{"blocks":[], "wires":[], "name":"…"}]}
+      • list plate        [block, …]   (ancien format ou déjà compilé)
 
-    Appelé automatiquement au chargement du programme (boot, POST /api/program,
-    restauration sauvegarde) pour garantir la compatibilité avec les programmes
-    contenant des groupes créés dans l'éditeur FBD.
+    Étapes :
+      1. Extraction des blocs depuis les pages (multi-pages)
+      2. Hoist des params : block["params"]["x"] → block["x"] (sans écraser l'existant)
+      3. Compilation des fils (wires) : assigne des registres RF100+ uniques à chaque
+         connexion pour que les blocs en aval puissent lire la valeur produite en amont.
+      4. Aplatissement des GROUP récursif (blocs imbriqués dans l'éditeur FBD)
     """
     import copy as _copy
 
-    def _flatten_once(blk_list):
-        """Un seul passage — retourne (nouvelle_liste, changed)."""
-        result  = []
-        changed = False
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _hoist(blk):
+        """Remonte les clés de block["params"] au niveau racine (non destructif)."""
+        b = _copy.copy(blk)
+        p = b.get("params")
+        if isinstance(p, dict):
+            for k, v in p.items():
+                if k != "_inner_blocks" and k not in b:
+                    b[k] = v
+        return b
+
+    def _flatten_groups_once(blk_list):
+        """Un passage d'aplatissement des blocs GROUP — retourne (liste, changed)."""
+        result, changed = [], False
         for b in blk_list:
             if b.get("type") != "GROUP":
-                result.append(b)
-                continue
+                result.append(b); continue
             changed = True
-            inner_raw = b.get("params", {}).get("_inner_blocks")
-            if not inner_raw:
-                continue   # groupe vide — on le retire
+            inner_raw = (b.get("params") or {}).get("_inner_blocks") or b.get("_inner_blocks")
+            if not inner_raw: continue
             try:
                 saved = json.loads(inner_raw)
+                inner_all = saved.get("blocks", [])
+                result.extend([_hoist(_copy.deepcopy(ib)) for ib in inner_all
+                                if ib.get("type") not in ("GROUP_IN", "GROUP_OUT")])
             except Exception:
-                result.append(b)   # JSON corrompu — garder tel quel
-                continue
-            inner_all   = saved.get("blocks", [])
-            inner_wires = saved.get("wires",  [])
-            gin_ids  = {ib["id"] for ib in inner_all if ib.get("type") == "GROUP_IN"}
-            gout_ids = {ib["id"] for ib in inner_all if ib.get("type") == "GROUP_OUT"}
-            real_blks = [_copy.deepcopy(ib) for ib in inner_all
-                         if ib.get("type") not in ("GROUP_IN", "GROUP_OUT")]
-            # Seuls les blocs réels sont ajoutés — les ports GROUP_IN/OUT n'ont
-            # aucune signification dans le moteur PLC linéaire.
-            result.extend(real_blks)
+                result.append(b)
         return result, changed
 
-    flat = list(blocks)
-    for _ in range(32):   # limite de sécurité pour les imbrications profondes
-        flat, changed = _flatten_once(flat)
-        if not changed:
+    # Attribut source du bloc selon le port de sortie câblé
+    def _src_attr(btype, port):
+        port = port.upper()
+        if port in ("VAL", "OUT", "SIG"):   return "reg_out"
+        if port == "HOUR":                  return "reg_hour"
+        if port == "WDAY":                  return "reg_wday"
+        if port.startswith("OA"):           return f"oa{port[2:]}_ref"
+        if port.startswith("OD"):           return f"od{port[2:]}_ref"
+        return "reg_out"
+
+    # Attribut destination du bloc selon le port d'entrée câblé
+    def _dst_attr(btype, port):
+        port = port.upper(); btype = btype.lower()
+        if port == "IN1":                   return "reg_a"
+        if port == "IN2":                   return "reg_b"
+        if port == "IN" and btype == "conn":  return "reg_in"
+        if port == "VAL":
+            if btype in ("backup",):        return "val_ref"
+            if btype == "output":           return "val_ref"
+            return "reg_a"
+        if port.startswith("A") and port[1:].isdigit(): return f"a{port[1:]}_ref"
+        if port.startswith("D") and port[1:].isdigit(): return f"d{port[1:]}_ref"
+        if port.startswith("I") and port[1:].isdigit(): return f"i{port[1:]}_ref"
+        return None
+
+    # ── 0. Normaliser l'entrée en liste de pages ──────────────────────────────
+    if isinstance(blocks_or_program, dict) and "pages" in blocks_or_program:
+        pages = blocks_or_program["pages"]
+        log.info(f"flatten_blocks : format multi-pages ({len(pages)} pages)")
+    elif isinstance(blocks_or_program, list):
+        pages = [{"blocks": blocks_or_program, "wires": [], "name": "flat"}]
+    else:
+        log.warning("flatten_blocks : format inconnu")
+        return []
+
+    # ── 1. Hoist params + construire dict blockId → block (mutable) ──────────
+    all_blocks = {}  # id → block (référence mutable, partagée)
+    for pg in pages:
+        for b in pg.get("blocks", []):
+            all_blocks[b["id"]] = _hoist(b)
+
+    # ── 2. Compiler les fils page par page ────────────────────────────────────
+    # FIX CRITIQUE : démarrer le compteur RF après le plus grand RF déjà utilisé
+    # dans les params des blocs pour éviter les collisions
+    _max_rf_used = 99
+    for b in all_blocks.values():
+        for v in list(b.values()) + list((b.get("params") or {}).values()):
+            if isinstance(v, str) and v.startswith("RF"):
+                try: _max_rf_used = max(_max_rf_used, int(v[2:]))
+                except ValueError: pass
+    _rf_counter = [_max_rf_used + 1]
+    log.info(f"flatten_blocks : RF counter démarre à RF{_rf_counter[0]} (max utilisé: RF{_max_rf_used})")
+
+    def _new_rf():
+        r = f"RF{_rf_counter[0]}"; _rf_counter[0] += 1; return r
+
+    for pg in pages:
+        wires = pg.get("wires", [])
+        if not wires:
+            continue
+        # Cache type par blockId pour cette page
+        bid2type = {b["id"]: b.get("type", "").lower() for b in pg.get("blocks", [])}
+
+        for wire in wires:
+            src = wire.get("src", {}); dst = wire.get("dst", {})
+            sbid = src.get("bid");     sport = src.get("port", "")
+            dbid = dst.get("bid");     dport = dst.get("port", "")
+            if not sbid or not dbid: continue
+            sb = all_blocks.get(sbid); db = all_blocks.get(dbid)
+            if not sb or not db: continue
+
+            sbtype = bid2type.get(sbid, sb.get("type", "")).lower()
+            dbtype = bid2type.get(dbid, db.get("type", "")).lower()
+
+            # ── Cas spécial PYBLOCK.od → OUTPUT.VAL : câblage GPIO direct ──
+            if sbtype == "pyblock" and dport.upper() == "VAL" and dbtype == "output":
+                pin = db.get("pin")
+                if pin is not None:
+                    sa = _src_attr(sbtype, sport)
+                    if sa and not (str(sb.get(sa, "")).startswith("RF")):
+                        sb[sa] = int(pin)
+                continue  # pas de registre intermédiaire nécessaire
+
+            # ── Cas général : registre RF intermédiaire ─────────────────────
+            sa = _src_attr(sbtype, sport)
+            da = _dst_attr(dbtype, dport)
+
+            # Réutiliser le RF existant si le port source est déjà assigné (fan-out)
+            existing = sb.get(sa) if sa else None
+            if existing and isinstance(existing, str) and existing.startswith("RF") \
+                    and int(existing[2:]) >= 100:
+                rf = existing   # fan-out : plusieurs destinations, même registre
+            else:
+                rf = _new_rf()
+                if sa:
+                    sb[sa] = rf
+
+            if da:
+                db[da] = rf
+
+    # ── 3. Aplatir les blocs GROUP récursivement ──────────────────────────────
+    flat = [_hoist(b) for b in all_blocks.values()]
+    for _ in range(32):
+        flat, changed = _flatten_groups_once(flat)
+        if changed:
+            flat = [_hoist(b) for b in flat]
+        else:
             break
-    if flat != list(blocks):
-        log.info(f"flatten_blocks : {len(blocks)} → {len(flat)} blocs (groupes aplatis)")
+
+    log.info(f"flatten_blocks : {len(flat)} blocs compilés (fils câblés, params hoistés)")
     return flat
+
 
 
 def load_config():
@@ -1983,6 +2498,23 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
     make_auth_middleware(app, engine.config)
     sio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
+    # ── CORS ──────────────────────────────────────────────────────────
+    @app.after_request
+    def _cors(response):
+        response.headers["Access-Control-Allow-Origin"]  = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return response
+
+    @app.route("/testeur")
+    def _testeur():
+        import pathlib as _pl
+        p = _pl.Path(__file__).parent / "testeur_plc.html"
+        if p.exists():
+            from flask import Response
+            return Response(p.read_text(encoding="utf-8"), mimetype="text/html")
+        return "testeur_plc.html absent", 404
+
     def on_plc_update(s):
         # Appliquer la calibration aux températures avant émission
         if calibration:
@@ -2045,14 +2577,31 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
     @app.route("/api/program", methods=["GET"])
     def api_get_prog(): return jsonify(engine.program)
 
+    @app.route("/api/fbd_diagram", methods=["GET"])
+    def api_get_fbd():
+        """Retourne le diagramme FBD brut (pages + wires) pour re-téléchargement depuis le Studio."""
+        fbd_path = BASE_DIR / "fbd_diagram.json"
+        if fbd_path.exists():
+            try: return jsonify(json.loads(fbd_path.read_text()))
+            except Exception: pass
+        return jsonify({}), 404
+
     @app.route("/api/program", methods=["POST"])
     def api_set_prog():
         prog = request.json
-        if not isinstance(prog, list): return jsonify({"error":"Liste attendue"}), 400
+        # Accepte une liste plate OU un dict multi-pages {"pages":[{"blocks":[],"wires":[]}]}
+        if not isinstance(prog, (list, dict)):
+            return jsonify({"error": "Format invalide (list ou dict pages attendu)"}), 400
+        # Sauvegarder le diagramme FBD brut (pour re-téléchargement fidèle)
+        if isinstance(prog, dict) and "pages" in prog:
+            try:
+                fbd_path = BASE_DIR / "fbd_diagram.json"
+                fbd_path.write_text(json.dumps(prog, indent=2, ensure_ascii=False))
+            except Exception: pass
         prog = flatten_blocks(prog)
         engine.load_program(prog); engine.save_program()
         if not engine._running: engine.start()
-        return jsonify({"ok":True,"blocks":len(prog)})
+        return jsonify({"ok": True, "blocks": len(prog)})
 
     @app.route("/api/plc/start",     methods=["POST"])
     def api_start(): engine.start(); return jsonify({"ok":True})
@@ -2071,20 +2620,33 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         d = request.json or {}
         pin = int(d.get("pin", 0))
         val = bool(int(d.get("value", 0)))
-        # Écrire le GPIO physique
+
+        # ── Gestion du forçage : stocker pour que le cycle PLC ne l'écrase pas
+        if val:
+            engine._gpio_force[pin] = True
+        else:
+            engine._gpio_force.pop(pin, None)
+
+        # Écrire le GPIO physique immédiatement
         engine.write_signal(pin, val)
+
         # Mettre à jour aussi les DV liées à ce pin
-        # pour éviter que le scan cycle n'écrase la commande manuelle
         for block in engine.program:
             if block.get('type') == 'dv' and block.get('output') == pin:
                 vn = block.get('varname', '').lower()
+                if val:
+                    engine._dv_force[vn] = True
+                else:
+                    engine._dv_force.pop(vn, None)
                 with engine._lock:
                     engine.dv_vars[vn] = val
                 if hasattr(engine, '_dv_prev'):
                     engine._dv_prev[block.get('id','')] = val
                 engine._save_dv_vars()
-                log.info(f"GPIO {pin} → DV '{vn}' = {val} (commande manuelle SCADA)")
-        return jsonify({"ok": True, "pin": pin, "value": val})
+                log.info(f"GPIO {pin} → DV '{vn}' = {val} (forçage manuel SCADA)")
+
+        forced = pin in engine._gpio_force
+        return jsonify({"ok": True, "pin": pin, "value": val, "forced": forced})
 
     @app.route("/api/gpio/scan", methods=["POST"])
     def api_gpio_scan():
@@ -2137,6 +2699,22 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         return jsonify({"ok": False, "error": "GPIO non disponible"})
 
     @app.route("/api/gpio/status")
+    @app.route("/api/gpio/force_clear", methods=["POST"])
+    def api_gpio_force_clear():
+        """Libère tous les forçages manuels GPIO et DV."""
+        engine._gpio_force.clear()
+        engine._dv_force.clear()
+        log.info("Tous les forçages GPIO/DV libérés")
+        return jsonify({"ok": True, "msg": "Tous les forçages libérés"})
+
+    @app.route("/api/gpio/forces")
+    def api_gpio_forces():
+        """Retourne la liste des pins/DV actuellement forcés."""
+        return jsonify({
+            "gpio_forced": {str(k): v for k,v in engine._gpio_force.items()},
+            "dv_forced":   dict(engine._dv_force)
+        })
+
     def api_gpio_status():
         """Lit l'état réel de tous les GPIO via gpiod."""
         result = {}
@@ -2266,6 +2844,9 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
     @app.route("/regulech")
     def regulech(): return render_template("synoptique_regulech.html")
 
+    @app.route("/maison")
+    def maison(): return render_template("synoptique_maison.html")
+
     @app.route("/manifest.json")
     def manifest():
         from flask import send_from_directory
@@ -2334,9 +2915,16 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         bid     = (request.json or {}).get("id","")
         program = backup.restore(bid) if backup else None
         if program is not None:
+            # FIX: sauvegarder l'état ACTUEL avant d'écraser → snapshot pré-restauration
+            if backup and engine.program:
+                try:
+                    backup.save(engine.program, label=f"Avant restauration → {bid}")
+                    log.info(f"Snapshot pré-restauration créé avant restauration {bid}")
+                except Exception as e:
+                    log.warning(f"Snapshot pré-restauration échoué: {e}")
             program = flatten_blocks(program)
             engine.load_program(program)
-            engine.save_program()
+            engine.save_program()   # écrase programme.json actif
             return jsonify({"ok": True, "blocks": len(program)})
         return jsonify({"ok": False, "error": "Sauvegarde introuvable"}), 404
 
@@ -2374,11 +2962,17 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
             import requests as _req
 
             # Auto-decouverte du chat_id via getUpdates si absent
+            # FIX Bug3 : utiliser get_updates_for_test() pour éviter le conflit
+            # 409 Conflict avec le thread de polling long-poll du bot.
             if not _chat_ids:
                 try:
-                    upd = _req.get(
-                        "https://api.telegram.org/bot" + _token + "/getUpdates",
-                        timeout=8).json()
+                    if bot and hasattr(bot, "get_updates_for_test"):
+                        updates_list = bot.get_updates_for_test()
+                        upd = {"result": updates_list}
+                    else:
+                        upd = _req.get(
+                            "https://api.telegram.org/bot" + _token + "/getUpdates",
+                            timeout=8).json()
                     found = []
                     for u in upd.get("result", []):
                         cid = str(u.get("message", {}).get("chat", {}).get("id", ""))
@@ -2434,6 +3028,194 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
             log.error("api_telegram_test: " + str(top_e), exc_info=True)
             return jsonify({"ok": False, "error": "Erreur interne: " + str(top_e)})
 
+    @app.route("/api/telegram/diagnose", methods=["GET"])
+    def api_telegram_diagnose():
+        """
+        Diagnostic complet Telegram accessible depuis le navigateur :
+        GET http://<rpi_ip>:<port>/api/telegram/diagnose
+        Retourne l'état exact vu par les serveurs Telegram + état du thread de polling.
+        """
+        import requests as _req
+        token = getattr(bot, "token", "") if bot else ""
+        result = {
+            "bot_object":    bot is not None,
+            "bot_enabled":   getattr(bot, "enabled", False),
+            "bot_token_set": bool(token),
+            "bot_running":   getattr(bot, "_running", False),
+            "bot_thread_alive": (
+                bot._thread.is_alive() if (bot and getattr(bot, "_thread", None)) else False
+            ),
+            "bot_offset":    getattr(bot, "_offset", -1),
+            "bot_chat_ids":  getattr(bot, "chat_ids", []),
+            "bot_last_error": getattr(bot, "_last_error", None),   # ← erreur exacte du thread
+            "telegram_api":  {},
+        }
+        if token:
+            base = f"https://api.telegram.org/bot{token}"
+            try:
+                me = _req.post(f"{base}/getMe", timeout=6).json()
+                result["telegram_api"]["getMe"] = me
+            except Exception as e:
+                result["telegram_api"]["getMe"] = {"error": str(e)}
+            try:
+                wi = _req.post(f"{base}/getWebhookInfo", timeout=6).json()
+                result["telegram_api"]["getWebhookInfo"] = wi
+                wh_url = wi.get("result", {}).get("url", "")
+                result["webhook_active"] = bool(wh_url)
+                result["webhook_url"]    = wh_url
+                if wh_url:
+                    result["problem"] = (
+                        "WEBHOOK ACTIF — intercepte tous les messages. "
+                        "Solution : GET /api/telegram/fixwebhook"
+                    )
+                elif not result["bot_running"] or not result["bot_thread_alive"]:
+                    result["problem"] = (
+                        "THREAD MORT — le bot ne reçoit aucun message. "
+                        "Webhook OK, token OK, mais le thread de polling est arrêté. "
+                        "Solution : GET /api/telegram/start"
+                    )
+                    result["fix_url"] = "/api/telegram/start"
+            except Exception as e:
+                result["telegram_api"]["getWebhookInfo"] = {"error": str(e)}
+        else:
+            result["problem"] = "Token manquant"
+        return jsonify(result)
+
+    @app.route("/api/telegram/fixwebhook", methods=["POST", "GET"])
+    def api_telegram_fixwebhook():
+        """
+        Supprime le webhook Telegram de force.
+        Appeler si /api/telegram/diagnose signale webhook_active=true.
+        GET http://<rpi_ip>:<port>/api/telegram/fixwebhook
+        """
+        import requests as _req
+        token = getattr(bot, "token", "") if bot else ""
+        if not token:
+            return jsonify({"ok": False, "error": "Token manquant"})
+        base = f"https://api.telegram.org/bot{token}"
+        results = []
+        for attempt in range(1, 4):
+            try:
+                r = _req.post(f"{base}/deleteWebhook",
+                              json={"drop_pending_updates": True}, timeout=8).json()
+                results.append({"attempt": attempt, "result": r})
+                if r.get("ok"):
+                    break
+            except Exception as e:
+                results.append({"attempt": attempt, "error": str(e)})
+        # Vérification finale
+        try:
+            wi = _req.post(f"{base}/getWebhookInfo", timeout=6).json()
+            url = wi.get("result", {}).get("url", "")
+        except Exception:
+            url = "vérification échouée"
+        # Redémarrer le polling du bot
+        if bot and hasattr(bot, "restart"):
+            try:
+                cfg = engine.config.get("telegram", {})
+                bot.restart(cfg)
+                restarted = True
+            except Exception as e:
+                restarted = str(e)
+        else:
+            restarted = False
+        return jsonify({
+            "ok":               not bool(url) or url == "vérification échouée",
+            "webhook_url_after": url,
+            "webhook_cleared":  not bool(url),
+            "bot_restarted":    restarted,
+            "delete_attempts":  results,
+        })
+
+    @app.route("/api/telegram/rawtest", methods=["GET"])
+    def api_telegram_rawtest():
+        """
+        Test direct getUpdates SANS thread — isole les problèmes réseau/token.
+        GET http://<rpi_ip>:<port>/api/telegram/rawtest
+        Si ok=true ici mais bot mort → problème dans le thread.
+        Si ok=false ici → problème réseau ou token.
+        """
+        import requests as _req
+        token = getattr(bot, "token", "") if bot else ""
+        if not token:
+            return jsonify({"ok": False, "error": "Token manquant"})
+        base = f"https://api.telegram.org/bot{token}"
+        results = {}
+        # Test 1 : getMe
+        try:
+            r = _req.post(f"{base}/getMe", timeout=10).json()
+            results["getMe"] = {"ok": r.get("ok"), "username": r.get("result", {}).get("username")}
+        except Exception as e:
+            results["getMe"] = {"ok": False, "error": str(e)}
+        # Test 2 : getUpdates (timeout=0, non-bloquant)
+        try:
+            r = _req.post(f"{base}/getUpdates",
+                          json={"offset": getattr(bot, "_offset", 0),
+                                "timeout": 0,
+                                "allowed_updates": ["message"]},
+                          timeout=10).json()
+            pending = len(r.get("result", []))
+            results["getUpdates"] = {
+                "ok": r.get("ok"),
+                "pending_messages": pending,
+                "error_code": r.get("error_code"),
+                "description": r.get("description"),
+                "first_update": r.get("result", [{}])[0].get("message", {}).get("text") if r.get("result") else None,
+            }
+        except Exception as e:
+            results["getUpdates"] = {"ok": False, "error": str(e)}
+        # Test 3 : connexion réseau internet basique
+        try:
+            _req.get("https://api.telegram.org", timeout=5)
+            results["network"] = "ok"
+        except Exception as e:
+            results["network"] = f"erreur: {e}"
+        return jsonify(results)
+
+    @app.route("/api/telegram/start", methods=["GET", "POST"])
+    def api_telegram_start():
+        """
+        Démarre ou redémarre le thread de polling Telegram directement.
+        GET http://<rpi_ip>:<port>/api/telegram/start
+        Utile si bot_running=false et bot_thread_alive=false dans /diagnose.
+        """
+        if not bot:
+            return jsonify({"ok": False, "error": "Objet bot non initialisé"})
+        if not getattr(bot, "enabled", False):
+            return jsonify({"ok": False, "error": "Bot désactivé dans la config"})
+        if not getattr(bot, "token", ""):
+            return jsonify({"ok": False, "error": "Token manquant"})
+        try:
+            # Forcer l'arrêt propre de l'ancien thread s'il existe
+            was_running = getattr(bot, "_running", False)
+            was_alive   = bool(bot._thread and bot._thread.is_alive()) if hasattr(bot, "_thread") else False
+            bot._running = False
+            if hasattr(bot, "_stop_event"):
+                bot._stop_event.set()
+            # Attendre max 3s que l'ancien thread se termine
+            if hasattr(bot, "_thread") and bot._thread and bot._thread.is_alive():
+                bot._thread.join(timeout=3)
+            if hasattr(bot, "_stop_event"):
+                bot._stop_event.clear()
+            # Démarrer un nouveau thread
+            bot.start()
+            import time as _t; _t.sleep(3)  # laisser le thread démarrer (getMe prend 1-2s)
+            new_running = getattr(bot, "_running", False)
+            new_alive   = bool(bot._thread and bot._thread.is_alive()) if hasattr(bot, "_thread") else False
+            last_error  = getattr(bot, "_last_error", None)
+            return jsonify({
+                "ok":            new_running and new_alive,
+                "was_running":   was_running,
+                "was_alive":     was_alive,
+                "now_running":   new_running,
+                "now_alive":     new_alive,
+                "last_error":    last_error,
+                "message":       "Thread démarré" if (new_running and new_alive) else f"Démarrage échoué — erreur: {last_error}",
+            })
+        except Exception as e:
+            log.error(f"api_telegram_start: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": str(e)})
+
     # ── Email SMTP ──────────────────────────────────────────────────────────
     @app.route("/api/email/config", methods=["GET"])
     def api_email_config_get():
@@ -2488,9 +3270,16 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         """Met à jour la config Telegram et redémarre le bot si nécessaire."""
         d = request.json or {}
         cfg = engine.config.setdefault("telegram", {})
-        for k in ("enabled","token","chat_ids","alarm_high","alarm_low",
-                  "report_hour","report_enabled"):
+        for k in ("enabled","chat_ids","alarm_high","alarm_low",
+                  "report_hour","report_enabled",
+                  "notify_relays","notify_plc",
+                  "alarm_cooldown_s","relay_cooldown_s"):
             if k in d: cfg[k] = d[k]
+        # Token : ne jamais écraser par une valeur vide (champ masqué dans le formulaire)
+        if d.get("token"):
+            cfg["token"] = d["token"]
+        elif not cfg.get("token"):
+            log.warning("Config Telegram : token absent du formulaire ET absent de la config !")
         try:
             existing = json.loads(CONFIG_FILE.read_text()) if CONFIG_FILE.exists() else {}
             existing["telegram"] = cfg
@@ -2647,7 +3436,8 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
 
     @app.route("/synoptic")
     def synoptic_editor():
-        return render_template("synoptic.html")
+        mobile = request.args.get("mobile", "0") == "1"
+        return render_template("synoptic.html", mobile=mobile)
 
     @app.route("/api/auth/status")
     def api_auth_status():
@@ -2740,9 +3530,33 @@ def main():
     log.info("RPi-PLC opérationnel")
     while True:
         time.sleep(30)
-        s = engine.snapshot()
-        ok = sum(1 for v in s["analog"].values() if v.get("celsius") is not None)
-        log.info(f"[OK] cycle={s['cycle']} err={s['error_count']} analog={ok}/12 run={s['running']}")
+        try:
+            s  = engine.snapshot()
+            ok = sum(1 for v in s.get("analog", {}).values()
+                     if v.get("celsius") is not None)
+            # FIX : snapshot() retourne 'error' (str|None), pas 'error_count'
+            err_val = s.get("error") or "none"
+            log.info(f"[OK] cycle={s.get('cycle',0)} "
+                     f"err={err_val} "
+                     f"analog={ok}/12 run={s.get('running',False)}")
+        except Exception as e:
+            log.error(f"[main loop] snapshot erreur: {e}", exc_info=True)
+
+        # ── Watchdog bot Telegram ─────────────────────────────────────────
+        try:
+            _thread   = getattr(bot, "_thread", None)
+            _running  = getattr(bot, "_running", False)
+            _enabled  = getattr(bot, "enabled",  False)
+            _token    = getattr(bot, "token",    "")
+            thread_dead = not _running or not (_thread and _thread.is_alive())
+            if thread_dead and _enabled and _token:
+                log.warning("Watchdog : thread Telegram mort — relance automatique")
+                if hasattr(bot, '_running'):    bot._running = False
+                if hasattr(bot, '_stop_event'): bot._stop_event.clear()
+                if hasattr(bot, 'start'):       bot.start()
+                else: log.warning("Watchdog : bot.start() indisponible")
+        except Exception as we:
+            log.error(f"[main loop] watchdog bot erreur: {we}", exc_info=True)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>RPi-PLC Studio — Blocs Métier : Fonctionnement Interne</title>
+<style>
+:root {
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;--bg4:#21262d;
+  --border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+  --accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922;
+  --orange:#f0883e;--purple:#bc8cff;--cyan:#00d4ff;--teal:#39d353;
+  --r:8px;--font:'Segoe UI',system-ui,sans-serif;
+  --mono:'JetBrains Mono','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.7;display:flex;}
+nav{width:260px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);height:100vh;overflow-y:auto;padding:0 0 40px;display:flex;flex-direction:column;}
+nav::-webkit-scrollbar{width:4px;}
+nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.nav-logo{padding:16px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.nav-logo h1{font-size:14px;font-weight:800;color:var(--orange);}
+.nav-logo p{font-size:10px;color:var(--text3);margin-top:2px;}
+.nav-sec{padding:10px 14px 3px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;}
+nav a{display:block;padding:5px 14px 5px 22px;font-size:12px;color:var(--text2);text-decoration:none;border-left:2px solid transparent;transition:all .15s;line-height:1.4;}
+nav a:hover{color:var(--text);background:var(--bg3);}
+nav a.active{color:var(--accent);border-left-color:var(--accent);background:#0d1f35;}
+nav a.sub{padding-left:30px;font-size:11px;color:var(--text3);}
+main{flex:1;height:100vh;overflow-y:auto;padding:36px 48px 80px;max-width:980px;}
+h1{font-size:28px;font-weight:800;margin-bottom:8px;}
+h2{font-size:20px;font-weight:700;margin-top:48px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:10px;}
+h3{font-size:15px;font-weight:700;color:var(--accent);margin-top:24px;margin-bottom:8px;}
+h4{font-size:12px;font-weight:700;color:var(--amber);margin-top:16px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}
+p{margin-bottom:12px;}
+ul,ol{padding-left:20px;margin-bottom:12px;}
+li{margin-bottom:4px;}
+code{font-family:var(--mono);font-size:11.5px;background:var(--bg3);border:1px solid var(--border);padding:1px 5px;border-radius:3px;color:var(--cyan);}
+pre{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;overflow-x:auto;margin:12px 0;}
+pre code{background:none;border:none;padding:0;color:var(--text);font-size:12px;line-height:1.6;}
+.c{color:var(--text3);}
+.kw{color:var(--red);}
+.str{color:var(--amber);}
+.num{color:var(--purple);}
+.fn{color:var(--green);}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;}
+th{background:var(--bg3);padding:7px 10px;text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;border:1px solid var(--border);}
+td{padding:6px 10px;border:1px solid var(--border);color:var(--text);vertical-align:top;}
+td:first-child{font-family:var(--mono);font-size:11px;color:var(--cyan);white-space:nowrap;}
+tr:nth-child(even) td{background:var(--bg2);}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;}
+.b-orange{background:#2a1800;color:var(--orange);border:1px solid var(--orange)40;}
+.b-blue{background:#0d1f35;color:var(--accent);border:1px solid var(--accent)40;}
+.b-green{background:#0a2010;color:var(--green);border:1px solid var(--green)40;}
+.b-red{background:#2a0a0a;color:var(--red);border:1px solid var(--red)40;}
+.b-amber{background:#2a1f00;color:var(--amber);border:1px solid var(--amber)40;}
+.b-purple{background:#1a0a2a;color:var(--purple);border:1px solid var(--purple)40;}
+.b-cyan{background:#001a2a;color:var(--cyan);border:1px solid var(--cyan)40;}
+.flow{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;margin:14px 0;font-family:var(--mono);font-size:11.5px;line-height:2.2;}
+.flow .arrow{color:var(--text3);}
+.flow .on{color:var(--green);font-weight:700;}
+.flow .off{color:var(--red);}
+.flow .warn{color:var(--amber);font-weight:700;}
+.flow .cond{color:var(--accent);}
+.note{background:#0a1f35;border-left:3px solid var(--accent);border-radius:0 var(--r) var(--r) 0;padding:10px 14px;margin:12px 0;font-size:13px;}
+.tip{background:#0a2010;border-left:3px solid var(--green);border-radius:0 var(--r) var(--r) 0;padding:10px 14px;margin:12px 0;font-size:13px;}
+.warn{background:#2a1800;border-left:3px solid var(--amber);border-radius:0 var(--r) var(--r) 0;padding:10px 14px;margin:12px 0;font-size:13px;}
+.danger{background:#2a0a0a;border-left:3px solid var(--red);border-radius:0 var(--r) var(--r) 0;padding:10px 14px;margin:12px 0;font-size:13px;}
+.block-header{display:flex;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin:20px 0 12px;}
+.block-icon{font-size:24px;}
+.block-title{font-size:17px;font-weight:800;}
+.block-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);text-align:center;}
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-logo"><h1>🏭 Blocs Métier</h1><p>Fonctionnement interne — v3.1</p></div>
+  <div class="nav-sec">Blocs</div>
+  <a href="#plancher">♨ PLANCHER</a>
+  <a href="#pid-detail" class="sub">Algorithme PID</a>
+  <a href="#securites-plancher" class="sub">Sécurités</a>
+  <a href="#chaudiere">🔥 CHAUDIERE</a>
+  <a href="#anti-cyclage" class="sub">Anti-cyclage</a>
+  <a href="#rehausse" class="sub">Rehausse chaudière</a>
+  <a href="#solar">☀ SOLAR</a>
+  <a href="#delta-t" class="sub">Gestion ΔT</a>
+  <a href="#priorite" class="sub">Priorité ECS/chauffage</a>
+  <a href="#zone">🏠 ZONE_CHAUF</a>
+  <a href="#ecs">🚿 ECS_BLOC</a>
+  <a href="#antileg" class="sub">Anti-légionellose</a>
+  <a href="#prog_h">📅 PROG_H</a>
+  <div class="nav-sec">Câblage type</div>
+  <a href="#cablage-chaud">Chaudière + Plancher</a>
+  <a href="#cablage-solar">Solaire + ECS</a>
+  <div class="nav-sec">Référence</div>
+  <a href="#registres">Registres diagnostic</a>
+  <a href="#interactions">Interactions entre blocs</a>
+</nav>
+<main>
+
+<h1>Blocs Métier — Fonctionnement Interne</h1>
+<p style="color:var(--text2)">Documentation technique générée depuis le code source de <code>plc_engine.py</code> — chaque comportement décrit ici reflète exactement l'implémentation réelle.</p>
+
+<!-- ═══════════════════════════════════════════════════════════ PLANCHER -->
+<h2 id="plancher"><span>♨</span> PLANCHER — Plancher chauffant PID</h2>
+
+<div class="block-header">
+  <div class="block-icon">♨</div>
+  <div><div class="block-title">PLANCHER</div><div class="block-sub">Régulation PID ambiante · V3V motorisée · Circulateur · 3 niveaux de sécurité</div></div>
+</div>
+
+<h3>Principe général</h3>
+<p>Le bloc PLANCHER régule la <strong>température ambiante</strong> d'une pièce via un PID. Il commande une <strong>vanne 3 voies motorisée</strong> (deux sorties indépendantes : ouvre / ferme) et un <strong>circulateur</strong>. Les deux impulsions V3V ne sont <strong>jamais actives simultanément</strong>.</p>
+
+<h3 id="pid-detail">Algorithme PID — détail cycle par cycle</h3>
+<p>À chaque cycle de scan (<code>dt_ms</code> millisecondes), le moteur exécute :</p>
+
+<pre><code><span class="c"># 1. Lire la consigne : port SP câblé OU valeur fixe dans les paramètres</span>
+sp = read_analog(sp_ref) <span class="kw">if</span> sp_ref <span class="kw">else</span> sp_fixed
+
+<span class="c"># 2. Calculer l'erreur et vérifier la bande morte</span>
+error  = sp - t_amb          <span class="c"># positif = trop froid, négatif = trop chaud</span>
+active = error > dead_band   <span class="c"># dead_band défaut = 0.5°C</span>
+
+<span class="c"># 3. PID uniquement si actif (erreur > bande morte)</span>
+<span class="kw">if</span> active:
+    integral += ki * error * (dt_ms / 1000.0)     <span class="c"># intégrale bornée [-100..100]</span>
+    derivative = kd * (error - prev_err) / dt_s   <span class="c"># dérivée sur la variation</span>
+    pid_out = kp*error + integral + derivative     <span class="c"># sortie [0..100%]</span>
+<span class="kw">else</span>:
+    pid_out = 0.0
+    integral = max(0.0, integral)   <span class="c"># évite l'intégrale négative</span>
+
+<span class="c"># 4. Commandes sorties</span>
+V3V_OUV = active     <span class="c"># impulsion ouverture si chauffe nécessaire</span>
+V3V_FER = not active <span class="c"># impulsion fermeture si température OK</span>
+CIRC    = active     <span class="c"># circulateur ON uniquement si chauffe active</span></code></pre>
+
+<div class="note">💡 Le pourcentage PID (<code>RF_out</code>) est enregistré dans un registre RF pour diagnostic mais ne pilote <strong>pas</strong> directement la vanne — la V3V est tout/rien par impulsions. Le PID sert à activer/désactiver le circuit, pas à moduler.</div>
+
+<h3 id="securites-plancher">Sécurités — 3 niveaux prioritaires</h3>
+<p>Les sécurités sont évaluées <strong>avant</strong> le PID. Dès qu'une condition est vraie, le PID ne s'exécute pas.</p>
+
+<table>
+<tr><th>Priorité</th><th>Condition</th><th>V3V Ouvre</th><th>V3V Ferme</th><th>Circulateur</th><th>Raison</th></tr>
+<tr><td>1 — GEL</td><td><code>T_amb &lt; min_temp</code> (défaut 5°C)</td><td class="b-green">ON</td><td class="b-red">OFF</td><td class="b-green">ON</td><td>Faire circuler l'eau chaude pour protéger le plancher du gel</td></tr>
+<tr><td>2 — SURCHAUFFE</td><td><code>T_amb &gt; max_temp</code> (défaut 35°C)</td><td class="b-red">OFF</td><td class="b-green">ON</td><td class="b-red">OFF</td><td>Fermer la V3V et couper le circulateur</td></tr>
+<tr><td>3 — DÉPART</td><td><code>T_départ &gt; max_depart</code> (défaut 45°C)</td><td class="b-red">OFF</td><td class="b-green">ON</td><td class="b-green">ON</td><td>Eau trop chaude : fermer la V3V mais garder le circulateur pour refroidir le plancher</td></tr>
+</table>
+
+<div class="warn">⚠ La sécurité départ n'est active que si la <strong>sonde départ</strong> est câblée. Sans cette sonde, seul le PID commande la V3V.</div>
+
+<h3>Logique complète simplifiée</h3>
+<div class="flow">
+  <span class="cond">EN = False ?</span> <span class="arrow">→</span> <span class="off">Tout OFF</span><br>
+  <span class="cond">T_amb &lt; 5°C ?</span> <span class="arrow">→</span> <span class="warn">PROTECTION GEL : V3V ouverte + CIRC ON</span><br>
+  <span class="cond">T_amb &gt; 35°C ?</span> <span class="arrow">→</span> <span class="warn">SURCHAUFFE : V3V fermée + CIRC OFF</span><br>
+  <span class="cond">T_départ &gt; 45°C ?</span> <span class="arrow">→</span> <span class="warn">ALM DÉPART : V3V fermée + CIRC ON (refroidissement)</span><br>
+  <span class="cond">PID : erreur &gt; 0.5°C ?</span> <span class="arrow">→</span> <span class="on">ACTIF : V3V_OUV + CIRC ON</span><br>
+  <span class="cond">PID : erreur ≤ 0.5°C ?</span> <span class="arrow">→</span> <span class="off">INACTIF : V3V_FER + CIRC OFF</span>
+</div>
+
+<h3>Paramètres configurables</h3>
+<table>
+<tr><th>Paramètre</th><th>Défaut</th><th>Description</th></tr>
+<tr><td>sp</td><td>20.0°C</td><td>Consigne ambiante fixe (remplacée si port SP câblé)</td></tr>
+<tr><td>dead_band</td><td>0.5°C</td><td>Bande morte : PID inactif si |erreur| &lt; dead_band</td></tr>
+<tr><td>kp / ki / kd</td><td>2.0 / 0.1 / 0.5</td><td>Gains PID — ajuster en fonction de l'inertie du plancher</td></tr>
+<tr><td>max_depart</td><td>45°C</td><td>Température max eau départ (sécurité plancher basse température)</td></tr>
+<tr><td>min_delta</td><td>3°C</td><td>Delta min départ−retour (diagnostic efficacité échange)</td></tr>
+<tr><td>min_temp</td><td>5°C</td><td>Seuil protection gel</td></tr>
+<tr><td>max_temp</td><td>35°C</td><td>Seuil alarme surchauffe ambiante</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════ CHAUDIERE -->
+<h2 id="chaudiere"><span>🔥</span> CHAUDIERE — Régulation avec anti-cyclage</h2>
+
+<div class="block-header">
+  <div class="block-icon">🔥</div>
+  <div><div class="block-title">CHAUDIERE</div><div class="block-sub">Tout/rien hystérésis sur T départ · Anti-cyclage min_on/min_off · Sécurité départ</div></div>
+</div>
+
+<h3>Logique de régulation</h3>
+<p>La chaudière est régulée en <strong>tout/rien avec hystérésis</strong> sur la <strong>température de départ</strong> (pas le retour). La chaudière granulés ne peut pas s'allumer et s'éteindre rapidement — l'anti-cyclage impose des durées minimales.</p>
+
+<pre><code><span class="c"># État courant et timer (persistant entre cycles)</span>
+st = {<span class="str">"on"</span>: False, <span class="str">"timer"</span>: <span class="num">0.0</span>}   <span class="c"># initialisé au premier cycle</span>
+st[<span class="str">"timer"</span>] += dt_ms              <span class="c"># incrémenté à chaque cycle</span>
+
+<span class="c"># Sécurité max départ (prioritaire)</span>
+<span class="kw">if</span> t_dep >= max_dep:              <span class="c"># défaut 90°C</span>
+    brulee = False; pompe = True  <span class="c"># brûleur OFF, pompe reste ON</span>
+
+<span class="c"># Extinction : T_départ atteint SP + hystérésis ET durée min ON écoulée</span>
+<span class="kw">if</span> st[<span class="str">"on"</span>] <span class="kw">and</span> t_dep >= sp+hyst <span class="kw">and</span> st[<span class="str">"timer"</span>] >= min_on:
+    st[<span class="str">"on"</span>] = False; st[<span class="str">"timer"</span>] = 0.0
+
+<span class="c"># Allumage : T_départ descend sous SP - hystérésis ET durée min OFF écoulée</span>
+<span class="kw">if not</span> st[<span class="str">"on"</span>] <span class="kw">and</span> t_dep < sp-hyst <span class="kw">and</span> st[<span class="str">"timer"</span>] >= min_off:
+    st[<span class="str">"on"</span>] = True; st[<span class="str">"timer"</span>] = 0.0
+
+<span class="c"># Les deux sorties suivent le même état</span>
+BRULEE = st[<span class="str">"on"</span>]
+POMPE  = st[<span class="str">"on"</span>]</code></pre>
+
+<h3 id="anti-cyclage">Anti-cyclage — pourquoi c'est critique</h3>
+<div class="danger">🔥 Une chaudière à granulés <strong>ne peut pas</strong> être allumée et éteinte librement. La procédure d'allumage dure plusieurs minutes et une extinction prématurée laisse du combustible non brûlé dans le foyer.</div>
+
+<table>
+<tr><th>Paramètre</th><th>Défaut</th><th>Rôle</th></tr>
+<tr><td>min_on_s</td><td>60 s</td><td>Durée minimale de fonctionnement avant autorisation d'extinction</td></tr>
+<tr><td>min_off_s</td><td>30 s</td><td>Durée minimale d'arrêt avant autorisation de rallumage</td></tr>
+<tr><td>hysteresis</td><td>3°C</td><td>Écart entre seuil allumage (SP−hyst) et extinction (SP+hyst)</td></tr>
+</table>
+
+<div class="flow">
+  <span class="cond">T_départ ≥ 90°C ?</span> <span class="arrow">→</span> <span class="warn">ALM DÉPART : brûleur OFF, pompe ON</span><br>
+  <span class="on">Chaudière ON</span> <span class="cond">et T_départ ≥ SP+hyst (68°C) et timer ≥ min_on ?</span> <span class="arrow">→</span> <span class="off">Extinction autorisée</span><br>
+  <span class="off">Chaudière OFF</span> <span class="cond">et T_départ &lt; SP−hyst (62°C) et timer ≥ min_off ?</span> <span class="arrow">→</span> <span class="on">Allumage autorisé</span>
+</div>
+
+<h3 id="rehausse">Rehausse chaudière — comment ça marche</h3>
+<p>Il n'y a pas de "rehausse automatique" câblée en dur dans le bloc CHAUDIERE lui-même. La rehausse se fait par le <strong>câblage FBD</strong> entre les blocs :</p>
+
+<div class="note">📐 <strong>Principe :</strong> Le bloc PLANCHER écrit sa sortie PID dans un registre RF (ex. <code>RF2</code>). Un bloc <strong>COMPARE_F</strong> compare ce registre à un seuil (ex. 30%). Si la demande est suffisante, il active une sortie booléenne qui déclenche la chaudière via un port <strong>EN</strong> du bloc CHAUDIERE.</div>
+
+<p>Exemple de câblage type pour la rehausse :</p>
+<pre><code><span class="c"># Dans le FBD :</span>
+PLANCHER.reg_out  <span class="arrow">→</span>  RF2             <span class="c"># PID plancher en % → registre RF2</span>
+RF2 <span class="arrow">→</span> COMPARE_F.IN  (seuil = 20%)   <span class="c"># si plancher demande > 20%</span>
+COMPARE_F.GT <span class="arrow">→</span> CHAUDIERE.EN        <span class="c"># → autoriser la chaudière</span>
+
+<span class="c"># Ou plus simplement : relier la DV de l'interrupteur "mode CHAUFFE"</span>
+<span class="c"># au port EN de la chaudière — la chaudière ne tourne que si le mode est actif</span>
+DV(marche_chauffe) <span class="arrow">→</span> CHAUDIERE.EN</code></pre>
+
+<div class="tip">✅ Le bloc CHAUDIERE ignore le port EN si non câblé (défaut = toujours actif). Pour conditionner la chaudière à la demande du plancher, câbler la sortie <code>active</code> du plancher (via une DV ou un bit mémoire) sur le port EN de la chaudière.</div>
+
+<!-- ═══════════════════════════════════════════════════════════ SOLAR -->
+<h2 id="solar"><span>☀</span> SOLAR — Solaire thermique ΔT + vanne directionnelle</h2>
+
+<div class="block-header">
+  <div class="block-icon">☀</div>
+  <div><div class="block-title">SOLAR</div><div class="block-sub">Hystérésis ΔT · Priorité ECS → Chauffage · Pompe TOR ou 0-10V · Anti-gel capteur</div></div>
+</div>
+
+<h3 id="delta-t">Gestion du ΔT et hystérésis pompe</h3>
+<pre><code>delta = T_capteur - T_ballon_ECS
+
+<span class="c"># Démarrage pompe si ΔT ≥ delta_on (défaut 8°C)</span>
+<span class="kw">if not</span> pompe_on <span class="kw">and</span> delta >= delta_on:  pompe_on = True
+<span class="c"># Arrêt pompe si ΔT &lt; delta_off (défaut 3°C)</span>
+<span class="kw">if</span> pompe_on <span class="kw">and</span> delta < delta_off:      pompe_on = False</code></pre>
+
+<p>Cette hystérésis (8°C pour démarrer, 3°C pour arrêter) évite le pompage intempestif quand le soleil se couvre brièvement.</p>
+
+<h3 id="priorite">Priorité ECS → Chauffage</h3>
+<div class="flow">
+  <span class="cond">Pompe ON ?</span><br>
+  <span class="arrow">  ├─ ECS &lt; 60°C ?</span> <span class="arrow">→</span> <span class="on">Vanne ECS ON</span> <span class="off">Vanne Chauf OFF</span> <span class="c">(priorité ECS)</span><br>
+  <span class="arrow">  ├─ ECS OK et chauff &lt; 50°C ?</span> <span class="arrow">→</span> <span class="off">Vanne ECS OFF</span> <span class="on">Vanne Chauf ON</span><br>
+  <span class="arrow">  └─ Tout OK ?</span> <span class="arrow">→</span> <span class="off">Pompe OFF (pas besoin de chauffe)</span>
+</div>
+
+<h3>Pompe proportionnelle 0-10V (optionnel)</h3>
+<p>Si le mode <code>pump_mode = "analog_0_10"</code> est sélectionné, la vitesse de pompe est proportionnelle au ΔT :</p>
+<pre><code><span class="c"># Plus le ΔT est grand, plus la pompe tourne vite</span>
+pct = pump_min_pct + (delta - delta_on) / (delta_max - delta_on) * (100 - pump_min_pct)
+volts = pct / 10.0   <span class="c"># converti en 0-10V pour la sortie AV</span></code></pre>
+
+<h3>Anti-gel capteur</h3>
+<table>
+<tr><th>Mode antigel</th><th>Comportement</th></tr>
+<tr><td><code>off</code></td><td>T_capteur &lt; 5°C → tout OFF (risque de gel assumé)</td></tr>
+<tr><td><code>ecs</code></td><td>Si T_ballon &gt; temp_source → ouvre vanne chauf + pompe pour réchauffer les capteurs avec l'eau du ballon</td></tr>
+<tr><td><code>chaudiere</code></td><td>Même principe mais depuis la sonde départ chaudière</td></tr>
+</table>
+
+<div class="warn">⚠ Si T_capteur ≥ 120°C (stagnation) → pompe et vannes coupées immédiatement, quelle que soit la situation.</div>
+
+<!-- ═══════════════════════════════════════════════════════════ ZONE -->
+<h2 id="zone"><span>🏠</span> ZONE_CHAUF — Zone de chauffage vanne motorisée</h2>
+
+<div class="block-header">
+  <div class="block-icon">🏠</div>
+  <div><div class="block-title">ZONE_CHAUF</div><div class="block-sub">Tout/rien hystérésis · Délais ouverture/fermeture moteur · Une sortie vanne</div></div>
+</div>
+
+<pre><code><span class="c"># Même logique d'hystérésis que la chaudière, mais sur T_ambiante</span>
+currently_open = vanne_ouverte
+
+<span class="c"># Fermeture : T ≥ SP + hyst ET durée min ouverte écoulée</span>
+<span class="kw">if</span> open <span class="kw">and</span> T >= sp+hyst <span class="kw">and</span> timer >= delay_open:
+    open = False; timer = 0
+
+<span class="c"># Ouverture : T &lt; SP - hyst ET durée min fermée écoulée</span>
+<span class="kw">if not</span> open <span class="kw">and</span> T < sp-hyst <span class="kw">and</span> timer >= delay_close:
+    open = True; timer = 0
+
+VANNE = open</code></pre>
+
+<p>Les délais <code>delay_open_s</code> et <code>delay_close_s</code> (défaut 120s chacun) protègent le moteur de la vanne contre les inversions trop rapides.</p>
+
+<!-- ═══════════════════════════════════════════════════════════ ECS -->
+<h2 id="ecs"><span>🚿</span> ECS_BLOC — Eau Chaude Sanitaire + anti-légionellose</h2>
+
+<div class="block-header">
+  <div class="block-icon">🚿</div>
+  <div><div class="block-title">ECS_BLOC</div><div class="block-sub">Régulation ballon · Condition primaire plus chaud · Anti-légionellose hebdomadaire automatique</div></div>
+</div>
+
+<pre><code><span class="c"># La pompe ne démarre QUE si deux conditions sont réunies :</span>
+need_heat = T_ecs < sp - hyst     <span class="c"># 1. ballon a besoin de chaleur</span>
+prim_ok   = T_prim > T_ecs + 3°C <span class="c"># 2. source primaire est plus chaude de 3°C</span>
+pump_on   = need_heat and prim_ok
+
+<span class="c"># Hystérésis sur la pompe (évite les cycles rapides)</span>
+<span class="kw">if</span> pompe_on <span class="kw">and</span> T_ecs >= sp + hyst:  pompe = False
+<span class="kw">if not</span> pompe_on <span class="kw">and</span> pump_on:         pompe = True</code></pre>
+
+<h3 id="antileg">Anti-légionellose automatique</h3>
+<pre><code><span class="c"># Chaque semaine, à un jour/heure configuré, monter à 65°C</span>
+antileg_active = (now.weekday() == al_day) <span class="kw">and</span> (now.hour == al_hour)
+sp = sp_antileg (<span class="num">65°C</span>) <span class="kw">if</span> antileg_active <span class="kw">else</span> sp_ecs (<span class="num">55°C</span>)</code></pre>
+
+<table>
+<tr><th>Paramètre</th><th>Défaut</th><th>Description</th></tr>
+<tr><td>sp_ecs</td><td>55°C</td><td>Consigne normale du ballon ECS</td></tr>
+<tr><td>sp_antileg</td><td>65°C</td><td>Consigne montée anti-légionellose</td></tr>
+<tr><td>antileg_day</td><td>0 (Lundi)</td><td>Jour de la semaine (0=Lun … 6=Dim)</td></tr>
+<tr><td>antileg_hour</td><td>3h</td><td>Heure de déclenchement (3h = nuit creuse)</td></tr>
+<tr><td>hysteresis</td><td>2°C</td><td>Bande morte sur la pompe</td></tr>
+</table>
+
+<div class="note">ℹ Le traitement anti-légionellose dure jusqu'à ce que T_ballon atteigne 65°C + hystérésis. Si la source primaire n'est pas assez chaude (chaudière éteinte), le traitement est différé.</div>
+
+<!-- ═══════════════════════════════════════════════════════════ PROG_H -->
+<h2 id="prog_h"><span>📅</span> PROG_H — Programmation horaire Jour/Nuit</h2>
+
+<div class="block-header">
+  <div class="block-icon">📅</div>
+  <div><div class="block-title">PROG_H</div><div class="block-sub">Consigne dynamique JOUR/NUIT/VACANCES · Planning hebdo par jour · Sortie registre RF</div></div>
+</div>
+
+<pre><code><span class="c"># Chaque cycle, le bloc lit l'heure système et décide le mode</span>
+now_min = now.hour * 60 + now.minute
+
+<span class="c"># Est-ce dans la plage jour ? (gère l'enjambement minuit)</span>
+is_jour = h_debut*60+m_debut <= now_min < h_fin*60+m_fin
+
+<span class="c"># Sélection de la consigne active</span>
+<span class="kw">if</span>   vacances:  sp = sp_vac  (ex: 15°C)
+<span class="kw">elif</span> jour:      sp = sp_jour (ex: 20°C)
+<span class="kw">else</span>:           sp = sp_nuit (ex: 17°C)
+
+<span class="c"># Écriture dans un registre → câblé sur le port SP du PLANCHER</span>
+RF5 = sp   <span class="c"># le PLANCHER lit RF5 comme consigne dynamique</span></code></pre>
+
+<p>Le mode <strong>hebdomadaire</strong> permet une consigne différente par jour de la semaine. Par exemple : confort du lundi au vendredi, réduit le week-end.</p>
+
+<!-- ═══════════════════════════════════════════════════════════ CÂBLAGES -->
+<h2 id="cablage-chaud">Câblage type — Chaudière + Plancher chauffant</h2>
+<pre><code><span class="c">─── Programme FBD complet ───────────────────────────────────────────────────</span>
+
+PROG_H                          <span class="c"># programmation horaire → RF5 (consigne)</span>
+  └─ reg_sp ──────────────────────────────────────────────► RF5
+
+PLANCHER                        <span class="c"># PID plancher</span>
+  ├─ pv_ref_amb = ANA0          <span class="c"># T ambiante → sonde NTC salon</span>
+  ├─ pv_ref_depart = ANA1       <span class="c"># T départ eau chaude</span>
+  ├─ pv_ref_retour = ANA2       <span class="c"># T retour plancher</span>
+  ├─ sp_ref = RF5               <span class="c"># consigne depuis PROG_H</span>
+  ├─ out_v3v_ouv → K7           <span class="c"># impulsion ouverture vanne</span>
+  ├─ out_v3v_fer → K8           <span class="c"># impulsion fermeture vanne</span>
+  ├─ out_circ    → K9           <span class="c"># circulateur plancher</span>
+  └─ reg_out ─────────────────────────────────────────────► RF2 (PID %)
+
+COMPARE_F                       <span class="c"># demande chaudière si PID > 20%</span>
+  ├─ IN = RF2
+  ├─ threshold = 20.0
+  └─ GT ──────────────────────────────────────────────────► M0 (rehausse)
+
+CHAUDIERE                       <span class="c"># brûleur granulés</span>
+  ├─ pv_ref_depart = ANA3       <span class="c"># T départ chaudière</span>
+  ├─ pv_ref_retour = ANA4
+  ├─ sp = 65°C, hyst = 3°C
+  ├─ min_on_s = 120, min_off_s = 60
+  ├─ EN = M0                    <span class="c"># ← rehausse depuis PLANCHER</span>
+  ├─ out_brulee → K3            <span class="c"># brûleur</span>
+  └─ out_pompe  → K4            <span class="c"># pompe chaudière</span></code></pre>
+
+<h2 id="cablage-solar">Câblage type — Solaire + ECS + Plancher</h2>
+<pre><code>SOLAR
+  ├─ pv_ref_capteur = ANA5     <span class="c"># T capteur solaire</span>
+  ├─ pv_ref_ecs = ANA6         <span class="c"># T ballon ECS</span>
+  ├─ pv_ref_chauf = ANA1       <span class="c"># T ballon chauffage (partagé avec PLANCHER)</span>
+  ├─ delta_on = 8°C            <span class="c"># ΔT démarrage pompe</span>
+  ├─ out_pompe   → K1          <span class="c"># pompe solaire</span>
+  ├─ out_vanne_ecs   → K2      <span class="c"># vanne vers ECS</span>
+  └─ out_vanne_chauf → K3      <span class="c"># vanne vers plancher chauffage</span>
+
+ECS_BLOC
+  ├─ pv_ref_ecs  = ANA6        <span class="c"># T ballon ECS</span>
+  ├─ pv_ref_prim = ANA3        <span class="c"># T départ chaudière (source primaire)</span>
+  ├─ sp_ecs = 55°C
+  ├─ antileg_day = 0 (Lundi)   <span class="c"># traitement anti-légionellose le lundi à 3h</span>
+  ├─ antileg_hour = 3
+  └─ out_pompe → K6            <span class="c"># pompe ECS (chargement ballon depuis chaudière)</span></code></pre>
+
+<!-- ═══════════════════════════════════════════════════════════ REGISTRES -->
+<h2 id="registres">Registres diagnostic automatiques</h2>
+<p>Chaque bloc métier écrit ses valeurs internes dans des registres RF pour le monitoring SCADA :</p>
+
+<table>
+<tr><th>Bloc</th><th>Registre</th><th>Contenu</th></tr>
+<tr><td>PLANCHER</td><td>reg_out (RF2)</td><td>Sortie PID en % (0-100)</td></tr>
+<tr><td>PLANCHER</td><td>reg_depart (RF9)</td><td>T départ eau plancher en °C</td></tr>
+<tr><td>PLANCHER</td><td>reg_retour (RF10)</td><td>T retour plancher en °C</td></tr>
+<tr><td>PLANCHER</td><td>reg_delta (RF11)</td><td>ΔT départ − retour (efficacité échange)</td></tr>
+<tr><td>SOLAR</td><td>reg_delta (RF12)</td><td>ΔT capteur − ballon</td></tr>
+<tr><td>SOLAR</td><td>reg_rendement (RF13)</td><td>Rendement estimé 0-100%</td></tr>
+<tr><td>SOLAR</td><td>reg_vitesse (RF14)</td><td>Vitesse pompe en % (mode 0-10V)</td></tr>
+<tr><td>PROG_H</td><td>reg_sp (RF5)</td><td>Consigne active (JOUR/NUIT/VAC)</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════ INTERACTIONS -->
+<h2 id="interactions">Interactions entre blocs — flux de données</h2>
+<p>Les blocs métier ne se "parlent" pas directement. Ils communiquent <strong>uniquement via les registres RF et les bits mémoire M</strong>, câblés dans le FBD par l'utilisateur.</p>
+
+<div class="flow">
+  <span class="b-amber">PROG_H</span> <span class="arrow">→ RF5 (consigne) →</span> <span class="b-orange">PLANCHER.sp_ref</span><br>
+  <span class="b-orange">PLANCHER</span> <span class="arrow">→ RF2 (PID%) →</span> <span class="b-blue">COMPARE_F</span> <span class="arrow">→ M0 (demande chauffe) →</span> <span class="b-red">CHAUDIERE.EN</span><br>
+  <span class="b-purple">SOLAR</span> <span class="arrow">→ K1 (pompe), K2 (vanne ECS), K3 (vanne chauf) →</span> GPIO physiques<br>
+  <span class="b-cyan">ECS_BLOC</span> <span class="arrow">← ANA3 (T chaudière primaire) ← physique</span>
+</div>
+
+<div class="tip">✅ Ce découplage par registres RF permet de modifier facilement la logique sans toucher aux blocs métier : changer un seuil dans COMPARE_F suffit pour ajuster quand la chaudière se rehausse.</div>
+
+<footer>
+  <p>RPi-PLC Studio — Documentation Blocs Métier — Générée depuis core/plc_engine.py</p>
+  <p>Blocs : PLANCHER · CHAUDIERE · SOLAR · ZONE_CHAUF · ECS_BLOC · PROG_H</p>
+</footer>
+
+<script>
+const mainEl=document.querySelector('main');
+const sections=document.querySelectorAll('h2[id],h3[id]');
+const navLinks=document.querySelectorAll('nav a[href^="#"]');
+navLinks.forEach(a=>{
+  a.addEventListener('click',e=>{
+    const id=a.getAttribute('href').slice(1);
+    const t=document.getElementById(id);
+    if(t&&mainEl){e.preventDefault();mainEl.scrollTo({top:t.offsetTop-20,behavior:'smooth'});}
+  });
+});
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      const id=e.target.id;
+      navLinks.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+id));
+      const act=document.querySelector('nav a.active');
+      if(act)act.scrollIntoView({block:'nearest'});
+    }
+  });
+},{root:mainEl,rootMargin:'-5% 0px -80% 0px'});
+sections.forEach(s=>obs.observe(s));
+</script>
+</main>
+</body>
+</html>

@@ -7,9 +7,28 @@ Lancer : python3 main.py
 
 import sys
 import os
+import logging
 
 # Ajouter le dossier racine au chemin
 sys.path.insert(0, os.path.dirname(__file__))
+
+# ── Logging : fichier + console ──────────────────────────────────────────────
+_log_dir  = os.path.expanduser("~/.rpi-plc-studio")
+os.makedirs(_log_dir, exist_ok=True)
+_log_file = os.path.join(_log_dir, "rpi-plc-studio.log")
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler(_log_file, encoding="utf-8"),
+        logging.StreamHandler(sys.stderr),
+    ]
+)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("PyQt5").setLevel(logging.WARNING)
+log = logging.getLogger("main")
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
@@ -52,10 +71,21 @@ def main():
         _qss_path = os.path.join(_base, "style.qss")
     app.setStyleSheet(open(_qss_path, encoding="utf-8").read())
 
+    log.info(f"RPi-PLC Studio démarré — Python {sys.version.split()[0]}")
+    log.info(f"Logs : {_log_file}")
+
     window = MainWindow()
     window.show()
 
-    sys.exit(app.exec_())
+    try:
+        ret = app.exec_()
+    except Exception as e:
+        log.critical(f"Exception non capturée : {e}", exc_info=True)
+        ret = 1
+    finally:
+        log.info("RPi-PLC Studio arrêté")
+
+    sys.exit(ret)
 
 
 if __name__ == "__main__":

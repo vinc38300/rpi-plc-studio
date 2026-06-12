@@ -604,7 +604,12 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0;}
         <div id="tg-status" style="font-size:12px;color:var(--text2);padding:4px 0;">
           ⚪ Chargement...
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <div id="tg-start-btn" style="display:none;margin-top:6px;">
+          <button class="btn success" onclick="startTgBot()" style="width:100%;">
+            ▶ Démarrer le bot maintenant
+          </button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button class="btn primary"  onclick="saveTgConfig()">💾 Sauvegarder</button>
           <button class="btn"          onclick="testTelegram()">🧪 Envoyer test</button>
           <button class="btn"          onclick="loadTgConfig()" style="padding:6px 10px;">↻</button>
@@ -867,11 +872,13 @@ function renderSynoptique(s, analog, gpio, regs, mem){
     });
   }
 
-  // Relais — rebuild si le nombre de relais a changé (config GPIO mise à jour)
+  // Relais — rebuild si la config GPIO a changé (pins ou noms)
   const rg = el('syn-relais-grid');
   if(rg){
-    if(rg.children.length !== RELAY_GPIO.length){
+    const rSig = RELAY_GPIO.map(p=>`${p}:${(gpio[p]||{}).name||''}`).join(',');
+    if(rg.dataset.sig !== rSig){
       rg.innerHTML = '';  // forcer rebuild si config a changé
+      rg.dataset.sig = rSig;
     }
     if(rg.children.length === 0){
       RELAY_GPIO.forEach((pin,i)=>{
@@ -1072,8 +1079,9 @@ function renderCommandes(gpio, regs, mem){
   if(!cmdBuilt){
     cmdBuilt=true;
     buildSetpointsList();
-    buildManualOutputs(gpio);
   }
+  // Toujours vérifier si la config GPIO a changé (nouveau déploiement, reconfiguration)
+  buildManualOutputs(gpio);
   // Update valeurs consignes (seulement si l'utilisateur n'est pas en train d'éditer)
   SETPOINTS.forEach(cfg=>{
     const sps=document.getElementById(`sp-range-${cfg.ref}`);
@@ -1163,9 +1171,14 @@ function buildSetpointsList(){
 function buildManualOutputs(gpio){
   const el=document.getElementById('manual-outputs');
   if(!el) return;
-  // Rebuild si config GPIO a changé (taille différente)
-  if(el.children.length > 0 && el.children.length !== RELAY_GPIO.length) el.innerHTML='';
-  if(el.children.length > 0) return;
+  // Reconstruire si la config GPIO a changé (pins ou noms différents)
+  const sig = RELAY_GPIO.map(p=>`${p}:${(gpio[p]||{}).name||''}`).join(',');
+  if(el.dataset.sig === sig && el.children.length > 0){
+    // Config inchangée : juste mettre à jour l'état des boutons
+    return;
+  }
+  el.dataset.sig = sig;
+  el.innerHTML = '';
   RELAY_GPIO.forEach((pin,i)=>{
     const info=gpio[pin]||{};
     const on=!!info.value;
@@ -1695,17 +1708,44 @@ async function loadTgConfig(){
   if(tr) tr.checked=d.report_enabled!==false;
   // Afficher statut bot
   const statusEl=document.getElementById('tg-status');
+  const startBtn=document.getElementById('tg-start-btn');
   if(statusEl){
-    if(d.enabled && d.has_token){
-      statusEl.textContent=d.bot_running?'🟢 Bot actif':'🟡 Bot configuré (redémarrage requis)';
-      statusEl.style.color=d.bot_running?'var(--green)':'var(--amber)';
+    if(d.bot_running){
+      statusEl.textContent='🟢 Bot actif — répond aux commandes Telegram';
+      statusEl.style.color='var(--green)';
+      if(startBtn) startBtn.style.display='none';
+    } else if(d.enabled && d.has_token){
+      statusEl.textContent='🟡 Bot configuré mais arrêté — cliquer "Démarrer" ci-dessous';
+      statusEl.style.color='var(--amber)';
+      if(startBtn) startBtn.style.display='block';
     } else if(!d.has_token){
-      statusEl.textContent='⚪ Token non configuré';
+      statusEl.textContent='⚪ Token non configuré — saisir le token et Sauvegarder';
       statusEl.style.color='var(--text2)';
+      if(startBtn) startBtn.style.display='none';
     } else {
-      statusEl.textContent='⚫ Bot désactivé';
+      statusEl.textContent='⚫ Bot désactivé — cocher "Activer le bot" et Sauvegarder';
       statusEl.style.color='var(--text3)';
+      if(startBtn) startBtn.style.display='none';
     }
+  }
+  // Auto-rafraîchir toutes les 10s si le bot n'est pas encore actif
+  if(!d.bot_running && d.enabled && d.has_token){
+    clearTimeout(window._tgRefreshTimer);
+    window._tgRefreshTimer=setTimeout(loadTgConfig, 10000);
+  }
+}
+
+async function startTgBot(){
+  const btn=document.querySelector('#tg-start-btn button');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Démarrage...'; }
+  const r=await api('/api/telegram/start','POST');
+  if(r?.ok){
+    toast('✅ Bot démarré !','ok');
+    setTimeout(loadTgConfig, 1500);
+  } else {
+    toast('❌ Échec démarrage : '+(r?.error||'vérifier les logs'),'err');
+    if(btn){ btn.disabled=false; btn.textContent='▶ Démarrer le bot maintenant'; }
+    setTimeout(loadTgConfig, 1000);
   }
 }
 

@@ -132,13 +132,17 @@ class PyBridge(QObject):
         import json, math, datetime, statistics, traceback
         if not code.strip():
             return json.dumps({"ok": False, "error": "Code vide"})
+        # Le moteur fournit toujours A1-A12 et d1-d12 ; le testeur doit en faire autant
+        # pour éviter les NameError sur les blocs qui utilisent n_a > 8 ou n_d > 8.
+        _na = max(n_a, 12)
+        _nd = max(n_d, 12)
         # Valeurs test par défaut
         ctx = {
-            **{f"A{i}": float(20 + i * 5) for i in range(1, 9)},
-            **{f"d{i}": (i % 2 == 1) for i in range(1, 9)},
+            **{f"A{i}": float(20 + i * 5) for i in range(1, _na + 1)},
+            **{f"d{i}": (i % 2 == 1) for i in range(1, _nd + 1)},
             **{f"I{i}": i * 10 for i in range(1, 3)},
-            **{f"OA{i}": 0.0 for i in range(1, 9)},
-            **{f"od{i}": False for i in range(1, 9)},
+            **{f"OA{i}": 0.0 for i in range(1, _na + 1)},
+            **{f"od{i}": False for i in range(1, _nd + 1)},
             "OI1": 0,
             "dt": 0.1, "cycle": 1,
             "state": {},
@@ -172,10 +176,10 @@ class PyBridge(QObject):
                 "print": buf.getvalue().strip().splitlines(),
             })
         outputs = {}
-        for i in range(1, 9):
+        for i in range(1, _na + 1):
             v = ctx.get(f"OA{i}", 0.0)
             if v != 0.0: outputs[f"OA{i}"] = round(float(v), 4)
-        for i in range(1, 9):
+        for i in range(1, _nd + 1):
             v = ctx.get(f"od{i}", False)
             if v: outputs[f"od{i}"] = bool(v)
         if ctx.get("OI1", 0) != 0: outputs["OI1"] = int(ctx["OI1"])
@@ -351,9 +355,10 @@ class BlockEditor(QWidget):
             self.view.load(QUrl.fromLocalFile(html_path))
         self.bridge.diagram_changed.connect(self._on_js_change)
         self.view.loadFinished.connect(self._on_canvas_loaded)
-        self._pending_theme = None   # thème à appliquer quand le canvas sera prêt
-        self._pending_load  = None   # diagramme à charger quand le canvas sera prêt
-        self._canvas_ready  = False  # True après loadFinished
+        self._pending_theme  = None   # thème à appliquer quand le canvas sera prêt
+        self._pending_load   = None   # diagramme à charger quand le canvas sera prêt
+        self._canvas_ready   = False  # True après loadFinished
+        self._pending_analog_config = None  # config sondes à pousser après loadFinished
         lay.addWidget(self.view)
 
     # ── Thème : appliqué dès que la page est chargée ─────────────────────────
@@ -378,6 +383,14 @@ class BlockEditor(QWidget):
             data = self._pending_load
             self._pending_load = None
             QTimer.singleShot(50, lambda: self._do_load(data))
+        # Re-pousser la config sondes si elle avait été reçue avant loadFinished
+        if self._pending_analog_config is not None:
+            _cfg = self._pending_analog_config
+            import json as _json
+            cfg_js = _json.dumps(_cfg)
+            QTimer.singleShot(800, lambda: self.view.page().runJavaScript(
+                f"window.setAnalogConfig && window.setAnalogConfig({cfg_js});"
+            ))
 
     def _do_load(self, data):
         """Effectue le chargement réel du diagramme dans le canvas JS."""
@@ -567,19 +580,29 @@ class BlockEditor(QWidget):
         return flat
 
     def _fbd_to_program(self, diagram: dict) -> list:
-        """Convertit toutes les pages du diagramme en un seul programme linéaire."""
-        all_prog = []
-        # Nouveau format multi-pages
+        """Convertit toutes les pages du diagramme en un seul programme linéaire.
+
+        IMPORTANT : toutes les pages sont fusionnées en une seule structure avant
+        d'appeler _page_to_program.  Cela permet aux paires PAGE_OUT / PAGE_IN
+        (signal=SigX) qui se trouvent sur des pages différentes d'être résolues
+        en fils virtuels directs — exactement comme si le programme était linéaire
+        (à la manière de ProviewR).  Avant ce correctif, chaque page était compilée
+        indépendamment et les signaux inter-pages étaient perdus.
+        """
         if "pages" in diagram:
+            # ── Fusionner tous les blocs + fils de toutes les pages ──────────
+            all_blocks: list = []
+            all_wires:  list = []
             for pg in diagram["pages"]:
-                flat_pg  = self._flatten_page(pg)   # ← aplatit les GROUP avant conversion
-                pg_prog  = self._page_to_program(flat_pg)
-                all_prog.extend(pg_prog)
+                flat_pg = self._flatten_page(pg)   # aplatit les GROUP
+                all_blocks.extend(flat_pg.get("blocks", []))
+                all_wires.extend(flat_pg.get("wires",  []))
+            merged_page = {"blocks": all_blocks, "wires": all_wires}
+            return self._page_to_program(merged_page)
         else:
-            # Ancien format (rétro-compatibilité)
-            flat_pg  = self._flatten_page(diagram)
-            all_prog = self._page_to_program(flat_pg)
-        return all_prog
+            # Ancien format mono-page (rétro-compatibilité)
+            flat_pg = self._flatten_page(diagram)
+            return self._page_to_program(flat_pg)
 
 
     def _page_to_program(self, page: dict) -> list:
@@ -587,15 +610,116 @@ class BlockEditor(QWidget):
         Gère tous les types de blocs définis dans fbd_canvas.html.
         """
         blocks = {b["id"]: b for b in page.get("blocks", [])}
-        wires  = page.get("wires", [])
+        wires  = list(page.get("wires", []))
+
+        # ── Résolution des paires PAGE_OUT / PAGE_IN (labels + blocs réels) ──
+        # Deux cas :
+        #   1) _isLabel:True – créés automatiquement par le canvas (fils longs)
+        #   2) Blocs manuels – placés depuis la palette, sans _isLabel
+        # Grâce à la fusion des pages dans _fbd_to_program, cette passe
+        # résout aussi les paires inter-pages : programme unifié façon ProviewR.
+        lbl_out = {}   # signal → id du bloc PAGE_OUT
+        lbl_in  = {}   # signal → liste d'ids PAGE_IN (un signal peut être consommé
+                       # par plusieurs blocs sur des pages différentes)
+        for b in list(blocks.values()):
+            if b["type"] not in ("PAGE_OUT", "PAGE_IN"):
+                continue
+            sig = b.get("params", {}).get("signal", "")
+            if not sig:
+                continue
+            if b["type"] == "PAGE_OUT":
+                lbl_out[sig] = b["id"]
+            else:
+                lbl_in.setdefault(sig, []).append(b["id"])
+
+        virtual_wires = []
+        for sig, out_id in lbl_out.items():
+            if sig not in lbl_in:
+                continue
+            # Fil entrant dans PAGE_OUT (src → PAGE_OUT.SIG)
+            src_wire = next((w for w in wires
+                             if w["dst"]["bid"] == out_id
+                             and w["dst"]["port"] == "SIG"), None)
+            if not src_wire:
+                continue
+            # Un fil virtuel par PAGE_IN consommatrice du signal
+            for in_id in lbl_in[sig]:
+                # Fil sortant de PAGE_IN (PAGE_IN.SIG → dst)
+                dst_wire = next((w for w in wires
+                                 if w["src"]["bid"] == in_id
+                                 and w["src"]["port"] == "SIG"), None)
+                if dst_wire:
+                    virtual_wires.append({
+                        "src": src_wire["src"],
+                        "dst": dst_wire["dst"],
+                    })
+
+        # Retirer fils et blocs PAGE_IN/PAGE_OUT du graphe de compilation
+        lbl_ids = set(lbl_out.values()) | {bid for ids in lbl_in.values() for bid in ids}
+        wires = [w for w in wires
+                 if w["src"]["bid"] not in lbl_ids
+                 and w["dst"]["bid"] not in lbl_ids]
+        wires += virtual_wires
+        for bid in lbl_ids:
+            blocks.pop(bid, None)
+
+        # ── Bits M temporaires pour blocs logiques → CARITHM/PYBLOCK ─────────
+        # M24-M31 réservés pour signaux intermédiaires générés automatiquement.
+        _tmp_m_idx  = [24]
+        _tmp_m_used: dict = {}   # cache (block_id, port) → M-bit déjà alloué
+
+        def _alloc_mbit(logic_bid, port=""):
+            """Alloue (ou réutilise) un bit M temporaire pour un port logique."""
+            key = (logic_bid, port)
+            if key in _tmp_m_used:
+                return _tmp_m_used[key]
+            m = f"M{_tmp_m_idx[0]}"
+            _tmp_m_idx[0] = 24 if _tmp_m_idx[0] >= 31 else _tmp_m_idx[0] + 1
+            _tmp_m_used[key] = m
+            return m
 
         # ── Helpers ───────────────────────────────────────────────────────
-        def wire_src(dst_bid, dst_port):
-            """Retourne (bloc_source, port_source) pour une entrée donnée."""
+        # Index CONN : num → liste de block_ids (pour traversée rapide)
+        _conn_by_num: dict = {}
+        for _bid, _b in blocks.items():
+            if _b.get("type") in ("CONN", "CONN_TX", "CONN_RX"):
+                _num = str(_b.get("params", {}).get("num", ""))
+                _conn_by_num.setdefault(_num, []).append(_bid)
+
+        def wire_src(dst_bid, dst_port, _visited=None):
+            """Retourne (bloc_source, port_source) pour une entrée donnée.
+
+            Traverse transparemment les paires CONN (connecteurs numérotés) :
+            un CONN reçoit le signal d'une source (port IN), son jumeau (même num)
+            le redistribue (port OUT) — wire_src franchit cette frontière
+            automatiquement pour retourner toujours le bloc réel en amont.
+            """
+            if _visited is None:
+                _visited = set()
             for w in wires:
                 if w["dst"]["bid"] == dst_bid and w["dst"]["port"] == dst_port:
-                    sb = blocks.get(w["src"]["bid"])
-                    return sb, w["src"]["port"]
+                    src_bid = w["src"]["bid"]
+                    sb      = blocks.get(src_bid)
+                    sp      = w["src"]["port"]
+                    # ── Traversée CONN pair ──────────────────────────────
+                    if sb and sb.get("type") in ("CONN", "CONN_TX", "CONN_RX"):
+                        if src_bid in _visited:
+                            return None, None
+                        _visited.add(src_bid)
+                        num = str(sb.get("params", {}).get("num", ""))
+                        # Chercher le CONN partenaire (même num, autre id)
+                        partner_id = next(
+                            (bid for bid in _conn_by_num.get(num, [])
+                             if bid != src_bid),
+                            None
+                        )
+                        if partner_id:
+                            # Remonter depuis le port IN du CONN partenaire (TX/RX inter-page)
+                            return wire_src(partner_id, "IN", _visited)
+                        # Fallback : CONN simple pass-through (pas de partenaire)
+                        # → remonter directement via le port IN du CONN courant
+                        return wire_src(src_bid, "IN", _visited)
+                    return sb, sp
             return None, None
 
         def signal_ref(src_b):
@@ -607,22 +731,134 @@ class BlockEditor(QWidget):
             if t == "CONST":  return p.get("value", 0)
             if t in ("PT_IN","ANA_IN","SENSOR"): return p.get("reg_out", "RF0")
             if t == "BACKUP": return p.get("varname", "backup0")
-            if t == "AV":     return p.get("varname", "av0")
+            if t == "AV":     return p.get("reg_out") or p.get("varname", "av0")  # FIX: reg_out = RF register écrit par l'AV
+            # FIX : DV câblé vers XOR/OR/AND → retourner reg_out RF* si disponible
+            if t == "DV":
+                ro = p.get("reg_out")
+                if ro and str(ro).startswith("RF"): return ro
+                return p.get("varname", "dv0")
             # Blocs analogiques → leur sortie registre
             if t in ("ADD","SUB","MUL","DIV","SCALE","PID","FILT1","AVG",
                      "INTEG","DERIV","DEADB","RAMP","ABS","MIN","MAX","MOD",
                      "SQRT","POW","CLAMP","CLAMP_A","SEL","MUX","COMPH","COMPL"):
                 return p.get("reg_out", "RF0")
+            if t == "PYBLOCK":
+                # Retourner oa1_ref uniquement si c'est vraiment une sortie analogique
+                # (quand port non connu). Pour les od* booléens → voir _get_src_ref
+                return p.get("oa1_ref") or p.get("reg_out")
             return None
 
         def bool_ref(src_b):
-            """Retourne la référence booléenne d'un bloc source."""
+            """Retourne la référence booléenne d'un bloc source simple."""
             if not src_b: return None
             t = src_b["type"]; p = src_b.get("params", {})
-            if t == "INPUT": return int(p.get("pin", 22))
-            if t == "MEM":   return p.get("bit", "M0")
-            if t == "DV":    return p.get("varname", "dv0")
+            if t == "INPUT":  return int(p.get("pin", 22))
+            if t == "MEM":    return p.get("bit", "M0")
+            if t == "DV":     return p.get("varname", "dv0")
             if t == "BACKUP" and p.get("bktype") == "bool": return p.get("varname", "backup0")
+            return None
+
+        _LOGIC_TYPES = {"AND", "OR", "NOT", "XOR", "INV", "NAND", "NOR"}
+
+        def bool_ref_for_input(isb, src_port, pre_coils_list):
+            """Comme bool_ref, mais gère tous les types de blocs source possibles
+            sur un port d{i} de CARITHM/PYBLOCK (blocs logiques, COIL, timer…).
+
+            Pour les blocs logiques (OR, INV…) : alloue un bit M temporaire,
+            insère un COIL implicite calculant la condition, retourne le bit M.
+            pre_coils_list : liste dans laquelle les COIL implicites sont ajoutés
+            (ils seront insérés AVANT le bloc courant dans prog).
+            """
+            # ── Cas simples ────────────────────────────────────────────────
+            ref = bool_ref(isb)
+            if ref is not None:
+                return ref
+            if isb is None:
+                return None
+            t = isb["type"]; p_src = isb.get("params", {})
+
+            # ── Bloc logique → prioriser reg_out RF* déjà assigné ──────────
+            if t in _LOGIC_TYPES:
+                # Si le canvas a assigné un reg_out RF* (ex: RF352 pour OR→CONN_TX),
+                # ce registre sera écrit directement par le bloc moteur "or"/"and"...
+                # → retourner ce RF directement sans générer de coil implicite.
+                reg_out_logic = p_src.get("reg_out")
+                if reg_out_logic and str(reg_out_logic).startswith("RF"):
+                    return reg_out_logic
+                # Sinon : générer un COIL implicite sur bit M temp
+                cond = build_cond(isb)
+                if cond:
+                    m = _alloc_mbit(isb["id"], "out")
+                    coil_id = f"__tmp_logic_{isb['id']}"
+                    if not any(c.get("id") == coil_id for c in pre_coils_list):
+                        pre_coils_list.append({"id": coil_id, "type": "coil",
+                                               "condition": cond, "output": m})
+                    return m
+                return None
+
+            # ── COIL / SET / RESET comme source ───────────────────────────
+            if t in ("COIL", "SET", "RESET"):
+                m = _alloc_mbit(isb["id"], "Q")
+                en_port = {"COIL": "EN", "SET": "S", "RESET": "R"}[t]
+                en_src, _ = wire_src(isb["id"], en_port)
+                cond = build_cond(en_src)
+                if cond:
+                    coil_id = f"__tmp_coilq_{isb['id']}"
+                    if not any(c.get("id") in (coil_id, isb["id"]) and
+                               c.get("output") == m for c in pre_coils_list):
+                        pre_coils_list.append({"id": coil_id, "type": "coil",
+                                               "condition": cond, "output": m})
+                return m
+
+            # ── Sortie od CARITHM / PYBLOCK ────────────────────────────────
+            if t in ("CARITHM", "PYBLOCK") and src_port:
+                sp = src_port.lower()
+                if sp.startswith("od"):
+                    return p_src.get(f"{sp}_ref")
+
+            # ── CONN / CONN_TX / CONN_RX avec reg_out RF* ──────────────────
+            # Si le connecteur porte déjà un reg_out RF* (ex: RF352),
+            # le bloc logique amont y écrit → retourner directement.
+            if t in ("CONN", "CONN_TX", "CONN_RX"):
+                reg_out_conn = p_src.get("reg_out")
+                if reg_out_conn and str(reg_out_conn).startswith("RF"):
+                    return reg_out_conn
+                # Sinon traverser pour trouver la source réelle
+                in_src, in_port = wire_src(isb["id"], "IN")
+                if in_src:
+                    return bool_ref_for_input(in_src, in_port, pre_coils_list)
+                return None
+
+            # ── SR_R / SR_S → bit mémoire ──────────────────────────────────
+            if t in ("SR_R", "SR_S"):
+                return p_src.get("bit", "M0")
+
+            # ── Timer done → COIL implicite ────────────────────────────────
+            if t in ("TON", "TOF", "TP", "WAIT", "WAITH", "PULSE"):
+                cond = {"type": "timer_done", "id": isb["id"]}
+                m = _alloc_mbit(isb["id"], "done")
+                coil_id = f"__tmp_tmr_{isb['id']}"
+                if not any(c.get("id") == coil_id for c in pre_coils_list):
+                    pre_coils_list.append({"id": coil_id, "type": "coil",
+                                           "condition": cond, "output": m})
+                return m
+
+            # ── Compteur done → COIL implicite ─────────────────────────────
+            if t in ("CTU", "CTD", "CTUD", "RUNTIMCNT"):
+                cond = {"type": "counter_done", "id": isb["id"]}
+                m = _alloc_mbit(isb["id"], "done")
+                coil_id = f"__tmp_ctr_{isb['id']}"
+                if not any(c.get("id") == coil_id for c in pre_coils_list):
+                    pre_coils_list.append({"id": coil_id, "type": "coil",
+                                           "condition": cond, "output": m})
+                return m
+
+            # ── COMPH / COMPL / HYST → bit M de leur reg_out ───────────────
+            if t in ("COMPH", "COMPL", "HYST"):
+                reg = p_src.get("reg_out", "M0")
+                if reg.startswith("M"):
+                    return reg
+
             return None
 
         def build_cond(src_b):
@@ -634,22 +870,37 @@ class BlockEditor(QWidget):
             if t == "MEM":
                 return {"type": "input", "ref": p.get("bit", "M0")}
             if t == "DV":
-                return {"type": "input", "ref": p.get("varname", "M0")}
+                # Normaliser en minuscules pour cohérence avec _on_dv_write et dv_vars
+                return {"type": "input", "ref": p.get("varname", "dv0").lower()}
             if t in ("NOT", "INV"):
                 isb, _ = wire_src(src_b["id"], "IN")
                 c = build_cond(isb)
                 return {"type": "not", "condition": c} if c else None
             if t == "AND":
+                # FIX : reg_out RF* disponible → l'utiliser directement
+                ro = p.get("reg_out")
+                if ro and isinstance(ro, str) and ro.startswith("RF"):
+                    return {"type": "input", "ref": ro}
                 i1, _ = wire_src(src_b["id"], "IN1")
                 i2, _ = wire_src(src_b["id"], "IN2")
                 conds = [c for c in [build_cond(i1), build_cond(i2)] if c]
                 return {"type": "and", "conditions": conds} if conds else None
             if t == "OR":
+                ro = p.get("reg_out")
+                if ro and isinstance(ro, str) and ro.startswith("RF"):
+                    return {"type": "input", "ref": ro}
                 i1, _ = wire_src(src_b["id"], "IN1")
                 i2, _ = wire_src(src_b["id"], "IN2")
                 conds = [c for c in [build_cond(i1), build_cond(i2)] if c]
                 return {"type": "or", "conditions": conds} if conds else None
             if t == "XOR":
+                # FIX : si le XOR a un reg_out RF* (assigné par _assignWireRF),
+                # l'utiliser directement — c'est le registre écrit par exec_block XOR.
+                # Pas besoin de reconstruire la logique booléenne complète.
+                ro = p.get("reg_out")
+                if ro and isinstance(ro, str) and ro.startswith("RF"):
+                    return {"type": "input", "ref": ro}
+                # Fallback: reconstruction logique si reg_out absent
                 i1, _ = wire_src(src_b["id"], "IN1")
                 i2, _ = wire_src(src_b["id"], "IN2")
                 c1 = build_cond(i1); c2 = build_cond(i2)
@@ -658,6 +909,26 @@ class BlockEditor(QWidget):
                         {"type": "and", "conditions": [c1, {"type": "not", "condition": c2}]},
                         {"type": "and", "conditions": [{"type": "not", "condition": c1}, c2]},
                     ]}
+                return None
+            if t == "NAND":
+                ro = p.get("reg_out")
+                if ro and isinstance(ro, str) and ro.startswith("RF"):
+                    return {"type": "input", "ref": ro}
+                i1, _ = wire_src(src_b["id"], "IN1")
+                i2, _ = wire_src(src_b["id"], "IN2")
+                conds = [c for c in [build_cond(i1), build_cond(i2)] if c]
+                if conds:
+                    return {"type": "not", "condition": {"type": "and", "conditions": conds}}
+                return None
+            if t == "NOR":
+                ro = p.get("reg_out")
+                if ro and isinstance(ro, str) and ro.startswith("RF"):
+                    return {"type": "input", "ref": ro}
+                i1, _ = wire_src(src_b["id"], "IN1")
+                i2, _ = wire_src(src_b["id"], "IN2")
+                conds = [c for c in [build_cond(i1), build_cond(i2)] if c]
+                if conds:
+                    return {"type": "not", "condition": {"type": "or", "conditions": conds}}
                 return None
             # Sortie timer/compteur → condition indirecte
             if t in ("TON","TOF","TP","WAIT","WAITH","PULSE"):
@@ -672,34 +943,128 @@ class BlockEditor(QWidget):
             # SR_R / SR_S → lire le bit
             if t in ("SR_R", "SR_S"):
                 return {"type": "input", "ref": p.get("bit", "M0")}
+            # CARITHM / PYBLOCK : sortie od{N} → laisser le chemin OUTPUT le gérer
+            # directement via _od_ref (voir compilation OUTPUT ci-dessous)
+            # build_cond ne peut pas connaître le port source → retourner None
+            if t in ("CARITHM", "PYBLOCK"):
+                return None
             return None
 
-        def resolve_bool_out(bid, port="Q"):
-            """Résout la destination booléenne d'un port de sortie."""
+        def resolve_bool_out(bid, port="Q", _visited=None):
+            """Résout la destination booléenne d'un port de sortie.
+            Traverse transparemment les paires CONN.
+            """
+            if _visited is None:
+                _visited = set()
             for w in wires:
                 if w["src"]["bid"] == bid and w["src"]["port"] == port:
-                    db = blocks.get(w["dst"]["bid"])
-                    if db:
-                        t = db["type"]; pp = db.get("params", {})
-                        if t == "OUTPUT": return int(pp.get("pin", 17))
-                        if t == "MEM":    return pp.get("bit", "M0")
-                        if t == "DV":     return pp.get("varname", "dv0")
+                    dst_bid = w["dst"]["bid"]
+                    db = blocks.get(dst_bid)
+                    if not db:
+                        continue
+                    t = db["type"]; pp = db.get("params", {})
+                    if t == "OUTPUT":
+                        # Priorité : val_ref RF* (variable) > pin GPIO (entier)
+                        val_ref = pp.get("val_ref")
+                        if val_ref and isinstance(val_ref, str) and val_ref.startswith("RF"):
+                            return val_ref
+                        return int(pp.get("pin", 17))
+                    if t == "MEM":    return pp.get("bit", "M0")
+                    if t == "DV":     return pp.get("varname", "dv0")
+                    # ── CARITHM / PYBLOCK : destination booléenne ────────
+                    # CORRECTION CRITIQUE : si la SOURCE est aussi un CARITHM/PYBLOCK,
+                    # le M-bit alloué ici N'EST JAMAIS LU par la destination :
+                    # bool_ref_for_input() retourne p_src.get("od{N}_ref") = RF canvas.
+                    # → retourner directement le RF canvas de la source.
+                    # Pour les autres sources (COIL, timer, logique...) on garde
+                    # le M-bit (il est alloué + lu via bool_ref_for_input).
+                    if t in ("CARITHM", "PYBLOCK"):
+                        _src_b = blocks.get(bid)
+                        if _src_b and _src_b.get("type","").upper() in ("CARITHM","PYBLOCK"):
+                            _src_p = _src_b.get("params", {})
+                            _pu = port.upper()
+                            if _pu.startswith("OD") and len(_pu) > 2:
+                                _pk = f"od{_pu[2:]}_ref"
+                            elif _pu in ("OUT","Q","OUT1"):
+                                _pk = "reg_out"
+                            else:
+                                _pk = f"{port.lower()}_ref"
+                            _rf = _src_p.get(_pk)
+                            if _rf and isinstance(_rf, str) and _rf.startswith("RF"):
+                                return _rf  # RF canvas → écriture dans registers[]
+                        return _alloc_mbit(bid, port)  # source COIL/timer → M-bit
+                    # ── Traversée CONN pair (sens avant) ─────────────────
+                    if t in ("CONN", "CONN_TX", "CONN_RX"):
+                        if dst_bid in _visited:
+                            continue
+                        _visited.add(dst_bid)
+                        num = str(pp.get("num", ""))
+                        partner_id = next(
+                            (i for i in _conn_by_num.get(num, []) if i != dst_bid),
+                            None
+                        )
+                        if partner_id:
+                            res = resolve_bool_out(partner_id, "OUT", _visited)
+                            if res is not None:
+                                return res
+                        else:
+                            # Fallback : CONN simple pass-through (pas de partenaire)
+                            # → suivre en avant via le port OUT du CONN courant
+                            res = resolve_bool_out(dst_bid, "OUT", _visited)
+                            if res is not None:
+                                return res
             return None
 
-        def resolve_reg_out(bid, port="OUT"):
-            """Résout la destination registre d'un port de sortie analogique."""
+        def resolve_reg_out(bid, port="OUT", _visited=None):
+            """Résout la destination registre d'un port de sortie analogique.
+            Traverse transparemment les paires CONN.
+            """
+            if _visited is None:
+                _visited = set()
             for w in wires:
                 if w["src"]["bid"] == bid and w["src"]["port"] == port:
-                    db = blocks.get(w["dst"]["bid"])
-                    if db:
-                        t = db["type"]; pp = db.get("params", {})
-                        if t in ("BACKUP","AV","STOAV"): return pp.get("varname","RF0")
-                        if t == "MEM":   return pp.get("bit","M0")
-                        if t == "OUTPUT": return int(pp.get("pin",17))
+                    dst_bid = w["dst"]["bid"]
+                    db = blocks.get(dst_bid)
+                    if not db:
+                        continue
+                    t = db["type"]; pp = db.get("params", {})
+                    if t in ("BACKUP","AV","STOAV"): return pp.get("reg_out") or pp.get("varname","RF0")
+                    if t == "MEM":    return pp.get("bit","M0")
+                    if t == "OUTPUT": return int(pp.get("pin",17))
+                    # ── Traversée CONN pair (sens avant) ─────────────────
+                    if t in ("CONN", "CONN_TX", "CONN_RX"):
+                        if dst_bid in _visited:
+                            continue
+                        _visited.add(dst_bid)
+                        num = str(pp.get("num", ""))
+                        partner_id = next(
+                            (i for i in _conn_by_num.get(num, []) if i != dst_bid),
+                            None
+                        )
+                        if partner_id:
+                            res = resolve_reg_out(partner_id, "OUT", _visited)
+                            if res is not None:
+                                return res
+                        else:
+                            # Fallback : CONN simple pass-through
+                            res = resolve_reg_out(dst_bid, "OUT", _visited)
+                            if res is not None:
+                                return res
             return None
 
-        # ── Tri topologique simplifié (gauche → droite) ───────────────────
-        sorted_b = sorted(blocks.values(), key=lambda b: b.get("x", 0))
+        # ── Tri topologique : gauche→droite, puis priorité type (sources avant calculs) ──
+        _COMPILE_PRIO = {
+            'SENSOR':0,'PT_IN':0,'ANA_IN':0,'AV':0,'DV':0,'BACKUP':0,'STOAV':0,
+            # PAGE_IN/PAGE_OUT supprimés — canvas infini (fils directs)
+            'ADD':2,'SUB':2,'MUL':2,'DIV':2,'ABS':2,'SQRT':2,
+            'MIN':2,'MAX':2,'MOD':2,'POW':2,'CLAMP':2,'CLAMP_A':2,
+            'SCALE':2,'FILT1':2,'AVG':2,'INTEG':2,'DERIV':2,
+            'DEADB':2,'RAMP':2,'SEL':2,'MUX':2,
+            'PID':3,'PLANCHER':3,'REGULECH':3,'CHAUDIERE':3,
+            'SOLAIRE':3,'ZONE':3,'ECS':3,
+            'COMPARE_F':4,'COMPH':4,'COMPL':4,'HYST':4,
+        }
+        sorted_b = sorted(blocks.values(), key=lambda b: (b.get("x", 0), _COMPILE_PRIO.get(b.get("type",""), 3)))
         done = set()
         prog = []
 
@@ -707,14 +1072,62 @@ class BlockEditor(QWidget):
             bid = b["id"]; bt = b["type"]; p = b.get("params", {})
 
             # Blocs purement graphiques — pas de code moteur
-            if bt in ("INPUT","OUTPUT","CONST","MEM","AND","OR","NOT",
-                      "XOR","INV","PAGE_IN","PAGE_OUT","CONN"):
+            if bt in ("INPUT","OUTPUT","CONST","MEM",
+                      "CONN","CONN_TX","CONN_RX",
+                      "CARTOUCHE","PAGE_IN","PAGE_OUT"):  # blocs visuels / héritage
                 continue
+
+            # ── Initialisation commune pour tous les blocs actifs ───────
             if bid in done:
                 continue
             done.add(bid)
             blk = {"id": bid}
 
+            # ── Blocs logiques : compiler en blocs moteur avec in1/in2/reg_out ──
+            # Ces blocs doivent écrire leur résultat dans reg_out (RF*)
+            # pour que les CONN_TX/RX et PYBLOCK.d{i} puissent les lire.
+            if bt in ("AND","OR","NOT","XOR","INV","NAND","NOR"):
+                blk["type"] = bt.lower()
+                # ── Entrées : lire depuis les fils IN1/IN2/IN ─────────────
+                i1sb, i1port = wire_src(bid, "IN1")
+                i2sb, i2port = wire_src(bid, "IN2")
+                insb, inport  = wire_src(bid, "IN")   # pour INV/NOT
+
+                def _get_src_ref(isb, src_port):
+                    """Retourne la RF reference CORRECTE en tenant compte du port source.
+                    FIX CRITIQUE : signal_ref(PYBLOCK) retournait oa1_ref (analog)
+                    au lieu de od2_ref/od3_ref (booléen). Il faut utiliser le port."""
+                    if not isb: return None
+                    t2 = isb["type"]; ps = isb.get("params", {})
+                    # PYBLOCK/CARITHM : od_ref ou oa_ref selon le port connecté
+                    if t2 in ("PYBLOCK", "CARITHM") and src_port:
+                        sp = src_port.lower()
+                        ref = ps.get(f"{sp}_ref")
+                        if ref: return ref
+                    # Blocs logiques avec reg_out RF* déjà assigné
+                    if t2 in _LOGIC_TYPES:
+                        ro = ps.get("reg_out")
+                        if ro and str(ro).startswith("RF"): return ro
+                    # Fallback standard
+                    return signal_ref(isb) or bool_ref(isb)
+
+                blk["in1"] = _get_src_ref(i1sb, i1port) or p.get("reg_a")
+                blk["in2"] = _get_src_ref(i2sb, i2port) or p.get("reg_b")
+                if bt in ("NOT","INV"):
+                    blk["in1"] = _get_src_ref(insb, inport) or blk.get("in1") or p.get("reg_a")
+                # ── Sortie : priorité au reg_out du canvas (ex: RF352) ────
+                # resolve_bool_out ne traverse pas CONN_TX → on prend directement p.get("reg_out")
+                reg_out_canvas = p.get("reg_out")
+                reg_out_wired  = resolve_bool_out(bid, "OUT")
+                # Priorité : canvas reg_out (RF*) > fil câblé (GPIO/M)
+                if reg_out_canvas and str(reg_out_canvas).startswith("RF"):
+                    blk["out"] = reg_out_canvas
+                elif reg_out_wired is not None:
+                    blk["out"] = reg_out_wired
+                else:
+                    blk["out"] = None
+                prog.append(blk)
+                continue
             # ── Bobines ──────────────────────────────────────────────────
             if bt in ("COIL","SET","RESET"):
                 ep = {"COIL":"EN","SET":"S","RESET":"R"}[bt]
@@ -903,12 +1316,18 @@ class BlockEditor(QWidget):
                 # → val_in = source câblée sur VAL (écriture)
                 # → val_out = registre où exposer la valeur lue (lecture)
                 isb, _ = wire_src(bid, "VAL")
-                ref_in  = signal_ref(isb)   # source analogique câblée
+                bktype = p.get("bktype", "float")
+                if bktype == "bool":
+                    # FIX: pour les sources booléennes (DV, INPUT, MEM…)
+                    # utiliser bool_ref() qui gère les blocs DV (signal_ref ne les couvre pas)
+                    ref_in = bool_ref(isb) or signal_ref(isb)
+                else:
+                    ref_in  = signal_ref(isb)   # source analogique câblée
                 ref_out = resolve_reg_out(bid, "VAL") or p.get("reg_out")
                 blk["type"]    = "backup"
                 blk["varname"] = p.get("varname", "backup0")
                 blk["default"] = p.get("default", 0.0)
-                blk["bktype"]  = p.get("bktype", "float")
+                blk["bktype"]  = bktype
                 if ref_in  is not None: blk["val_in"]  = ref_in
                 if ref_out is not None: blk["val_out"] = ref_out
                 bool_out = resolve_bool_out(bid, "VAL")
@@ -927,12 +1346,51 @@ class BlockEditor(QWidget):
 
             elif bt == "DV":
                 blk["type"]    = "dv"
-                blk["varname"] = p.get("varname", "dv0")
+                blk["varname"] = p.get("varname", "dv0").lower()  # normalise casse
                 blk["default"] = p.get("default", False)
-                # Résoudre le fil de sortie DV.OUT → OUTPUT/MEM
+                # Résoudre le fil de sortie DV.OUT → OUTPUT/MEM/RF
                 dv_out = resolve_bool_out(bid, "OUT")
                 if dv_out is not None:
                     blk["output"] = dv_out
+                # FIX CRITIQUE : si le DV est câblé vers un OR/AND/CONN (pas OUTPUT),
+                # reg_out=RF* est dans les params canvas → l'ajouter explicitement
+                # sinon le moteur n'écrit jamais dans RF130/RF131/etc.
+                dv_reg = p.get("reg_out")
+                if dv_reg and str(dv_reg).startswith("RF"):
+                    blk["reg_out"] = dv_reg
+                prog.append(blk)
+
+            elif bt == "BOOLEAN":
+                n_in = int(p.get("n_in", 4))
+                n_out = int(p.get("n_out", 1))
+                blk["type"]         = "boolean"
+                blk["n_in"]         = n_in
+                blk["n_out"]        = n_out
+                blk["invert_o1"]    = bool(p.get("invert_o1", False))
+                blk["invert_o2"]    = bool(p.get("invert_o2", False))
+                rows = 1 << n_in
+                tt = p.get("truth_table") or [[0]*n_out for _ in range(rows)]
+                if len(tt) != rows:
+                    tt = [[0]*n_out for _ in range(rows)]
+                blk["truth_table"]  = tt
+                # FIX : utiliser bool_ref_for_input pour gérer DV/CONN/logique
+                _pre_coils_bool = []
+                for i in range(1, n_in + 1):
+                    isb, src_port = wire_src(bid, f"I{i}")
+                    # Priorité: bool_ref_for_input gère tous les types de source
+                    ref = bool_ref_for_input(isb, src_port, _pre_coils_bool)
+                    if ref is None:
+                        ref = bool_ref(isb)  # fallback
+                    blk[f"in{i}_ref"] = ref
+                prog.extend(_pre_coils_bool)
+                # Sorties O1/O2 : résoudre vers GPIO, M* ou RF*
+                out1 = resolve_bool_out(bid, "O1")
+                out2 = resolve_bool_out(bid, "O2") if n_out >= 2 else None
+                # Si pas de fil câblé, utiliser le reg_out du canvas pour O1/O2
+                if out1 is None: out1 = p.get("reg_out_o1") or p.get("reg_out")
+                if out2 is None: out2 = p.get("reg_out_o2")
+                if out1 is not None: blk["out1_ref"] = out1
+                if out2 is not None: blk["out2_ref"] = out2
                 prog.append(blk)
 
             elif bt == "STOAV":
@@ -953,9 +1411,13 @@ class BlockEditor(QWidget):
 
             elif bt == "LOCALTIME":
                 blk["type"]     = "localtime"
-                blk["out_hour"] = p.get("out_hour", "RF13")
-                blk["out_mday"] = p.get("out_mday", "RF14")
-                blk["out_wday"] = p.get("out_wday", "RF15")
+                # FIX: le canvas stocke reg_hour/reg_wday (nouveaux noms)
+                # fallback sur out_hour/out_wday (anciens noms) pour compatibilité
+                blk["out_hour"] = p.get("reg_hour") or p.get("out_hour", "RF13")
+                blk["out_mday"] = p.get("reg_mday") or p.get("out_mday", "RF14")
+                blk["out_wday"] = p.get("reg_wday") or p.get("out_wday", "RF15")
+                if p.get("reg_min"):  blk["out_min"] = p["reg_min"]
+                if p.get("reg_sec"):  blk["out_sec"] = p["reg_sec"]
                 prog.append(blk)
 
             # ── Actionneurs ───────────────────────────────────────────────
@@ -1059,6 +1521,39 @@ class BlockEditor(QWidget):
                 blk["out_pompe"]    = p.get("out_pompe", "k6")
                 prog.append(blk)
 
+            elif bt == "PROG_H":
+                ensb,  _ = wire_src(bid, "EN")
+                vacsb, _ = wire_src(bid, "VAC")
+                en_cond  = build_cond(ensb)
+                vac_cond = build_cond(vacsb)
+                blk["type"]       = "prog_h"
+                blk["name"]       = p.get("name", "Planning")
+                blk["hebdo_mode"] = p.get("hebdo_mode", False)
+                blk["sp_jour"]    = float(p.get("sp_jour", 20.0))
+                blk["sp_nuit"]    = float(p.get("sp_nuit", 17.0))
+                blk["sp_vac"]     = float(p.get("sp_vac",  15.0))
+                blk["h_debut_j"]  = int(p.get("h_debut_j", 6))
+                blk["m_debut_j"]  = int(p.get("m_debut_j", 30))
+                blk["h_fin_j"]    = int(p.get("h_fin_j",   22))
+                blk["m_fin_j"]    = int(p.get("m_fin_j",    0))
+                # Planning hebdomadaire (d0=Lun … d6=Dim)
+                for _di in range(7):
+                    _key = f"d{_di}"
+                    if _key in p:
+                        blk[_key] = p[_key]
+                blk["reg_sp"]     = p.get("reg_sp",     "RF5")
+                # Sorties : priorité fil câblé > paramètre
+                blk["out_jour"]   = p.get("out_jour",   "")
+                blk["out_vac_dv"] = p.get("out_vac_dv", "")
+                blk["out_actif"]  = p.get("out_actif",  "")
+                _jour_wire = resolve_bool_out(bid, "JOUR")
+                if _jour_wire   is not None: blk["out_jour"]   = _jour_wire
+                _vac_wire  = resolve_bool_out(bid, "VAC_OUT")
+                if _vac_wire    is not None: blk["out_vac_dv"] = _vac_wire
+                if en_cond:  blk["condition"] = en_cond
+                if vac_cond: blk["cond_vac"]  = vac_cond
+                prog.append(blk)
+
             elif bt == "CONTACTOR":
                 isb, _ = wire_src(bid, "ON")
                 cond = build_cond(isb) or p.get("condition")
@@ -1086,9 +1581,17 @@ class BlockEditor(QWidget):
                 prog.append(blk)
 
             elif bt == "RUNTIMCNT":
-                runsb, _ = wire_src(bid, "RUN")
-                rstsb, _ = wire_src(bid, "RST")
+                runsb, run_port = wire_src(bid, "RUN")
+                rstsb, _        = wire_src(bid, "RST")
                 cond  = build_cond(runsb) or p.get("condition")
+                # FIX inter-pages : PYBLOCK.od{N} transmis via PAGE_OUT→PAGE_IN
+                # build_cond retourne None pour PYBLOCK → condition directe via RF
+                if cond is None and runsb and runsb.get("type") == "PYBLOCK" and run_port:
+                    sp = run_port.lower()
+                    if sp.startswith("od"):
+                        od_rf = runsb.get("params", {}).get(f"{sp}_ref")
+                        if od_rf:
+                            cond = {"type": "input", "ref": od_rf}
                 rcond = build_cond(rstsb) or p.get("reset_condition")
                 blk["type"]        = "runtimcnt"
                 blk["name"]        = p.get("name", p.get("label", "Compteur1"))
@@ -1299,6 +1802,12 @@ class BlockEditor(QWidget):
                 blk["type"] = "carithm"
                 blk["code"] = p.get("code","")
                 blk["name"] = p.get("name","CArithm")
+                blk["n_a"]  = int(p.get("n_a",  2))
+                blk["n_d"]  = int(p.get("n_d",  1))
+                blk["n_i"]  = int(p.get("n_i",  0))
+                blk["n_oa"] = int(p.get("n_oa", 1))
+                blk["n_od"] = int(p.get("n_od", 1))
+                blk["n_oi"] = int(p.get("n_oi", 0))
                 # Connecter les ports d'entrée analogiques A1..A8
                 for i in range(1, int(p.get("n_a",0))+1):
                     isb, _ = wire_src(bid, f"A{i}")
@@ -1306,11 +1815,13 @@ class BlockEditor(QWidget):
                     # Priorité : fil > param existant > fallback RF*
                     blk[f"a{i}_ref"] = ref if ref is not None else p.get(f"a{i}_ref", f"RF{i-1}")
                 # Entrées booléennes d1..d7
+                # FIX: bool_ref_for_input gère OR/INV/XOR/AND/COIL/Timer → bit M temp
+                _pre_coils_ca = []
                 for i in range(1, int(p.get("n_d",0))+1):
-                    isb, _ = wire_src(bid, f"d{i}")
-                    ref = bool_ref(isb)
-                    # Priorité : fil > param existant
+                    isb, src_port = wire_src(bid, f"d{i}")
+                    ref = bool_ref_for_input(isb, src_port, _pre_coils_ca)
                     blk[f"d{i}_ref"] = ref if ref is not None else p.get(f"d{i}_ref")
+                prog.extend(_pre_coils_ca)   # COIL implicites AVANT le CARITHM
                 # Entrées entières I1..I2
                 for i in range(1, int(p.get("n_i",0))+1):
                     isb, _ = wire_src(bid, f"I{i}")
@@ -1323,9 +1834,13 @@ class BlockEditor(QWidget):
                     blk[f"oa{i}_ref"] = ref if ref is not None else p.get(f"oa{i}_ref", f"RF{i-1}")
                 # Sorties od1..od8
                 for i in range(1, int(p.get("n_od",0))+1):
-                    ref = resolve_bool_out(bid, f"od{i}")
-                    # Priorité : fil > param existant
-                    blk[f"od{i}_ref"] = ref if ref is not None else p.get(f"od{i}_ref")
+                    # Priorité : RF canvas déjà assigné > resolve_bool_out
+                    canvas_ref = p.get(f"od{i}_ref")
+                    if canvas_ref and isinstance(canvas_ref, str) and canvas_ref.startswith("RF"):
+                        blk[f"od{i}_ref"] = canvas_ref
+                    else:
+                        ref = resolve_bool_out(bid, f"od{i}")
+                        blk[f"od{i}_ref"] = ref if ref is not None else canvas_ref
                 # Sortie OI1
                 if p.get("n_oi",0) > 0:
                     blk["oi1_ref"] = resolve_reg_out(bid,"OI1") or "RF15"
@@ -1341,13 +1856,22 @@ class BlockEditor(QWidget):
                 blk["n_od"] = int(p.get("n_od", 1))
                 blk["n_oi"] = int(p.get("n_oi", 0))
                 for i in range(1, int(p.get("n_a", 0)) + 1):
-                    isb, _ = wire_src(bid, f"A{i}")
+                    isb, src_port = wire_src(bid, f"A{i}")
                     ref = signal_ref(isb)
+                    # FIX inter-pages : PYBLOCK.OA{N} transmis via PAGE_OUT→PAGE_IN
+                    # signal_ref ne connaît que OA1, cette passe couvre OA2+
+                    if ref is None and isb and isb.get("type") == "PYBLOCK" and src_port:
+                        sp = src_port.upper()
+                        if sp.startswith("OA"):
+                            ref = isb.get("params", {}).get(f"oa{sp[2:]}_ref")
                     blk[f"a{i}_ref"] = ref if ref is not None else p.get(f"a{i}_ref", f"RF{i-1}")
+                # FIX: bool_ref_for_input gère OR/INV/XOR/AND/COIL/Timer → bit M temp
+                _pre_coils_py = []
                 for i in range(1, int(p.get("n_d", 0)) + 1):
-                    isb, _ = wire_src(bid, f"d{i}")
-                    ref = bool_ref(isb)
+                    isb, src_port = wire_src(bid, f"d{i}")
+                    ref = bool_ref_for_input(isb, src_port, _pre_coils_py)
                     blk[f"d{i}_ref"] = ref if ref is not None else p.get(f"d{i}_ref")
+                prog.extend(_pre_coils_py)   # COIL implicites AVANT le PYBLOCK
                 for i in range(1, int(p.get("n_i", 0)) + 1):
                     isb, _ = wire_src(bid, f"I{i}")
                     ref = signal_ref(isb)
@@ -1356,12 +1880,116 @@ class BlockEditor(QWidget):
                     ref = resolve_reg_out(bid, f"OA{i}")
                     blk[f"oa{i}_ref"] = ref if ref is not None else p.get(f"oa{i}_ref", f"RF{i-1}")
                 for i in range(1, int(p.get("n_od", 0)) + 1):
-                    ref = resolve_bool_out(bid, f"od{i}")
-                    blk[f"od{i}_ref"] = ref if ref is not None else p.get(f"od{i}_ref")
+                    canvas_rf = p.get(f"od{i}_ref")
+                    if canvas_rf and isinstance(canvas_rf, str) and canvas_rf.startswith("RF"):
+                        # RF canvas déjà assigné → utiliser directement
+                        blk[f"od{i}_ref"] = canvas_rf
+                    else:
+                        ref = resolve_bool_out(bid, f"od{i}")
+                        # FIX: si resolve retourne GPIO int mais canvas a RF -> garder les deux
+                        if isinstance(ref, int) and canvas_rf and str(canvas_rf).startswith("RF"):
+                            blk[f"od{i}_ref"]  = canvas_rf
+                            blk[f"od{i}_gpio"] = ref
+                        else:
+                            blk[f"od{i}_ref"] = ref if ref is not None else canvas_rf
                 if p.get("n_oi", 0) > 0:
                     blk["oi1_ref"] = resolve_reg_out(bid, "OI1") or "RF15"
                 prog.append(blk)
 
+
+        # ════════════════════════════════════════════════════════════════════
+        # ── PASS 2 : OUTPUT blocks driven directly by INPUT / logic blocks ──
+        # Blocs OUTPUT câblés directement depuis INPUT, AND, OR, NOT, XOR, INV,
+        # DV (multi-sorties) — ils ne génèrent aucun engine-block dans le pass 1
+        # (tous dans la liste skip). On génère ici des coils implicites.
+        # ════════════════════════════════════════════════════════════════════
+        def resolve_all_bool_outs(src_bid, port="OUT"):
+            """Retourne TOUTES les destinations booléennes câblées sur un port."""
+            outs = []
+            for w in wires:
+                if w["src"]["bid"] == src_bid and w["src"]["port"] == port:
+                    db = blocks.get(w["dst"]["bid"])
+                    if db:
+                        t = db["type"]; pp = db.get("params", {})
+                        if t == "OUTPUT": outs.append(int(pp.get("pin", 17)))
+                        elif t == "MEM":  outs.append(pp.get("bit", "M0"))
+                        elif t == "DV":   outs.append(pp.get("varname", "dv0"))
+            return outs
+
+        LOGIC_BLOCKS = {"AND", "OR", "NOT", "XOR", "INV", "NAND", "NOR",
+                        "SR_R", "SR_S", "COIL", "SET", "RESET",
+                        "TON", "TOF", "TP", "WAIT", "WAITH", "PULSE",
+                        "CTU", "CTD", "CTUD",
+                        "COMPARE_F", "COMPH", "COMPL", "HYST"}
+
+        generated_outputs = set()
+        for blk in prog:
+            if "output" in blk:
+                generated_outputs.add(blk["output"])
+
+        for b in sorted_b:
+            bid = b["id"]; bt = b["type"]; p = b.get("params", {})
+
+            if bt == "OUTPUT":
+                gpio_pin = int(p.get("pin", 17))
+                if gpio_pin in generated_outputs:
+                    continue
+                src_b, src_port_out = wire_src(bid, "VAL")
+                if src_b is None:
+                    continue
+                st = src_b["type"]
+                cond = None
+                if st == "INPUT":
+                    cond = {"type": "input", "ref": int(src_b.get("params", {}).get("pin", 22))}
+                elif st in LOGIC_BLOCKS:
+                    cond = build_cond(src_b)
+                elif st == "DV":
+                    sp = src_b.get("params", {})
+                    cond = {"type": "input", "ref": sp.get("varname", "dv0")}
+                elif st == "MEM":
+                    cond = {"type": "input", "ref": src_b.get("params", {}).get("bit", "M0")}
+                elif st in ("PYBLOCK", "CARITHM"):
+                    # FIX : PYBLOCK.od{N} → OUTPUT : lire od{N}_ref (registre RF écrit par le pyblock)
+                    _sp = (src_port_out or "").lower()
+                    _od_ref = src_b.get("params", {}).get(f"{_sp}_ref")
+                    if _od_ref:
+                        cond = {"type": "input", "ref": _od_ref}
+                if cond:
+                    prog.append({"id": f"__auto_coil_{bid}",
+                                 "type": "coil",
+                                 "condition": cond,
+                                 "output": gpio_pin})
+                    generated_outputs.add(gpio_pin)
+
+            elif bt == "DV":
+                varname = p.get("varname", "dv0").lower()  # normalise casse
+                all_outs = resolve_all_bool_outs(bid, "OUT")
+                for o in all_outs:
+                    if o not in generated_outputs:
+                        prog.append({"id": f"__auto_dv_{bid}_{o}",
+                                     "type": "coil",
+                                     "condition": {"type": "input", "ref": varname},
+                                     "output": o})
+                        generated_outputs.add(o)
+
+            elif bt == "INPUT":
+                gpio_in = int(p.get("pin", 22))
+                all_outs = resolve_all_bool_outs(bid, "VAL")
+                for o in all_outs:
+                    if o not in generated_outputs:
+                        prog.append({"id": f"__auto_input_{bid}_{o}",
+                                     "type": "coil",
+                                     "condition": {"type": "input", "ref": gpio_in},
+                                     "output": o})
+                        generated_outputs.add(o)
+
+        # Exposer la carte block_id → M-bit temporaire pour le canvas
+        # Ex: {"or1": "M24", "inv1": "M25"} utilisé pour colorer les fils
+        mbit_map = {}
+        for (bid, port), mbit in _tmp_m_used.items():
+            if not str(bid).startswith("__tmp"):
+                mbit_map[bid] = mbit
+        self._logic_mbit_map = mbit_map
 
         return prog
 
@@ -1450,6 +2078,13 @@ class BlockEditor(QWidget):
 
     def update_from_state(self, state: dict):
         if not HAS_WEBENGINE: return
+        # Injecter la carte bit-M temporaires pour que le canvas puisse
+        # colorer correctement les fils issus des blocs logiques (OR, INV, XOR…).
+        # Ex: {"or1": "M24", "inv1": "M25"} → canvas lit memory["M24"] pour OR.active
+        mbit_map = getattr(self, '_logic_mbit_map', {})
+        if mbit_map:
+            state = dict(state)
+            state['logic_mbits'] = mbit_map
         self.bridge.set_pending_state(json.dumps(state))
         self.view.page().runJavaScript(
             "if(window.pybridge&&window.pybridge.get_pending_state){"
@@ -1473,4 +2108,14 @@ class BlockEditor(QWidget):
     def fit_view(self):
         if HAS_WEBENGINE:
             self.view.page().runJavaScript("window.fbdAPI && window.fbdAPI.fitView()")
+
+    def set_analog_config(self, analog_config: dict):
+        """Pousse la config sondes (Ctrl+T) dans le canvas FBD (enrichit les dropdowns ANA0…ANA11)."""
+        self._pending_analog_config = analog_config  # cache pour re-push après loadFinished
+        if HAS_WEBENGINE and self._canvas_ready:
+            import json as _json
+            cfg_js = _json.dumps(analog_config)
+            self.view.page().runJavaScript(
+                f"window.setAnalogConfig && window.setAnalogConfig({cfg_js});"
+            )
 

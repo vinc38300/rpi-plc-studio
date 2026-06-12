@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Régulation Maison — Synoptique</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700;800&display=swap');
+:root {
+  --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--bg4:#30363d;
+  --border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+  --accent:#58a6ff;--green:#3fb950;--amber:#d29922;--red:#f85149;
+  --purple:#bc8cff;--solar:#f0883e;--blue2:#1f6feb;--teal:#39d353;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;min-height:100vh;overflow-x:hidden}
+
+/* ── TOPBAR ── */
+#topbar{position:fixed;top:0;left:0;right:0;z-index:200;height:50px;background:rgba(13,17,23,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px}
+.logo{font-weight:800;font-size:14px;letter-spacing:-.3px;white-space:nowrap}
+.logo span{color:var(--accent)}
+#api-url{flex:0 0 200px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;outline:none}
+#api-url:focus{border-color:var(--accent)}
+#conn-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+#conn-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+#conn-dot.err{background:var(--red)}
+#conn-label{font-size:11px;color:var(--text2)}
+.nav-tabs{display:flex;gap:2px;margin-left:auto}
+.nav-tab{padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);border:none;background:transparent;transition:all .15s}
+.nav-tab:hover{background:var(--bg3);color:var(--text)}
+.nav-tab.active{background:var(--blue2);color:#fff}
+#clock{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);flex-shrink:0}
+
+/* ── PAGES ── */
+.page{display:none;padding:58px 0 40px;min-height:100vh}
+.page.active{display:block}
+.page-inner{max-width:1300px;margin:0 auto;padding:16px 16px 0}
+
+/* ── HYDRAULIC SVG CARD ── */
+.hyd-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;position:relative}
+#hyd-svg{width:100%;display:block}
+
+/* ── BOTTOM GRID ── */
+.bottom-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.panel.p-blue::before{background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.panel.p-green::before{background:linear-gradient(90deg,transparent,var(--green),transparent)}
+.panel.p-amber::before{background:linear-gradient(90deg,transparent,var(--amber),transparent)}
+.panel.p-solar::before{background:linear-gradient(90deg,transparent,var(--solar),transparent)}
+.panel.p-red::before{background:linear-gradient(90deg,transparent,var(--red),transparent)}
+.panel-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:12px}
+
+/* Contacteurs */
+.c-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.c-item{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 9px;display:flex;align-items:center;gap:7px}
+.c-led{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--text3);border:1px solid var(--border);transition:background .3s,box-shadow .3s}
+.c-led.on{background:var(--green);box-shadow:0 0 5px var(--green);border-color:var(--green)}
+.c-led.warn{background:var(--amber)}
+.c-led.alarm{background:var(--red);box-shadow:0 0 5px var(--red);animation:pulse 1s infinite}
+.c-name{font-size:11px;font-weight:600;color:var(--text);line-height:1.2}
+.c-sub{font-size:9px;color:var(--text3)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Temp mini */
+.t-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.t-cell{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px}
+.t-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.t-val{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--accent)}
+.t-val.hot{color:var(--solar)}.t-val.warm{color:var(--amber)}.t-val.cold{color:#79c0ff}
+
+/* ── PAGE HORAIRES ── */
+.sched-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin:16px 0}
+.day-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 8px;text-align:center}
+.day-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;color:var(--text2)}
+.day-tog{width:40px;height:22px;border-radius:11px;background:var(--bg4);position:relative;cursor:pointer;margin:0 auto 10px;transition:background .2s;border:1px solid var(--border)}
+.day-tog::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--text3);transition:left .2s,background .2s}
+.day-tog.on{background:rgba(63,185,80,.2);border-color:var(--green)}
+.day-tog.on::after{left:21px;background:var(--green)}
+.t-input-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;display:block}
+.t-input-val{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;width:100%;transition:border-color .15s;user-select:none}
+.t-input-val:hover{border-color:var(--accent)}
+.corr-bar{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:16px}
+.corr-lbl{font-size:12px;color:var(--text2);flex:1}
+.corr-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:var(--amber)}
+.corr-btn{width:30px;height:30px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.corr-btn:hover{background:var(--accent);border-color:var(--accent);color:#000}
+
+/* ── PAGE CONSIGNES ── */
+.cons-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cons-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.cons-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.cons-ctrl{display:flex;align-items:center;gap:10px}
+.cons-val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:var(--text);flex:1;text-align:center}
+.cons-unit{font-size:11px;color:var(--text3)}
+.cons-btn{width:34px;height:34px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.cons-btn:hover{background:var(--accent);border-color:var(--accent);color:#000}
+.cons-range{width:100%;margin-top:8px;accent-color:var(--accent)}
+.sec-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
+/* ── PAGE FORCAGES ── */
+.forc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.forc-item{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.forc-item.on{border-color:var(--amber)}
+.fi-name{font-size:12px;font-weight:600;color:var(--text)}
+.fi-desc{font-size:10px;color:var(--text3);margin-top:2px}
+.fi-tog{width:42px;height:22px;border-radius:11px;background:var(--bg4);position:relative;cursor:pointer;border:1px solid var(--border);flex-shrink:0;transition:background .2s}
+.fi-tog::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--text3);transition:left .2s,background .2s}
+.fi-tog.on{background:rgba(210,153,34,.2);border-color:var(--amber)}
+.fi-tog.on::after{left:21px;background:var(--amber)}
+
+/* ── PAGE COMPTEURS ── */
+.cpt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cpt-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.cpt-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text);margin-bottom:10px}
+.cpt-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.cpt-row:last-child{border-bottom:none}
+.cpt-key{font-size:11px;color:var(--text2)}
+.cpt-v{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--accent)}
+
+/* ── PAGE CTN ── */
+.ctn-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.ctn-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.ctn-lbl{font-size:10px;color:var(--text3);margin-bottom:8px}
+.ctn-ctrl{display:flex;align-items:center;gap:8px}
+.ctn-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;color:var(--text);flex:1;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="logo">RPI-PLC <span>regulech</span></div>
+  <input id="api-url" type="text" value="" placeholder="http://rpi:5000">
+  <div id="conn-dot"></div>
+  <span id="conn-label">—</span>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('synop')">Synoptique</button>
+    <button class="nav-tab" onclick="showPage('horaires')">Horaires</button>
+    <button class="nav-tab" onclick="showPage('consignes')">Consignes</button>
+    <button class="nav-tab" onclick="showPage('forcages')">Forçages</button>
+    <button class="nav-tab" onclick="showPage('compteurs')">Compteurs</button>
+    <button class="nav-tab" onclick="showPage('ctn')">Offsets CTN</button>
+  </div>
+  <div id="clock">--:--:--</div>
+</div>
+
+<!-- ══════════════════ PAGE SYNOPTIQUE ══════════════════ -->
+<div id="page-synop" class="page active">
+<div class="page-inner">
+
+<!-- Schéma hydraulique SVG -->
+<div class="hyd-card">
+<svg id="hyd-svg" viewBox="0 0 1100 480" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1100" height="480" fill="#161b22"/>
+
+  <!-- ── PANNEAUX SOLAIRES ── -->
+  <rect x="30" y="30" width="160" height="90" rx="8" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+  <!-- grille panneaux -->
+  <line x1="30" y1="60" x2="190" y2="60" stroke="#39d353" stroke-width=".5" opacity=".4"/>
+  <line x1="30" y1="90" x2="190" y2="90" stroke="#39d353" stroke-width=".5" opacity=".4"/>
+  <line x1="83" y1="30" x2="83" y2="120" stroke="#39d353" stroke-width=".5" opacity=".4"/>
+  <line x1="137" y1="30" x2="137" y2="120" stroke="#39d353" stroke-width=".5" opacity=".4"/>
+  <text x="110" y="148" text-anchor="middle" fill="#8b949e" font-size="10" font-family="Outfit,sans-serif">Capteurs solaires</text>
+  <!-- temp capteurs badge -->
+  <rect x="60" y="128" width="100" height="26" rx="5" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text id="t-cap-lbl" x="110" y="143" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">Capteurs</text>
+  <text id="t-capteurs" x="110" y="153" text-anchor="middle" fill="#f0883e" font-size="14" font-weight="700" font-family="JetBrains Mono,monospace">--.-°C</text>
+
+  <!-- ── BALLON ECS ── -->
+  <rect x="400" y="40" width="120" height="220" rx="10" fill="#21262d" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="460" y="30" text-anchor="middle" fill="#8b949e" font-size="10" font-family="Outfit,sans-serif">Ballon ECS</text>
+  <!-- séparation haut/bas -->
+  <line x1="400" y1="145" x2="520" y2="145" stroke="#30363d" stroke-width="1" stroke-dasharray="4 3"/>
+  <!-- badges temp ballon -->
+  <rect x="415" y="58" width="90" height="36" rx="5" fill="#0d1117" stroke="#30363d"/>
+  <text x="460" y="72" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">Haut</text>
+  <text id="t-ball-haut" x="460" y="87" text-anchor="middle" fill="#f0883e" font-size="16" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+  <rect x="415" y="158" width="90" height="36" rx="5" fill="#0d1117" stroke="#30363d"/>
+  <text x="460" y="172" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">Bas</text>
+  <text id="t-ball-bas" x="460" y="187" text-anchor="middle" fill="#58a6ff" font-size="16" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+
+  <!-- ── CHAUDIÈRE ── -->
+  <rect x="700" y="60" width="130" height="160" rx="10" fill="#21262d" stroke="#d29922" stroke-width="1.5"/>
+  <text x="765" y="50" text-anchor="middle" fill="#8b949e" font-size="10" font-family="Outfit,sans-serif">Chaudière</text>
+  <!-- flamme icon -->
+  <polygon points="765,80 758,110 768,100 765,120 775,100 770,110" fill="#f0883e" opacity=".8"/>
+  <rect x="710" y="130" width="110" height="36" rx="5" fill="#0d1117" stroke="#30363d"/>
+  <text x="765" y="145" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">T° Chaudière</text>
+  <text id="t-chaudiere" x="765" y="160" text-anchor="middle" fill="#d29922" font-size="16" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+  <!-- LED production -->
+  <circle id="led-prod" cx="800" cy="90" r="6" fill="#484f58"/>
+  <text x="812" y="94" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">Prod</text>
+  <circle id="led-alarm" cx="800" cy="108" r="6" fill="#484f58"/>
+  <text x="812" y="112" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">Alarme</text>
+
+  <!-- ── PLANCHER CHAUFFANT ── -->
+  <rect x="700" y="310" width="340" height="120" rx="10" fill="#21262d" stroke="#3fb950" stroke-width="1" stroke-dasharray="5 3"/>
+  <text x="870" y="302" text-anchor="middle" fill="#8b949e" font-size="10" font-family="Outfit,sans-serif">Plancher chauffant</text>
+  <!-- serpentin -->
+  <path d="M720 340 L980 340 L980 360 L720 360 L720 380 L980 380 L980 400 L720 400" fill="none" stroke="#3fb950" stroke-width="2" opacity=".4"/>
+  <!-- badges départ/retour plancher -->
+  <rect x="715" y="318" width="80" height="30" rx="4" fill="#0d1117" stroke="#30363d"/>
+  <text x="755" y="329" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">Départ</text>
+  <text id="t-depart" x="755" y="343" text-anchor="middle" fill="#d29922" font-size="14" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+  <rect x="910" y="318" width="80" height="30" rx="4" fill="#0d1117" stroke="#30363d"/>
+  <text x="950" y="329" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">Retour</text>
+  <text id="t-retour" x="950" y="343" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+
+  <!-- ── SONDES EXT / AMB / BOUCLAGE ── -->
+  <rect x="30" y="280" width="100" height="54" rx="6" fill="#21262d" stroke="#30363d"/>
+  <text x="80" y="298" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">Extérieur</text>
+  <text id="t-ext" x="80" y="318" text-anchor="middle" fill="#79c0ff" font-size="18" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+  <text x="80" y="330" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">°C</text>
+
+  <rect x="150" y="280" width="100" height="54" rx="6" fill="#21262d" stroke="#30363d"/>
+  <text x="200" y="298" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">Ambiance</text>
+  <text id="t-amb" x="200" y="318" text-anchor="middle" fill="#3fb950" font-size="18" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+  <text x="200" y="330" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">°C</text>
+
+  <rect x="270" y="280" width="100" height="54" rx="6" fill="#21262d" stroke="#30363d"/>
+  <text x="320" y="298" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">Bouclage ECS</text>
+  <text id="t-bouclage" x="320" y="318" text-anchor="middle" fill="#d29922" font-size="18" font-weight="700" font-family="JetBrains Mono,monospace">--.-</text>
+  <text x="320" y="330" text-anchor="middle" fill="#8b949e" font-size="8" font-family="Outfit,sans-serif">°C</text>
+
+  <!-- ── V3V SOLAIRE (K2 / K10) ── -->
+  <!-- triangle V3V -->
+  <polygon points="290,120 310,155 270,155" fill="#21262d" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="290" y="170" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">V3V Sol</text>
+  <circle id="led-k2" cx="290" cy="138" r="5" fill="#484f58"/>
+
+  <!-- V3V CHAUDIERE → plancher (K7/K8) -->
+  <polygon points="620,350 640,385 600,385" fill="#21262d" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="620" y="400" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">V3V Plancher</text>
+  <circle id="led-k7" cx="612" cy="368" r="5" fill="#484f58"/>
+  <circle id="led-k8" cx="630" cy="368" r="5" fill="#484f58"/>
+
+  <!-- ── CIRCULATEURS ── -->
+  <!-- K5 circ ECS sol -->
+  <circle cx="350" cy="230" r="16" fill="#21262d" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="350" y="234" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif" font-weight="700">K5</text>
+  <circle id="led-k5" cx="363" cy="218" r="5" fill="#484f58"/>
+
+  <!-- K6 circ ECS chaud -->
+  <circle cx="580" cy="230" r="16" fill="#21262d" stroke="#d29922" stroke-width="1.5"/>
+  <text x="580" y="234" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif" font-weight="700">K6</text>
+  <circle id="led-k6" cx="593" cy="218" r="5" fill="#484f58"/>
+
+  <!-- K9 circ plancher -->
+  <circle cx="870" cy="260" r="18" fill="#21262d" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="870" y="264" text-anchor="middle" fill="#8b949e" font-size="10" font-family="Outfit,sans-serif" font-weight="700">K9</text>
+  <circle id="led-k9" cx="885" cy="246" r="5" fill="#484f58"/>
+
+  <!-- K4 circ réhausse -->
+  <circle cx="660" cy="135" r="16" fill="#21262d" stroke="#f85149" stroke-width="1.5"/>
+  <text x="660" y="139" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif" font-weight="700">K4</text>
+  <circle id="led-k4" cx="673" cy="122" r="5" fill="#484f58"/>
+
+  <!-- ── TUYAUTERIES ── -->
+  <!-- panneaux → V3V sol -->
+  <line x1="190" y1="100" x2="270" y2="138" stroke="#f0883e" stroke-width="2" opacity=".5"/>
+  <!-- V3V sol → ballon (K2 actif) -->
+  <line x1="310" y1="138" x2="400" y2="120" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="5 3" id="pipe-sol"/>
+  <!-- V3V → chaudière (K10) -->
+  <line x1="310" y1="155" x2="700" y2="155" stroke="#d29922" stroke-width="1.5" stroke-dasharray="5 3" id="pipe-ch-sol"/>
+  <!-- chaudière → ballon -->
+  <line x1="700" y1="120" x2="520" y2="120" stroke="#d29922" stroke-width="2" opacity=".5"/>
+  <!-- ballon → départ plancher via K6/K5 -->
+  <line x1="520" y1="200" x2="580" y2="200" stroke="#f0883e" stroke-width="1.5" opacity=".6"/>
+  <line x1="520" y1="190" x2="350" y2="200" stroke="#3fb950" stroke-width="1.5" opacity=".6"/>
+  <!-- chaudière → réhausse K4 -->
+  <line x1="700" y1="135" x2="676" y2="135" stroke="#f85149" stroke-width="1.5" opacity=".6"/>
+  <!-- départ plancher -->
+  <line x1="620" y1="310" x2="700" y2="320" stroke="#d29922" stroke-width="2" opacity=".5"/>
+  <!-- K9 → plancher -->
+  <line x1="870" y1="278" x2="870" y2="310" stroke="#3fb950" stroke-width="2" opacity=".6"/>
+
+  <!-- ── ÉTAT GÉNÉRAL ── -->
+  <rect x="1010" y="20" width="80" height="50" rx="6" fill="#21262d" stroke="#30363d"/>
+  <text x="1050" y="36" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">Période</text>
+  <text id="t-periode" x="1050" y="52" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="700" font-family="Outfit,sans-serif">CONFORT</text>
+
+  <rect x="1010" y="80" width="80" height="50" rx="6" fill="#21262d" stroke="#30363d"/>
+  <text x="1050" y="96" text-anchor="middle" fill="#8b949e" font-size="9" font-family="Outfit,sans-serif">K1 Chaudière</text>
+  <circle id="led-k1" cx="1050" cy="115" r="8" fill="#484f58"/>
+
+  <!-- légende -->
+  <text x="20" y="460" fill="#484f58" font-size="9" font-family="Outfit,sans-serif">Rafraîchissement auto toutes les 3s</text>
+</svg>
+</div>
+
+<!-- BOTTOM PANELS -->
+<div class="bottom-row">
+  <div class="panel p-solar">
+    <div class="panel-title">Solaire thermique</div>
+    <div class="t-grid">
+      <div class="t-cell"><div class="t-lbl">Capteurs</div><div id="b-cap" class="t-val hot">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">Retour froid</div><div id="b-ret" class="t-val cold">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">ΔT</div><div id="b-dt" class="t-val">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">V3V Sol</div><div id="b-v3v" class="t-val">--</div></div>
+    </div>
+  </div>
+  <div class="panel p-blue">
+    <div class="panel-title">Ballon ECS</div>
+    <div class="t-grid">
+      <div class="t-cell"><div class="t-lbl">Ballon Haut</div><div id="b-bh" class="t-val warm">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">Ballon Bas</div><div id="b-bb" class="t-val cool">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">Circ. Sol (K5)</div><div id="b-k5" class="t-val">OFF</div></div>
+      <div class="t-cell"><div class="t-lbl">Circ. CH (K6)</div><div id="b-k6" class="t-val">OFF</div></div>
+    </div>
+  </div>
+  <div class="panel p-amber">
+    <div class="panel-title">Chaudière</div>
+    <div class="t-grid">
+      <div class="t-cell"><div class="t-lbl">T° Chaudière</div><div id="b-ch" class="t-val warm">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">Consigne départ</div><div id="b-cons" class="t-val">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">K1 Autoris.</div><div id="b-k1" class="t-val">OFF</div></div>
+      <div class="t-cell"><div class="t-lbl">K4 Réhausse</div><div id="b-k4" class="t-val">OFF</div></div>
+    </div>
+  </div>
+  <div class="panel p-green">
+    <div class="panel-title">Plancher chauffant</div>
+    <div class="t-grid">
+      <div class="t-cell"><div class="t-lbl">Départ</div><div id="b-dep" class="t-val warm">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">Retour</div><div id="b-rp" class="t-val cool">--.-°C</div></div>
+      <div class="t-cell"><div class="t-lbl">K9 Circulateur</div><div id="b-k9" class="t-val">OFF</div></div>
+      <div class="t-cell"><div class="t-lbl">V3V inc/dec</div><div id="b-v3v2" class="t-val">—</div></div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ══════════════════ PAGE HORAIRES ══════════════════ -->
+<div id="page-horaires" class="page">
+<div class="page-inner">
+<div class="sched-grid" id="sched-grid"></div>
+<div class="corr-bar">
+  <div class="corr-lbl">Correction nuit (abaissement hors plage confort)</div>
+  <div class="corr-val" id="corr-val">2.0°C</div>
+  <button class="corr-btn" onclick="adjAV('Correction_Jour_Nuit',-0.5)">−</button>
+  <button class="corr-btn" onclick="adjAV('Correction_Jour_Nuit',+0.5)">+</button>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════ PAGE CONSIGNES ══════════════════ -->
+<div id="page-consignes" class="page">
+<div class="page-inner">
+<div class="sec-hdr">Chauffage</div>
+<div class="cons-grid">
+  <div class="cons-card"><div class="cons-lbl">Consigne ambiance</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Conssigne_Ambiance',-0.5)">−</button>
+    <div><div class="cons-val" id="cv-amb">19.0</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Conssigne_Ambiance',+0.5)">+</button></div>
+    <input class="cons-range" type="range" min="14" max="26" step="0.5" id="r-amb" oninput="setAV('Conssigne_Ambiance',+this.value)">
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Départ V3V max</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Conssigne_Depart_V3V_Max',-1)">−</button>
+    <div><div class="cons-val" id="cv-dep-max">50</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Conssigne_Depart_V3V_Max',+1)">+</button></div>
+    <input class="cons-range" type="range" min="30" max="70" step="1" id="r-dep-max" oninput="setAV('Conssigne_Depart_V3V_Max',+this.value)">
+  </div>
+</div>
+
+<div class="sec-hdr">Ballon ECS</div>
+<div class="cons-grid">
+  <div class="cons-card"><div class="cons-lbl">Consigne ballon</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Conssigne_Ballons',-1)">−</button>
+    <div><div class="cons-val" id="cv-bal">55</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Conssigne_Ballons',+1)">+</button></div>
+    <input class="cons-range" type="range" min="40" max="75" step="1" id="r-bal" oninput="setAV('Conssigne_Ballons',+this.value)">
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Sécurité ballon max</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Conssigne_Ballons_Max',-1)">−</button>
+    <div><div class="cons-val" id="cv-bal-max">85</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Conssigne_Ballons_Max',+1)">+</button></div>
+    <input class="cons-range" type="range" min="60" max="95" step="1" id="r-bal-max" oninput="setAV('Conssigne_Ballons_Max',+this.value)">
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Mini ballon sol+CH</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Conssigne_MINI_Ballons_S_CH',-1)">−</button>
+    <div><div class="cons-val" id="cv-bal-min">45</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Conssigne_MINI_Ballons_S_CH',+1)">+</button></div>
+    <input class="cons-range" type="range" min="30" max="60" step="1" id="r-bal-min" oninput="setAV('Conssigne_MINI_Ballons_S_CH',+this.value)">
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Hystérésis ballon haut</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Hyst_Ballon_Haut',-0.5)">−</button>
+    <div><div class="cons-val" id="cv-hyst-h">5</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Hyst_Ballon_Haut',+0.5)">+</button></div>
+  </div>
+</div>
+
+<div class="sec-hdr">Solaire thermique</div>
+<div class="cons-grid">
+  <div class="cons-card"><div class="cons-lbl">Sécurité panneaux max</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Secu_Panneaux_Solaire_Max',-1)">−</button>
+    <div><div class="cons-val" id="cv-sol-max">95</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Secu_Panneaux_Solaire_Max',+1)">+</button></div>
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Mini marche solaire</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Conssigne_Panneaux_Solaire_Mini',-1)">−</button>
+    <div><div class="cons-val" id="cv-sol-min">35</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Conssigne_Panneaux_Solaire_Mini',+1)">+</button></div>
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Hystérésis retour froid</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Hyst_RetourFroid_Solaire',-0.5)">−</button>
+    <div><div class="cons-val" id="cv-hyst-rf">5</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Hyst_RetourFroid_Solaire',+0.5)">+</button></div>
+  </div>
+  <div class="cons-card"><div class="cons-lbl">Correction départ V3V sol</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Corection_Depart_V3V_Solaire',-0.5)">−</button>
+    <div><div class="cons-val" id="cv-dep-sol">3</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Corection_Depart_V3V_Solaire',+0.5)">+</button></div>
+  </div>
+</div>
+
+<div class="sec-hdr">Chaudière</div>
+<div class="cons-grid">
+  <div class="cons-card"><div class="cons-lbl">T° marche chaudière</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Cons_Temp_de_Marche_Chaudiere',-1)">−</button>
+    <div><div class="cons-val" id="cv-t-ch">35</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Cons_Temp_de_Marche_Chaudiere',+1)">+</button></div>
+  </div>
+  <div class="cons-card"><div class="cons-lbl">T° anti-gommage</div>
+    <div class="cons-ctrl"><button class="cons-btn" onclick="adjAV('Cons_temp_de_marche_Degommage',-1)">−</button>
+    <div><div class="cons-val" id="cv-t-gom">60</div><div class="cons-unit">°C</div></div>
+    <button class="cons-btn" onclick="adjAV('Cons_temp_de_marche_Degommage',+1)">+</button></div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════ PAGE FORÇAGES ══════════════════ -->
+<div id="page-forcages" class="page">
+<div class="page-inner">
+<div class="sec-hdr">Commandes principales</div>
+<div class="forc-grid">
+  <div class="forc-item" id="fi-marche"><div class="fi-info"><div class="fi-name">Marche générale</div><div class="fi-desc">Active ECS solaire + chauffage</div></div><div class="fi-tog" onclick="togDV('BP_Marche',this,'fi-marche')"></div></div>
+  <div class="forc-item" id="fi-arret"><div class="fi-info"><div class="fi-name">Arrêt chaudière</div><div class="fi-desc">Arrêt forcé K1</div></div><div class="fi-tog" onclick="togDV('BP_Arret',this,'fi-arret')"></div></div>
+  <div class="forc-item" id="fi-chauff"><div class="fi-info"><div class="fi-name">Marche chauffage</div><div class="fi-desc">Plancher + loi d'eau</div></div><div class="fi-tog" onclick="togDV('BP_Marche_Arret_Chauffage',this,'fi-chauff')"></div></div>
+  <div class="forc-item" id="fi-sol"><div class="fi-info"><div class="fi-name">Marche chauffage solaire</div><div class="fi-desc">V3V sol → plancher</div></div><div class="fi-tog" onclick="togDV('BP_Marche_Cauffage_Solaire',this,'fi-sol')"></div></div>
+  <div class="forc-item" id="fi-ecs-sol"><div class="fi-info"><div class="fi-name">Marche ECS solaire</div><div class="fi-desc">K5 circulateur ECS sol</div></div><div class="fi-tog" onclick="togDV('BP_Marche_ECS_Solair',this,'fi-ecs-sol')"></div></div>
+  <div class="forc-item" id="fi-ecs-ch"><div class="fi-info"><div class="fi-name">Marche ECS chaudière</div><div class="fi-desc">K6 circulateur ECS CH</div></div><div class="fi-tog" onclick="togDV('BP_Marche_ECS_Chaudiere',this,'fi-ecs-ch')"></div></div>
+  <div class="forc-item" id="fi-arret-ch"><div class="fi-info"><div class="fi-name">Arrêt forcé chaudière</div><div class="fi-desc">DV_tor-Arret_Chaudiere</div></div><div class="fi-tog" onclick="togDV('Arret_Chaudiere',this,'fi-arret-ch')"></div></div>
+  <div class="forc-item" id="fi-f-arret-auto"><div class="fi-info"><div class="fi-name">Forçage arrêt auto chaud.</div><div class="fi-desc">Bloque autorisation auto K1</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_Arret_Auto_Chaudiere',this,'fi-f-arret-auto')"></div></div>
+</div>
+<div class="sec-hdr">Forçages actuateurs</div>
+<div class="forc-grid">
+  <div class="forc-item" id="fi-v3v-sol"><div class="fi-info"><div class="fi-name">Forçage V3V solaire (K2)</div><div class="fi-desc">Maintien position solaire</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_V3V_Solaire',this,'fi-v3v-sol')"></div></div>
+  <div class="forc-item" id="fi-circ-pl"><div class="fi-info"><div class="fi-name">Forçage circulateur plancher (K9)</div><div class="fi-desc">Marche forcée indépendante</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_Circulateur_Planché',this,'fi-circ-pl')"></div></div>
+  <div class="forc-item" id="fi-v3v-open"><div class="fi-info"><div class="fi-name">Forçage V3V plancher ouverture</div><div class="fi-desc">Commande manuelle K7 inc</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_v3v_open',this,'fi-v3v-open')"></div></div>
+  <div class="forc-item" id="fi-v3v-close"><div class="fi-info"><div class="fi-name">Forçage V3V plancher fermeture</div><div class="fi-desc">Commande manuelle K8 dec</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_v3v_close',this,'fi-v3v-close')"></div></div>
+  <div class="forc-item" id="fi-arret-v3v"><div class="fi-info"><div class="fi-name">Arrêt V3V plancher</div><div class="fi-desc">Bloque K7 et K8</div></div><div class="fi-tog" onclick="togDV('BP_Arret_V3V',this,'fi-arret-v3v')"></div></div>
+  <div class="forc-item" id="fi-reh"><div class="fi-info"><div class="fi-name">Forçage circulateur réhausse (K4)</div><div class="fi-desc">Marche forcée K4</div></div><div class="fi-tog" onclick="togDV('Forcage_circulateur_réausse',this,'fi-reh')"></div></div>
+  <div class="forc-item" id="fi-circ-sol"><div class="fi-info"><div class="fi-name">Forçage circulateur ECS sol (K5)</div><div class="fi-desc">Marche forcée K5</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_Circulateur_Solaire',this,'fi-circ-sol')"></div></div>
+  <div class="forc-item" id="fi-circ-ch"><div class="fi-info"><div class="fi-name">Forçage circulateur ECS CH (K6)</div><div class="fi-desc">Marche forcée K6</div></div><div class="fi-tog" onclick="togDV('BP_Forcage_Circulateur_Chaudier',this,'fi-circ-ch')"></div></div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════ PAGE COMPTEURS ══════════════════ -->
+<div id="page-compteurs" class="page">
+<div class="page-inner">
+<div class="cpt-grid">
+  <div class="cpt-card"><div class="cpt-title">Solaire thermique</div>
+    <div class="cpt-row"><span class="cpt-key">Temps total marche</span><span class="cpt-v" id="cpt-sol-total">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Démarrages</span><span class="cpt-v" id="cpt-sol-starts">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Dernier démarrage</span><span class="cpt-v" id="cpt-sol-last">—</span></div>
+  </div>
+  <div class="cpt-card"><div class="cpt-title">ECS solaire (K5)</div>
+    <div class="cpt-row"><span class="cpt-key">Temps total marche</span><span class="cpt-v" id="cpt-ecs-sol-total">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Démarrages</span><span class="cpt-v" id="cpt-ecs-sol-starts">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Session courante</span><span class="cpt-v" id="cpt-ecs-sol-sess">—</span></div>
+  </div>
+  <div class="cpt-card"><div class="cpt-title">ECS chaudière (K6)</div>
+    <div class="cpt-row"><span class="cpt-key">Temps total marche</span><span class="cpt-v" id="cpt-ecs-ch-total">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Démarrages</span><span class="cpt-v" id="cpt-ecs-ch-starts">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Session courante</span><span class="cpt-v" id="cpt-ecs-ch-sess">—</span></div>
+  </div>
+  <div class="cpt-card"><div class="cpt-title">Chaudière (K1)</div>
+    <div class="cpt-row"><span class="cpt-key">Temps total marche</span><span class="cpt-v" id="cpt-ch-total">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Démarrages</span><span class="cpt-v" id="cpt-ch-starts">—</span></div>
+    <div class="cpt-row"><span class="cpt-key">Session courante</span><span class="cpt-v" id="cpt-ch-sess">—</span></div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════ PAGE OFFSETS CTN ══════════════════ -->
+<div id="page-ctn" class="page">
+<div class="page-inner">
+<div class="sec-hdr">Corrections offset sondes NTC10K (°C)</div>
+<div class="ctn-grid" id="ctn-grid"></div>
+</div>
+</div>
+
+<script>
+const BASE = ()=>{
+  const v = document.getElementById('api-url').value.replace(/\/$/,'');
+  return v || (window.location.protocol+'//'+window.location.host);
+};
+let avState={}, dvState={}, connected=false;
+
+const DAYS=['L','M','ME','J','V','S','D'];
+const DAY_NAMES=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+
+/* ── NAVIGATION ── */
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+/* ── API ── */
+async function api(path,method='GET',body=null){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  try{
+    const r=await fetch(BASE()+path,opts);
+    const dot=document.getElementById('conn-dot');
+    const lbl=document.getElementById('conn-label');
+    if(r.ok){dot.className='ok';lbl.textContent='Connecté';connected=true;}
+    else{dot.className='err';lbl.textContent='Erreur '+r.status;connected=false;}
+    return r.ok?r.json():null;
+  }catch(e){
+    document.getElementById('conn-dot').className='err';
+    document.getElementById('conn-label').textContent='Hors ligne';
+    connected=false;return null;
+  }
+}
+
+async function setAV(name,value){
+  value=Math.round(value*10)/10;
+  avState[name.toLowerCase()]=value;
+  updateConsignesUI();
+  await api('/api/av/write','POST',{varname:name,value});
+}
+async function adjAV(name,delta){
+  const cur=avState[name.toLowerCase()]||0;
+  await setAV(name,cur+delta);
+}
+
+const dvCache={};
+async function togDV(name,el,fid){
+  const cur=!!dvState[name.toLowerCase()];
+  const nv=!cur;
+  dvState[name.toLowerCase()]=nv;
+  dvCache[name]=nv;
+  updateForcageEl(el,fid,nv);
+  await api('/api/dv/write','POST',{varname:name,value:nv});
+}
+function updateForcageEl(el,fid,val){
+  if(val){el.classList.add('on');document.getElementById(fid)?.classList.add('on');}
+  else{el.classList.remove('on');document.getElementById(fid)?.classList.remove('on');}
+}
+
+/* ── HORAIRES ── */
+async function setHour(avName,val){
+  val=Math.max(0,Math.min(23,Math.round(val)));
+  avState[avName.toLowerCase()]=val;
+  await api('/api/av/write','POST',{varname:avName,value:val});
+  buildSched();
+}
+function promptHour(avName,cur){
+  const v=prompt(`Heure (0-23) pour ${avName} :`,cur);
+  if(v!==null&&!isNaN(+v)) setHour(avName,+v);
+}
+
+function buildSched(){
+  const g=document.getElementById('sched-grid');
+  g.innerHTML=DAYS.map((d,i)=>{
+    const deb=avState[`prog_heure_de_début_${d}`.toLowerCase()]??7;
+    const fin=avState[`prog_heure_de_fin_${d}`.toLowerCase()]??22;
+    const torKey=`dv_tor-${DAY_NAMES[i]}`.toLowerCase();
+    const on=!!dvState[torKey];
+    return `<div class="day-card">
+      <div class="day-name">${DAY_NAMES[i].substring(0,3)}</div>
+      <div class="day-tog ${on?'on':''}" onclick="togDayDV('${DAY_NAMES[i]}',this)"></div>
+      <span class="t-input-lbl">Début</span>
+      <div class="t-input-val" onclick="promptHour('Prog_Heure_de_début_${d}',${deb})">${String(deb).padStart(2,'0')}h</div>
+      <span class="t-input-lbl" style="margin-top:6px;display:block">Fin</span>
+      <div class="t-input-val" onclick="promptHour('Prog_Heure_de_fin_${d}',${fin})">${String(fin).padStart(2,'0')}h</div>
+    </div>`;
+  }).join('');
+  const cjn=avState['correction_jour_nuit']??2;
+  document.getElementById('corr-val').textContent=cjn.toFixed(1)+'°C';
+}
+
+async function togDayDV(dayName,el){
+  const name=dayName;
+  const cur=!!dvState[('dv_tor-'+dayName).toLowerCase()];
+  const nv=!cur;
+  dvState[('dv_tor-'+dayName).toLowerCase()]=nv;
+  if(nv) el.classList.add('on'); else el.classList.remove('on');
+  await api('/api/dv/write','POST',{varname:'dv_tor-'+dayName,value:nv});
+}
+
+/* ── CONSIGNES UI ── */
+function updateConsignesUI(){
+  const m={
+    'cv-amb':'conssigne_ambiance','cv-dep-max':'conssigne_depart_v3v_max',
+    'cv-bal':'conssigne_ballons','cv-bal-max':'conssigne_ballons_max',
+    'cv-bal-min':'conssigne_mini_ballons_s_ch','cv-hyst-h':'hyst_ballon_haut',
+    'cv-sol-max':'secu_panneaux_solaire_max','cv-sol-min':'conssigne_panneaux_solaire_mini',
+    'cv-hyst-rf':'hyst_retourfroid_solaire','cv-dep-sol':'corection_depart_v3v_solaire',
+    'cv-t-ch':'cons_temp_de_marche_chaudiere','cv-t-gom':'cons_temp_de_marche_degommage',
+  };
+  for(const [id,k] of Object.entries(m)){
+    const el=document.getElementById(id);
+    if(el&&avState[k]!==undefined) el.textContent=Number(avState[k]).toFixed(1);
+  }
+  const sliders={'r-amb':'conssigne_ambiance','r-dep-max':'conssigne_depart_v3v_max','r-bal':'conssigne_ballons','r-bal-max':'conssigne_ballons_max','r-bal-min':'conssigne_mini_ballons_s_ch'};
+  for(const [id,k] of Object.entries(sliders)){
+    const el=document.getElementById(id);
+    if(el&&avState[k]!==undefined) el.value=avState[k];
+  }
+  const cjn=avState['correction_jour_nuit']??2;
+  document.getElementById('corr-val').textContent=Number(cjn).toFixed(1)+'°C';
+}
+
+/* ── CTN OFFSETS ── */
+const CTN_NAMES=['Ambiance','Extérieur','Capteurs thermiques','Chaudière','Ballon Haut','Ballon Bas','Départ chauffage','Retour froid','Bouclage ECS','—','—'];
+function buildCTN(){
+  const g=document.getElementById('ctn-grid');
+  g.innerHTML=Array.from({length:10},(_,i)=>{
+    const avName=`Corection_CTN_${i+1}`;
+    const val=avState[avName.toLowerCase()]??0;
+    return `<div class="ctn-card">
+      <div class="ctn-lbl">CTN ${i+1} — ${CTN_NAMES[i]||'ANA'+i} (ANA${i})</div>
+      <div class="ctn-ctrl">
+        <button class="cons-btn" style="font-size:14px;width:28px;height:28px" onclick="adjAV('${avName}',-0.1)">−</button>
+        <div><div class="ctn-val" id="ctn-val-${i+1}">${val.toFixed(1)}</div></div>
+        <button class="cons-btn" style="font-size:14px;width:28px;height:28px" onclick="adjAV('${avName}',+0.1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function updateCTN(){
+  for(let i=1;i<=10;i++){
+    const el=document.getElementById('ctn-val-'+i);
+    if(el){const v=avState[`corection_ctn_${i}`]??0;el.textContent=Number(v).toFixed(1);}
+  }
+}
+
+/* ── COULEUR TEMPÉRATURE ── */
+function tcol(v){if(v>55)return'hot';if(v>40)return'warm';if(v<15)return'cold';return'';}
+function fmt(v){return v!==null&&v!==undefined?Number(v).toFixed(1)+'°C':'--.-°C';}
+function fmtH(sec){if(!sec)return'—';const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return`${h}h${String(m).padStart(2,'0')}`;}
+
+/* ── REFRESH ÉTAT ── */
+function setLed(id,on){
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(on)el.classList.add('on');else el.classList.remove('on');
+}
+
+async function refresh(){
+  const [state,avR,dvR]=await Promise.all([
+    api('/api/state'),api('/api/av/read'),api('/api/dv/read')
+  ]);
+  if(!state)return;
+
+  if(avR){
+    for(const[k,v]of Object.entries(avR)) avState[k.toLowerCase()]=v;
+    updateConsignesUI();buildSched();buildCTN();updateCTN();
+  }
+  if(dvR){
+    for(const[k,v]of Object.entries(dvR)) dvState[k.toLowerCase()]=v;
+  }
+
+  const an=state.analog||{};
+  const gp=state.gpio||{};
+  const rf=state.registers||{};
+  const mem=state.memory||{};
+
+  /* températures */
+  const T={
+    amb:an.ANA0?.celsius,ext:an.ANA1?.celsius,cap:an.ANA2?.celsius,
+    ch:an.ANA3?.celsius, bh:an.ANA4?.celsius, bb:an.ANA5?.celsius,
+    dep:an.ANA6?.celsius,ret:an.ANA7?.celsius,bou:an.ANA8?.celsius
+  };
+
+  const sv=(id,v,cls)=>{const el=document.getElementById(id);if(!el)return;el.textContent=fmt(v);el.className='t-val '+(cls||tcol(v??0));};
+
+  /* SVG badges */
+  sv('t-capteurs',T.cap,'hot');
+  sv('t-ball-haut',T.bh,'warm');sv('t-ball-bas',T.bb,'cool');
+  sv('t-chaudiere',T.ch,'warm');sv('t-depart',T.dep,'warm');sv('t-retour',T.ret,'cool');
+  sv('t-ext',T.ext,'cold');sv('t-amb',T.amb,'');sv('t-bouclage',T.bou,'');
+
+  /* panels */
+  sv('b-cap',T.cap,'hot');sv('b-ret',T.ret,'cold');
+  const dt=(T.cap!=null&&T.ret!=null)?T.cap-T.ret:null;
+  const dtEl=document.getElementById('b-dt');
+  if(dtEl)dtEl.textContent=dt!=null?dt.toFixed(1)+'°C':'--.-°C';
+
+  sv('b-bh',T.bh,'warm');sv('b-bb',T.bb,'cool');
+  sv('b-ch',T.ch,'warm');sv('b-dep',T.dep,'warm');sv('b-rp',T.ret,'cool');
+
+  const cons=rf.RF5??null;
+  const cEl=document.getElementById('b-cons');if(cEl)cEl.textContent=cons!=null?cons.toFixed(1)+'°C':'--';
+
+  /* GPIO states — GPIO numéros → noms relais */
+  const gpioMap={5:'k1',10:'k4',22:'k5',27:'k6',17:'k7',4:'k8',6:'k9',11:'k2-sol',13:'k10-ch'};
+  const K={};
+  for(const[pin,name]of Object.entries(gpioMap)){
+    K[name]=gp[pin]?.value??false;
+  }
+  const k1on=K.k1;const k4on=K.k4;const k5on=K.k5;const k6on=K.k6;
+  const k7on=K.k7;const k8on=K.k8;const k9on=K.k9;
+  const k2on=K['k2-sol'];const k10on=K['k10-ch'];
+
+  setLed('led-k1',k1on);setLed('led-k2',k2on);setLed('led-k4',k4on);
+  setLed('led-k5',k5on);setLed('led-k6',k6on);setLed('led-k7',k7on);
+  setLed('led-k8',k8on);setLed('led-k9',k9on);
+
+  const txtOn=(id,on,a,b)=>{const el=document.getElementById(id);if(!el)return;el.textContent=on?a:b;el.style.color=on?'var(--green)':'var(--text3)';};
+  txtOn('b-k1',k1on,'ON','OFF');txtOn('b-k4',k4on,'ON','OFF');
+  txtOn('b-k5',k5on,'ON','OFF');txtOn('b-k6',k6on,'ON','OFF');
+  txtOn('b-k9',k9on,'ON','OFF');
+  const v3vEl=document.getElementById('b-v3v');if(v3vEl){v3vEl.textContent=k2on?'Solaire':k10on?'Chaudière':'Coupé';v3vEl.style.color=k2on?'var(--solar)':k10on?'var(--amber)':'var(--text3)';}
+  const v3v2El=document.getElementById('b-v3v2');if(v3v2El){v3v2El.textContent=k7on?'INC ▲':k8on?'DEC ▼':'Stable';v3v2El.style.color=k7on?'var(--green)':k8on?'var(--red)':'var(--text3)';}
+
+  /* TOR IN */
+  const torIn=state.tor_in||state.gpio||{};
+  const prod=torIn[23]?.value??false;
+  const alarm=torIn[14]?.value??false;
+  setLed('led-prod',prod);
+  const alEl=document.getElementById('led-alarm');
+  if(alEl){if(alarm){alEl.classList.add('alarm');alEl.setAttribute('fill','var(--red)');}else{alEl.classList.remove('alarm');alEl.setAttribute('fill','#484f58');}}
+
+  /* Période confort */
+  const pEl=document.getElementById('t-periode');
+  if(pEl){const c=mem.M0_periode_confort??rf.RF13>0;pEl.textContent=c?'CONFORT':'NUIT';pEl.style.fill=c?'var(--green)':'var(--accent)';}
+
+  /* Compteurs depuis RF ou backup */
+  const fH=id=>fmtH(rf[id]??0);
+  document.getElementById('cpt-sol-total').textContent=fH('RF_cpt_sol');
+  document.getElementById('cpt-ecs-sol-total').textContent=fH('RF_cpt_ecs_sol');
+  document.getElementById('cpt-ecs-ch-total').textContent=fH('RF_cpt_ecs_ch');
+  document.getElementById('cpt-ch-total').textContent=fH('RF_cpt_ch');
+
+  /* Forçages DV */
+  const DV_MAP={
+    'bp_marche':'fi-marche','bp_arret':'fi-arret',
+    'bp_marche_arret_chauffage':'fi-chauff','bp_marche_cauffage_solaire':'fi-sol',
+    'bp_marche_ecs_solair':'fi-ecs-sol','bp_marche_ecs_chaudiere':'fi-ecs-ch',
+    'arret_chaudiere':'fi-arret-ch','bp_forcage_arret_auto_chaudiere':'fi-f-arret-auto',
+    'bp_forcage_v3v_solaire':'fi-v3v-sol','bp_forcage_circulateur_planché':'fi-circ-pl',
+    'bp_forcage_v3v_open':'fi-v3v-open','bp_forcage_v3v_close':'fi-v3v-close',
+    'bp_arret_v3v':'fi-arret-v3v','forcage_circulateur_réausse':'fi-reh',
+    'bp_forcage_circulateur_solaire':'fi-circ-sol','bp_forcage_circulateur_chaudier':'fi-circ-ch',
+  };
+  for(const[dvk,fid]of Object.entries(DV_MAP)){
+    const on=!!dvState[dvk];
+    const fi=document.getElementById(fid);
+    const tog=fi?.querySelector('.fi-tog');
+    if(fi){if(on)fi.classList.add('on');else fi.classList.remove('on');}
+    if(tog){if(on)tog.classList.add('on');else tog.classList.remove('on');}
+  }
+}
+
+/* ── CLOCK ── */
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('fr-FR');},1000);
+
+/* ── INIT ── */
+buildSched();buildCTN();
+refresh();
+setInterval(refresh,3000);
+</script>
+</body>
+</html>

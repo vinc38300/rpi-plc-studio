@@ -1,0 +1,276 @@
+Full analysis report of all incoherences
+
+bash
+python3 << 'EOF'
+print("""
+╔══════════════════════════════════════════════════════════════╗
+║         ANALYSE COMPLÈTE — INCOHÉRENCES DÉTECTÉES           ║
+╚══════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P9_CH — CHAUDIÈRE  (3 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG CH-1 ★★★ BLOQUANT — marche_chauffage bloque l'ECS
+  auto_final = auto_ch AND marche_chauffage
+  → si Marche Chauffage=OFF → K1 bloqué même pour demande ECS
+  FIX : auto_ecs_mini = (sr_s8 OR sr_s10) sans marche_chauffage
+        auto_planch   = sr_s9 AND marche_chauffage
+
+BUG CH-2 ★★ — od2 (K4 réhausse) démarre en automatique
+  od2 = bouclage_chaud_ECS OR bouclage_chaud_CH
+  → K4 s'active dès que le bouclage est chaud, SANS forçage manuel
+  Intention: K4 = récupération inertie sur forçage uniquement
+  FIX : od2 = False  (géré entièrement par XOR externe)
+
+BUG CH-3 ★★ — od3 (dem_circ_ECS) dépend de od2 (K4)
+  od3 = od2 AND bouclage_chaud_ECS
+  → dem_circ_ECS ne part que si K4 actif — logique circulaire
+  FIX : od3 = bouclage_chaud_ECS AND dem_ecs  (indépendant de K4)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P7_ECS — GESTION ECS  (4 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG ECS-1 ★★★ — od3 (dem_mini) utilise T_ball_BAS au lieu de T_ball_HAUT
+  od3 = T_ball_bas <= T_mini_bal
+  → T_ball_bas = sonde retour froide, pas représentative du ballon
+  FIX : od3 = T_ball_haut <= T_mini_bal
+
+BUG ECS-2 ★★ — od4 (dem_ecs_ch) se set si v3v_sol_on=False uniquement
+  SET: T_ball_haut <= T_cons-hyst AND NOT v3v_sol_on
+  → si solaire actif mais insuffisant, demande bloquée
+  → correct logiquement MAIS: si solaire tombe en panne,
+    il faut quand même que la chaudière prenne le relais
+  FIX : ajouter condition: OR (v3v_sol_on AND T_cap_sol < T_ball_haut+5)
+
+BUG ECS-3 ★ — d6 et d7 non câblés (forcage_circ_sol, forcage_circ_ch)
+  d6=NON_CABLE, d7=NON_CABLE → bool(d6)=False, bool(d7)=False
+  → ces variables existent dans le code mais ne servent à rien
+  INFO : les forçages sont gérés par XOR externes → OK si voulu
+
+BUG ECS-4 ★ — od5 et od6 n_od=6 mais refs None
+  od5_ref=None, od6_ref=None → jamais écrits dans les RF
+  → solaire_actif et ballon_plein calculés mais inutilisables
+  FIX : câbler od5/od6 vers des CONN ou les supprimer
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P8_LOI — LOI D'EAU PLANCHER  (3 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG LOI-1 ★★★ — od1 (circ plancher K9) = marche_ch seulement
+  od1 = marche_ch  → circulateur actif dès que chaudière marche
+  Manque: vérifier que T_dep >= T_dep_min (plancher froid = inutile)
+  FIX : od1 = marche_ch AND (T_dep >= T_dep_min OR state['t_gom']>0)
+
+BUG LOI-2 ★★ — od4 (dem_planch) bloque si v3v_sol_pos=True
+  od4 = demande_chauff AND marche_ch AND NOT v3v_sol_pos
+  → si V3V en position solaire → demande plancher annulée
+  → mais solaire ne chauffe pas forcément le plancher (c'est ECS)
+  Question: est-ce voulu ? (solaire = ECS seulement, plancher = chaudière)
+  Si oui: OK. Si non → supprimer AND NOT v3v_sol_pos
+
+BUG LOI-3 ★ — d6/d7/d8 non câblés (n_d=5 max câblé)
+  n_d=5 mais d6/d7/d8=NON_CABLE → inutilisés
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P6_SOL — SOLAIRE  (2 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG SOL-1 ★★ — d3 (forcage_v3v) non câblé graphiquement
+  d3_ref=RF380 dans params mais PAS de fil canvas vers P6_SOL.d3
+  → forcage_v3v = lecture directe RF380 par le moteur (fallback)
+  → fonctionne car moteur lit d3_ref, mais fragile si recâblage
+  FIX : ajouter fil CONN[num_forcage] → P6_SOL.d3
+
+BUG SOL-2 ★ — A2 = T_ret = CONN[9] = RF123 = T_retour_plancher
+  Mais dans le code: T_ret = A2 utilisé pour deltaT = T_cap - T_BalB
+  A2 n'est PAS utilisé dans le code (T_ret défini mais jamais lu)
+  A7 = T_BalB = RF268 est utilisé pour deltaT → OK
+  → A2 = T_retour_plancher câblé inutilement (confusion initiale)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INCOHÉRENCES INTER-BLOCS  (3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG INTER-1 ★★★ — Chaîne ECS: P7_ECS.od4 → P9_CH.d1
+  P7_ECS.od4 = dem_ecs_ch (SR hystérésis ballon)
+  P9_CH.d1 = dem_ecs
+  → P9_CH reçoit la demande ECS de P7_ECS
+  MAIS: P7_ECS.od4 se set uniquement si NOT v3v_sol_on
+  → si solaire actif → dem_ecs=False → chaudière ne peut PAS
+    prendre le relais si solaire insuffisant
+  Réponse attendue: est-ce voulu ou non ?
+
+BUG INTER-2 ★★ — P9_CH.d1=RF310=od4_ECS mais commentaire dit od1
+  Commentaire: 'd1 = demande_ecs (RF310 ← gestion_ecs od1)'
+  Réalité: od4_ref=RF310 (dem_ecs_ch SR hystérésis)
+           od1_ref=RF195 (circ ECS solaire K5)
+  → confusion dans les commentaires du code
+
+BUG INTER-3 ★★ — P9_CH.A4 = T_consigne_depart = RF318 = LOI.oa1
+  LOI.oa1_ref = RF318 = T_dep_consigne
+  Commentaire P9_CH: 'A4 = T_consigne_depart (RF318 ← loi_eau od4)'
+  Réalité: od4=RF316 (dem_planch), oa1=RF318 (T_dep_consigne)
+  → commentaire incorrect mais câblage correct (RF318=OA1=T_dep_cons)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RÉSUMÉ PRIORITÉS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+★★★ BLOQUANT (3):
+  CH-1  : marche_chauffage bloque ECS → chaudière ne démarre pas
+  ECS-1 : od3 mini utilise T_ball_bas au lieu de T_ball_haut
+  LOI-1 : circulateur plancher = marche_ch sans vérif T_dep
+
+★★ IMPORTANT (6):
+  CH-2  : K4 réhausse démarre automatiquement (doit être forçage pur)
+  CH-3  : od3 dem_circ_ECS dépend de K4 (logique circulaire)
+  ECS-2 : dem_ecs bloquée si solaire actif même si insuffisant
+  ECS-4 : od5/od6 calculés mais non câblés (RF None)
+  LOI-2 : dem_planch bloquée si V3V solaire (à confirmer)
+  SOL-1 : d3 forcage_v3v non câblé graphiquement
+
+★ MINEUR (4):
+  ECS-3 : d6/d7 non câblés (forçages via XOR = OK)
+  LOI-3 : d6/d7/d8 LOI non câblés
+  SOL-2 : A2=T_ret câblé mais non utilisé dans le code
+  INTER-2/3 : commentaires incorrects
+""")
+EOF
+
+Sortie
+
+╔══════════════════════════════════════════════════════════════╗
+║         ANALYSE COMPLÈTE — INCOHÉRENCES DÉTECTÉES           ║
+╚══════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P9_CH — CHAUDIÈRE  (3 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG CH-1 ★★★ BLOQUANT — marche_chauffage bloque l'ECS
+  auto_final = auto_ch AND marche_chauffage
+  → si Marche Chauffage=OFF → K1 bloqué même pour demande ECS
+  FIX : auto_ecs_mini = (sr_s8 OR sr_s10) sans marche_chauffage
+        auto_planch   = sr_s9 AND marche_chauffage
+
+BUG CH-2 ★★ — od2 (K4 réhausse) démarre en automatique
+  od2 = bouclage_chaud_ECS OR bouclage_chaud_CH
+  → K4 s'active dès que le bouclage est chaud, SANS forçage manuel
+  Intention: K4 = récupération inertie sur forçage uniquement
+  FIX : od2 = False  (géré entièrement par XOR externe)
+
+BUG CH-3 ★★ — od3 (dem_circ_ECS) dépend de od2 (K4)
+  od3 = od2 AND bouclage_chaud_ECS
+  → dem_circ_ECS ne part que si K4 actif — logique circulaire
+  FIX : od3 = bouclage_chaud_ECS AND dem_ecs  (indépendant de K4)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P7_ECS — GESTION ECS  (4 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG ECS-1 ★★★ — od3 (dem_mini) utilise T_ball_BAS au lieu de T_ball_HAUT
+  od3 = T_ball_bas <= T_mini_bal
+  → T_ball_bas = sonde retour froide, pas représentative du ballon
+  FIX : od3 = T_ball_haut <= T_mini_bal
+
+BUG ECS-2 ★★ — od4 (dem_ecs_ch) se set si v3v_sol_on=False uniquement
+  SET: T_ball_haut <= T_cons-hyst AND NOT v3v_sol_on
+  → si solaire actif mais insuffisant, demande bloquée
+  → correct logiquement MAIS: si solaire tombe en panne,
+    il faut quand même que la chaudière prenne le relais
+  FIX : ajouter condition: OR (v3v_sol_on AND T_cap_sol < T_ball_haut+5)
+
+BUG ECS-3 ★ — d6 et d7 non câblés (forcage_circ_sol, forcage_circ_ch)
+  d6=NON_CABLE, d7=NON_CABLE → bool(d6)=False, bool(d7)=False
+  → ces variables existent dans le code mais ne servent à rien
+  INFO : les forçages sont gérés par XOR externes → OK si voulu
+
+BUG ECS-4 ★ — od5 et od6 n_od=6 mais refs None
+  od5_ref=None, od6_ref=None → jamais écrits dans les RF
+  → solaire_actif et ballon_plein calculés mais inutilisables
+  FIX : câbler od5/od6 vers des CONN ou les supprimer
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P8_LOI — LOI D'EAU PLANCHER  (3 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG LOI-1 ★★★ — od1 (circ plancher K9) = marche_ch seulement
+  od1 = marche_ch  → circulateur actif dès que chaudière marche
+  Manque: vérifier que T_dep >= T_dep_min (plancher froid = inutile)
+  FIX : od1 = marche_ch AND (T_dep >= T_dep_min OR state['t_gom']>0)
+
+BUG LOI-2 ★★ — od4 (dem_planch) bloque si v3v_sol_pos=True
+  od4 = demande_chauff AND marche_ch AND NOT v3v_sol_pos
+  → si V3V en position solaire → demande plancher annulée
+  → mais solaire ne chauffe pas forcément le plancher (c'est ECS)
+  Question: est-ce voulu ? (solaire = ECS seulement, plancher = chaudière)
+  Si oui: OK. Si non → supprimer AND NOT v3v_sol_pos
+
+BUG LOI-3 ★ — d6/d7/d8 non câblés (n_d=5 max câblé)
+  n_d=5 mais d6/d7/d8=NON_CABLE → inutilisés
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+P6_SOL — SOLAIRE  (2 incohérences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG SOL-1 ★★ — d3 (forcage_v3v) non câblé graphiquement
+  d3_ref=RF380 dans params mais PAS de fil canvas vers P6_SOL.d3
+  → forcage_v3v = lecture directe RF380 par le moteur (fallback)
+  → fonctionne car moteur lit d3_ref, mais fragile si recâblage
+  FIX : ajouter fil CONN[num_forcage] → P6_SOL.d3
+
+BUG SOL-2 ★ — A2 = T_ret = CONN[9] = RF123 = T_retour_plancher
+  Mais dans le code: T_ret = A2 utilisé pour deltaT = T_cap - T_BalB
+  A2 n'est PAS utilisé dans le code (T_ret défini mais jamais lu)
+  A7 = T_BalB = RF268 est utilisé pour deltaT → OK
+  → A2 = T_retour_plancher câblé inutilement (confusion initiale)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INCOHÉRENCES INTER-BLOCS  (3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG INTER-1 ★★★ — Chaîne ECS: P7_ECS.od4 → P9_CH.d1
+  P7_ECS.od4 = dem_ecs_ch (SR hystérésis ballon)
+  P9_CH.d1 = dem_ecs
+  → P9_CH reçoit la demande ECS de P7_ECS
+  MAIS: P7_ECS.od4 se set uniquement si NOT v3v_sol_on
+  → si solaire actif → dem_ecs=False → chaudière ne peut PAS
+    prendre le relais si solaire insuffisant
+  Réponse attendue: est-ce voulu ou non ?
+
+BUG INTER-2 ★★ — P9_CH.d1=RF310=od4_ECS mais commentaire dit od1
+  Commentaire: 'd1 = demande_ecs (RF310 ← gestion_ecs od1)'
+  Réalité: od4_ref=RF310 (dem_ecs_ch SR hystérésis)
+           od1_ref=RF195 (circ ECS solaire K5)
+  → confusion dans les commentaires du code
+
+BUG INTER-3 ★★ — P9_CH.A4 = T_consigne_depart = RF318 = LOI.oa1
+  LOI.oa1_ref = RF318 = T_dep_consigne
+  Commentaire P9_CH: 'A4 = T_consigne_depart (RF318 ← loi_eau od4)'
+  Réalité: od4=RF316 (dem_planch), oa1=RF318 (T_dep_consigne)
+  → commentaire incorrect mais câblage correct (RF318=OA1=T_dep_cons)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RÉSUMÉ PRIORITÉS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+★★★ BLOQUANT (3):
+  CH-1  : marche_chauffage bloque ECS → chaudière ne démarre pas
+  ECS-1 : od3 mini utilise T_ball_bas au lieu de T_ball_haut
+  LOI-1 : circulateur plancher = marche_ch sans vérif T_dep
+
+★★ IMPORTANT (6):
+  CH-2  : K4 réhausse démarre automatiquement (doit être forçage pur)
+  CH-3  : od3 dem_circ_ECS dépend de K4 (logique circulaire)
+  ECS-2 : dem_ecs bloquée si solaire actif même si insuffisant
+  ECS-4 : od5/od6 calculés mais non câblés (RF None)
+  LOI-2 : dem_planch bloquée si V3V solaire (à confirmer)
+  SOL-1 : d3 forcage_v3v non câblé graphiquement
+
+★ MINEUR (4):
+  ECS-3 : d6/d7 non câblés (forçages via XOR = OK)
+  LOI-3 : d6/d7/d8 LOI non câblés
+  SOL-2 : A2=T_ret câblé mais non utilisé dans le code
+  INTER-2/3 : commentaires incorrects

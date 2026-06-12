@@ -1,0 +1,198 @@
+{
+  "version": "1.0",
+  "name": "Régulation maison solaire + chaudière",
+  "description": "Transposition Proview 25-NOV-2023 → RPI-PLC Studio. 5 pyblocks + 1 bloc Jours. regulech.",
+  "created": "2026-04-19 00:00:00",
+  "modified": "2026-04-19 00:00:00",
+  "rpi": {
+    "host": "192.168.1.100",
+    "port": 22,
+    "user": "pi",
+    "password": "",
+    "key_path": "",
+    "remote_dir": "/home/pi/rpi-plc"
+  },
+  "plc": {
+    "scan_time_ms": 100,
+    "gpio_config": {
+      "5":  {"name":"K1_Autorisation_Chaudiere",     "mode":"output","active_low":true},
+      "11": {"name":"K2_V3V_CH_Sol_Solaire",          "mode":"output","active_low":true},
+      "9":  {"name":"K3_TOR_OUT_3_PV",                "mode":"output","active_low":true},
+      "10": {"name":"K4_Cir_Rehausse_Chaudiere",      "mode":"output","active_low":true},
+      "22": {"name":"K5_Circulateur_ECS_Solaire",     "mode":"output","active_low":true},
+      "27": {"name":"K6_Circulateur_ECS_Chaudiere",   "mode":"output","active_low":true},
+      "17": {"name":"K7_V3V_Planche_inc",             "mode":"output","active_low":true},
+      "4":  {"name":"K8_V3V_Planche_dec",             "mode":"output","active_low":true},
+      "6":  {"name":"K9_Circulateur_Planche",         "mode":"output","active_low":true},
+      "13": {"name":"K10_V3V_CH_Sol_Chaudiere",       "mode":"output","active_low":true},
+      "19": {"name":"K11_TOR_OUT_11_PV",              "mode":"output","active_low":true},
+      "26": {"name":"K12_TOR_OUT_12_PV",              "mode":"output","active_low":true},
+      "21": {"name":"K13_TOR_OUT_13_PV",              "mode":"output","active_low":true},
+      "20": {"name":"K14_TOR_OUT_14_PV",              "mode":"output","active_low":true},
+      "16": {"name":"K15_TOR_OUT_15_PV",              "mode":"output","active_low":true},
+      "12": {"name":"K16_TOR_OUT_16_PV",              "mode":"output","active_low":true},
+      "14": {"name":"TOR_IN_1_Alarme_Chaudiere",      "mode":"input", "pull":"down"},
+      "15": {"name":"TOR_IN_2",                       "mode":"input", "pull":"up"},
+      "18": {"name":"TOR_IN_3",                       "mode":"input", "pull":"up"},
+      "23": {"name":"TOR_IN_4_Contact_Production_CH", "mode":"input", "pull":"up"},
+      "24": {"name":"TOR_IN_5",                       "mode":"input", "pull":"up"},
+      "25": {"name":"TOR_IN_6",                       "mode":"input", "pull":"up"},
+      "8":  {"name":"TOR_IN_7",                       "mode":"input", "pull":"up"},
+      "7":  {"name":"TOR_IN_8",                       "mode":"input", "pull":"up"}
+    },
+    "analog_config": {
+      "ANA0":{"name":"Temp_Ambiante",            "probe":"NTC10K","ads":"0x48","ch":0,"offset_av":"Corection_CTN_1"},
+      "ANA1":{"name":"Temp_Exterieur",           "probe":"NTC10K","ads":"0x48","ch":1,"offset_av":"Corection_CTN_2"},
+      "ANA2":{"name":"Temp_Capteurs_Thermique",  "probe":"NTC10K","ads":"0x48","ch":2,"offset_av":"Corection_CTN_3"},
+      "ANA3":{"name":"Temp_Chaudiere",           "probe":"NTC10K","ads":"0x48","ch":3,"offset_av":"Corection_CTN_4"},
+      "ANA4":{"name":"Temp_Ballon_Haut",         "probe":"NTC10K","ads":"0x49","ch":0,"offset_av":"Corection_CTN_5"},
+      "ANA5":{"name":"Temp_Ballon_Bas",          "probe":"NTC10K","ads":"0x49","ch":1,"offset_av":"Corection_CTN_6"},
+      "ANA6":{"name":"Temp_Chauffage_Depart",    "probe":"NTC10K","ads":"0x49","ch":2,"offset_av":"Corection_CTN_7"},
+      "ANA7":{"name":"Temp_Chauffage_Retour_Froid","probe":"NTC10K","ads":"0x49","ch":3,"offset_av":"Corection_CTN_8"},
+      "ANA8":{"name":"Temp_Bouclage",            "probe":"NTC10K","ads":"0x4A","ch":0,"offset_av":"Corection_CTN_9"}
+    }
+  },
+  "program": {
+    "pages": [
+      {
+        "id":"P1","name":"Régulation principale",
+        "blocks":[
+          {
+            "id":"BLK_JOURS","type":"PYBLOCK","name":"bloc_jours",
+            "x":60,"y":60,"w":200,"h":280,
+            "params":{
+              "name":"Jours",
+              "code_file":"pyblock_jours.py"
+            },
+            "ports":{
+              "a1_ref":"RF14_heure_courante",
+              "i1_ref":"RF15_jour_semaine",
+              "d1_ref":"DV_Lundi","d2_ref":"DV_Mardi","d3_ref":"DV_Mercredi",
+              "d4_ref":"DV_Jeudi","d5_ref":"DV_Vendredi","d6_ref":"DV_Samedi","d7_ref":"DV_Dimanche",
+              "od1_ref":"M0_periode_confort"
+            }
+          },
+          {
+            "id":"BLK_SOL","type":"PYBLOCK","name":"solaire_thermique",
+            "x":320,"y":60,"w":200,"h":300,
+            "params":{
+              "name":"Solaire Thermique",
+              "code_file":"pyblock_solaire_thermique.py"
+            },
+            "ports":{
+              "a1_ref":"ANA2","a2_ref":"ANA7",
+              "a3_ref":"AV_Secu_Panneaux_Solaire_Max",
+              "a4_ref":"AV_Secu_Paneaux_Solaire_Mini",
+              "a5_ref":"AV_Conssigne_Panneaux_Solaire_Mini",
+              "a6_ref":"AV_Hyst_RetourFroid_Solaire",
+              "d1_ref":"DV_BP_Marche","d2_ref":"DV_BP_Marche_Cauffage_Solaire",
+              "d3_ref":"DV_BP_Forcage_V3V_Solaire",
+              "od1_ref":"GPIO_11","od2_ref":"GPIO_13","od3_ref":"M1_run_cpt_sol"
+            }
+          },
+          {
+            "id":"BLK_ECS","type":"PYBLOCK","name":"gestion_ecs",
+            "x":580,"y":60,"w":200,"h":380,
+            "params":{
+              "name":"Gestion ECS",
+              "code_file":"pyblock_gestion_ecs.py"
+            },
+            "ports":{
+              "a1_ref":"ANA2","a2_ref":"ANA5","a3_ref":"AV_Hyst_Ballon_Bas",
+              "a4_ref":"ANA3","a5_ref":"ANA4","a6_ref":"AV_Hyst_Ballon_Haut",
+              "a7_ref":"AV_Conssigne_Ballons","a8_ref":"AV_Conssigne_MINI_Ballons_S_CH",
+              "d1_ref":"DV_BP_Marche_ECS_Solair","d2_ref":"DV_BP_Marche_ECS_Chaudiere",
+              "d3_ref":"GPIO_23_TOR_IN_4","d4_ref":"RF6_circ_plancher",
+              "d5_ref":"DV_BP_Marche","d6_ref":"DV_BP_Forcage_Circulateur_Solaire",
+              "d7_ref":"DV_BP_Forcage_Circulateur_Chaudier",
+              "od1_ref":"GPIO_22","od2_ref":"GPIO_27",
+              "od3_ref":"RF3_dem_mini","od4_ref":"RF2_dem_ecs"
+            }
+          },
+          {
+            "id":"BLK_LOI","type":"PYBLOCK","name":"loi_eau",
+            "x":320,"y":420,"w":200,"h":360,
+            "params":{
+              "name":"Loi d'eau / Plancher",
+              "code_file":"pyblock_loi_eau.py"
+            },
+            "ports":{
+              "a1_ref":"ANA1","a2_ref":"ANA0","a3_ref":"ANA6",
+              "a4_ref":"AV_Conssigne_Ambiance","a5_ref":"AV_Correction_Jour_Nuit",
+              "a6_ref":"AV_Corection_Depart_V3V_Solaire",
+              "a7_ref":"AV_Conssigne_Depart_V3V_Max",
+              "a8_ref":"AV_Cons_temp_de_marche_Degommage",
+              "d1_ref":"RF1_v3v_sol","d2_ref":"DV_BP_Marche_Arret_Chauffage",
+              "d3_ref":"DV_BP_Marche_Cauffage_Solaire","d4_ref":"M0_periode_confort",
+              "d5_ref":"DV_BP_Forcage_Circulateur_Planché",
+              "d6_ref":"DV_BP_Forcage_v3v_close","d7_ref":"DV_BP_Forcage_v3v_open",
+              "d8_ref":"DV_BP_Arret_V3V",
+              "od1_ref":"GPIO_6","od2_ref":"GPIO_17","od3_ref":"GPIO_4","od4_ref":"RF7_dem_plancher"
+            }
+          },
+          {
+            "id":"BLK_CH","type":"PYBLOCK","name":"chaudiere",
+            "x":580,"y":500,"w":200,"h":380,
+            "params":{
+              "name":"Chaudière",
+              "code_file":"pyblock_chaudiere.py"
+            },
+            "ports":{
+              "a1_ref":"ANA3","a2_ref":"ANA4","a3_ref":"ANA7",
+              "a4_ref":"RF5_cons_dep","a5_ref":"AV_Cons_Temp_de_Marche_Chaudiere",
+              "a6_ref":"AV_Cons_temp_de_marche_Degommage",
+              "a7_ref":"AV_Cons_temp_de_marche_Circulateur",
+              "d1_ref":"RF2_dem_ecs","d2_ref":"RF3_dem_mini","d3_ref":"RF7_dem_plancher",
+              "d4_ref":"GPIO_23_TOR_IN_4","d5_ref":"GPIO_14_TOR_IN_1",
+              "d6_ref":"RF6_circ_plancher","d7_ref":"M2_circ_ecs_ch",
+              "d8_ref":"RF1_v3v_sol",
+              "od1_ref":"GPIO_5","od2_ref":"GPIO_10","od3_ref":"M3_run_cpt_ch"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "av_vars": {
+    "Conssigne_Ambiance":              {"value":19.0,  "unit":"°C", "desc":"Consigne ambiance chauffage"},
+    "Correction_Jour_Nuit":            {"value":2.0,   "unit":"°C", "desc":"Abaissement nocturne"},
+    "Hyst_Ballon_Bas":                 {"value":3.0,   "unit":"°C", "desc":"Hystérésis ballon bas"},
+    "Hyst_Ballon_Haut":                {"value":5.0,   "unit":"°C", "desc":"Hystérésis ballon haut"},
+    "Hyst_RetourFroid_Solaire":        {"value":5.0,   "unit":"°C", "desc":"Hystérésis retour froid solaire"},
+    "Corection_Depart_V3V_Solaire":    {"value":3.0,   "unit":"°C", "desc":"Correction départ V3V solaire"},
+    "Conssigne_Depart_V3V_Max":        {"value":50.0,  "unit":"°C", "desc":"Départ V3V max"},
+    "Conssigne_Ballons_Max":           {"value":85.0,  "unit":"°C", "desc":"Sécurité ballon max"},
+    "Conssigne_Ballons":               {"value":55.0,  "unit":"°C", "desc":"Consigne ballon ECS"},
+    "Conssigne_MINI_Ballons_S_CH":     {"value":45.0,  "unit":"°C", "desc":"Mini ballon sol+CH"},
+    "Secu_Panneaux_Solaire_Max":       {"value":95.0,  "unit":"°C", "desc":"Sécurité haute panneaux"},
+    "Conssigne_Panneaux_Solaire_Mini": {"value":35.0,  "unit":"°C", "desc":"Mini marche solaire"},
+    "Secu_Paneaux_Solaire_Mini":       {"value":5.0,   "unit":"°C", "desc":"Sécurité basse panneaux (gel)"},
+    "Cons_Temp_de_Marche_Chaudiere":   {"value":35.0,  "unit":"°C", "desc":"Température de marche chaudière"},
+    "Cons_temp_de_marche_Degommage":   {"value":60.0,  "unit":"°C", "desc":"Consigne anti-gommage"},
+    "Cons_temp_de_marche_Circulateur": {"value":30.0,  "unit":"°C", "desc":"T° min circulateur"},
+    "Corection_CTN_1":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Ambiance"},
+    "Corection_CTN_2":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Extérieur"},
+    "Corection_CTN_3":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Capteurs"},
+    "Corection_CTN_4":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Chaudière"},
+    "Corection_CTN_5":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Ballon Haut"},
+    "Corection_CTN_6":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Ballon Bas"},
+    "Corection_CTN_7":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Départ"},
+    "Corection_CTN_8":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Retour Froid"},
+    "Corection_CTN_9":  {"value":0.0, "unit":"°C", "desc":"Offset sonde Bouclage"},
+    "Prog_Heure_de_début_L":{"value":7,  "unit":"h","desc":"Lundi - début confort"},
+    "Prog_Heure_de_fin_L":  {"value":22, "unit":"h","desc":"Lundi - fin confort"},
+    "Prog_Heure_de_début_M":{"value":7,  "unit":"h","desc":"Mardi - début confort"},
+    "Prog_Heure_de_fin_M":  {"value":22, "unit":"h","desc":"Mardi - fin confort"},
+    "Prog_Heure_de_début_ME":{"value":7, "unit":"h","desc":"Mercredi - début confort"},
+    "Prog_Heure_de_fin_ME": {"value":22, "unit":"h","desc":"Mercredi - fin confort"},
+    "Prog_Heure_de_début_J":{"value":7,  "unit":"h","desc":"Jeudi - début confort"},
+    "Prog_Heure_de_fin_J":  {"value":22, "unit":"h","desc":"Jeudi - fin confort"},
+    "Prog_Heure_de_début_V":{"value":7,  "unit":"h","desc":"Vendredi - début confort"},
+    "Prog_Heure_de_fin_V":  {"value":22, "unit":"h","desc":"Vendredi - fin confort"},
+    "Prog_Heure_de_début_S":{"value":8,  "unit":"h","desc":"Samedi - début confort"},
+    "Prog_Heure_de_fin_S":  {"value":23, "unit":"h","desc":"Samedi - fin confort"},
+    "Prog_Heure_de_début_D":{"value":8,  "unit":"h","desc":"Dimanche - début confort"},
+    "Prog_Heure_de_fin_D":  {"value":23, "unit":"h","desc":"Dimanche - fin confort"}
+  },
+  "notes": "Transposition complète Proview → RPI-PLC Studio.\nRegistres RF partagés entre blocs :\n  RF0  = ΔT capteurs-retour (solaire_thermique)\n  RF1  = v3v_solaire_on  (→ loi_eau d1, chaudiere d8)\n  RF2  = demande_ecs     (→ chaudiere d1)\n  RF3  = demande_mini    (→ chaudiere d2)\n  RF4  = circ_ecs_ch     (info)\n  RF5  = consigne_depart (loi_eau → chaudiere a4)\n  RF6  = circ_plancher   (loi_eau → ecs d4, chaudiere d6)\n  RF7  = demande_plancher(loi_eau → chaudiere d3)\n  RF8  = surchauffe_dep  (info)\n  RF9  = autorisation_ch (→ synoptique)\n  RF10 = rehausse_ch     (→ synoptique)\n  RF13 = correction_jn   (→ synoptique)\n  RF14 = heure_courante  (LocalTime)\n  RF15 = jour_semaine    (LocalTime)"
+}

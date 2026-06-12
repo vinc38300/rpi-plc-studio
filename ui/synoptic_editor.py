@@ -228,7 +228,9 @@ class SynopticEditor(QWidget):
 
     def _mark_ready(self):
         self._ready = True
-        self._status.setText("Prêt — glissez des éléments depuis la palette")
+        self._status.setText("Prêt")
+        # Démarrer en mode Édition (grille visible, drag & drop actif)
+        self._call_js("window.setOperatorMode && window.setOperatorMode(false)")
         if self._pending_load is not None:
             self._call_js(f"loadSynopticData({self._pending_load})")
             self._pending_load = None
@@ -273,6 +275,13 @@ class SynopticEditor(QWidget):
             import json as _json
             cfg_js = _json.dumps(gpio_config)
             self._call_js(f"window.setGpioConfig && window.setGpioConfig({cfg_js});")
+
+    def set_analog_config(self, analog_config: dict):
+        """Pousse la config sondes ANA dans le canvas synoptique (enrichit les dropdowns ANA)."""
+        if self._ready:
+            import json as _json
+            cfg_js = _json.dumps(analog_config)
+            self._call_js(f"window.setAnalogConfig && window.setAnalogConfig({cfg_js});")
 
     def set_operator_mode(self, enabled: bool):
         """Bascule le canvas en mode Opérateur (True) ou Édition (False)."""

@@ -167,6 +167,38 @@ class RPiDeployer:
         self._client = None
         self.log_cb("[SSH] Déconnecté")
 
+    def download_project(self) -> dict:
+        """
+        Télécharge programme.json, synoptic.json et config.json depuis le RPi via SFTP.
+        Retourne un dict {filename: parsed_json} pour chaque fichier récupéré avec succès.
+        Doit être appelé après connect().
+        """
+        import io as _io
+        files = {}
+        targets = ["programme.json", "fbd_diagram.json", "synoptic.json", "config.json"]
+        for fname in targets:
+            remote_path = f"{self.remote_dir}/{fname}"
+            try:
+                buf = _io.BytesIO()
+                self._sftp.getfo(remote_path, buf)
+                content = json.loads(buf.getvalue().decode("utf-8"))
+                files[fname] = content
+                self.log_cb(f"[DL] ✓ {fname} ({buf.tell()} octets)")
+            except FileNotFoundError:
+                if fname == "fbd_diagram.json":
+                    self.log_cb(f"[DL] ℹ {fname} absent (ancien RPi) — reconstruction depuis programme.json")
+                else:
+                    self.log_cb(f"[DL] ✗ {fname} introuvable sur le RPi ({remote_path})")
+            except json.JSONDecodeError as e:
+                self.log_cb(f"[DL] ✗ {fname} JSON invalide : {e}")
+            except Exception as e:
+                self.log_cb(f"[DL] ✗ {fname} : {e}")
+        if files:
+            self.log_cb(f"[DL] {len(files)}/{len(targets)} fichier(s) récupéré(s)")
+        else:
+            self.log_cb("[DL] Aucun fichier récupéré — vérifiez le chemin remote_dir")
+        return files
+
     def is_connected(self) -> bool:
         return self._client is not None and self._client.get_transport() is not None \
                and self._client.get_transport().is_active()
@@ -319,8 +351,9 @@ class RPiDeployer:
         return result
 
     # ── Déploiement programme seul ────────────────────────────────────────────
-    def deploy_prog_only(self, program_json, synoptic=None, extra_config: dict = None) -> "DeployResult":
-        """Envoie uniquement programme.json et synoptic.json puis redémarre le service."""
+    def deploy_prog_only(self, program_json, synoptic=None, extra_config: dict = None, fbd_diagram: dict = None) -> "DeployResult":
+        """Envoie uniquement programme.json, fbd_diagram.json et synoptic.json puis redémarre le service.
+        Si server.py est absent ou a une taille différente de la version locale, il est mis à jour automatiquement."""
         if not self.is_connected():
             r = self.connect()
             if not r.success:
@@ -342,13 +375,55 @@ class RPiDeployer:
                     try: self._sftp.stat(cur)
                     except: self._sftp.mkdir(cur)
 
+            # ── Vérifier si server.py doit être mis à jour ──────────────
+            import os as _os
+            _srv_local = _os.path.normpath(_os.path.join(
+                _os.path.dirname(_os.path.abspath(__file__)), '..', 'rpi_server', 'server.py'))
+            if _os.path.isfile(_srv_local):
+                _local_size = _os.path.getsize(_srv_local)
+                _, _rsize_out, _ = self.run(f"stat -c '%s' {rd}/server.py 2>/dev/null || echo 0")
+                _remote_size = int(_rsize_out.strip() or '0')
+                if _remote_size != _local_size:
+                    self.log_cb(f"[UPDATE] server.py distant ({_remote_size}o) ≠ local ({_local_size}o) → mise à jour automatique")
+                    self._sftp.put(_srv_local, f"{rd}/server.py")
+                    self.log_cb("[UPDATE] server.py mis à jour ✓")
+                else:
+                    self.log_cb("[OK] server.py à jour (taille identique)")
+
+            # ── Toujours envoyer tous les fichiers serveur (templates, static…) ──
+            for rel in SERVER_FILES:
+                if rel == "server.py":
+                    continue
+                _fp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'rpi_server', rel)
+                if _os.path.isfile(_fp):
+                    try:
+                        _rp = f"{rd}/{rel}"
+                        # Créer le sous-dossier si nécessaire
+                        _rdir = _rp.rsplit('/', 1)[0]
+                        self.run(f"mkdir -p {_rdir}")
+                        self._sftp.put(_fp, _rp)
+                        self.log_cb(f"[SFTP] → {_rp}")
+                    except Exception as _ef:
+                        self.log_cb(f"[WARN] {rel} : {_ef}")
+
+            # ── Toujours envoyer synoptic_canvas.js → static/ ──────────────────
+            _canvas_js_src2 = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'ui', 'synoptic_canvas.js'))
+            if _os.path.isfile(_canvas_js_src2):
+                try:
+                    self.run(f"mkdir -p {rd}/static")
+                    self._sftp.put(_canvas_js_src2, f"{rd}/static/synoptic_canvas.js")
+                    self.log_cb(f"[SFTP] → {rd}/static/synoptic_canvas.js")
+                except Exception as _e2:
+                    self.log_cb(f"[WARN] synoptic_canvas.js : {_e2}")
+            else:
+                self.log_cb("[WARN] synoptic_canvas.js introuvable — synoptique web non mis à jour")
+
             # Sauvegarde automatique
             self.log_cb("[BACKUP] Sauvegarde du programme existant…")
             self.run(f"test -f {rd}/programme.json && cp {rd}/programme.json {rd}/backups/auto_$(date +%Y%m%d_%H%M%S).json || true")
 
             # Mise à jour config.json sur le RPi — même logique que deploy()
-            import os as _os, json as _jcfg3, io as _iocfg3
-            rd = self.remote_dir
+            import json as _jcfg3, io as _iocfg3
 
             rpi_cfg3 = {}
             try:
@@ -367,6 +442,18 @@ class RPiDeployer:
                             rpi_cfg3[k] = v
                 except Exception:
                     pass
+
+            # Appliquer gpio depuis extra_config (priorité absolue)
+            if extra_config and extra_config.get("gpio"):
+                rpi_cfg3["gpio"] = extra_config["gpio"]
+                n_out3 = sum(1 for c in extra_config["gpio"].values() if c.get("mode") == "output")
+                self.log_cb(f"[GPIO] Config GPIO : {len(extra_config['gpio'])} pins ({n_out3} sorties)")
+
+            # Appliquer analog depuis extra_config
+            if extra_config and extra_config.get("analog"):
+                rpi_cfg3["analog"] = extra_config["analog"]
+                n_ch3 = sum(len(a.get("channels", [])) for a in extra_config["analog"].get("ads", []))
+                self.log_cb(f"[ANALOG] Config sondes : {n_ch3} canaux")
 
             if extra_config and "telegram" in extra_config:
                 tg3 = extra_config["telegram"]
@@ -395,6 +482,13 @@ class RPiDeployer:
             nb = sum(len(p.get("blocks",[])) for p in program_json["pages"]) if isinstance(program_json,dict) and "pages" in program_json else len(program_json) if isinstance(program_json,list) else 0
             self.log_cb(f"[PROG] Programme envoyé ({nb} blocs)")
 
+            # Envoyer diagramme FBD graphique (pour retéléchargement fidèle)
+            if fbd_diagram:
+                fbd_json = json.dumps(fbd_diagram, indent=2, ensure_ascii=False)
+                self._sftp.putfo(_io.BytesIO(fbd_json.encode()), f"{rd}/fbd_diagram.json")
+                nb_fbd = sum(len(p.get("blocks",[])) for p in fbd_diagram.get("pages",[])) if "pages" in fbd_diagram else 0
+                self.log_cb(f"[PROG] Diagramme FBD sauvegardé ({nb_fbd} blocs visuels)")
+
             # Envoyer synoptique
             if synoptic:
                 syn_json = json.dumps(synoptic, indent=2, ensure_ascii=False)
@@ -419,7 +513,7 @@ class RPiDeployer:
             return DeployResult(False, f"Erreur : {e}")
 
     # ── Déploiement complet ───────────────────────────────────────────────────
-    def deploy(self, program_json: list, synoptic: dict = None, extra_config: dict = None) -> "DeployResult":
+    def deploy(self, program_json: list, synoptic: dict = None, extra_config: dict = None, fbd_diagram: dict = None) -> "DeployResult":
         """
         1. Crée le dossier distant
         2. Envoie server.py + templates/
@@ -504,6 +598,19 @@ class RPiDeployer:
                 except Exception:
                     pass
 
+            # 3a. Appliquer gpio depuis extra_config (priorité sur config.json local)
+            if extra_config and extra_config.get("gpio"):
+                rpi_cfg["gpio"] = extra_config["gpio"]
+                n_out = sum(1 for c in extra_config["gpio"].values() if c.get("mode") == "output")
+                n_in  = sum(1 for c in extra_config["gpio"].values() if c.get("mode") == "input")
+                self.log_cb(f"[GPIO] Config GPIO : {len(extra_config['gpio'])} pins ({n_out} sorties, {n_in} entrées)")
+
+            # 3b. Appliquer analog depuis extra_config
+            if extra_config and extra_config.get("analog"):
+                rpi_cfg["analog"] = extra_config["analog"]
+                n_ch = sum(len(a.get("channels", [])) for a in extra_config["analog"].get("ads", []))
+                self.log_cb(f"[ANALOG] Config sondes : {n_ch} canaux")
+
             # 3. Appliquer extra_config telegram — SANS toucher au token s'il est absent
             if extra_config and "telegram" in extra_config:
                 tg_new = extra_config["telegram"]
@@ -541,6 +648,19 @@ class RPiDeployer:
                 sftp_makedirs(remote_folder)
                 self.log_cb(f"[SFTP] → {remote}")
                 self._sftp.put(local, remote)
+
+
+            # Déployer synoptic_canvas.js depuis ui/ vers static/ du RPi
+            _canvas_js_src = os.path.join(SERVER_SRC, '..', 'ui', 'synoptic_canvas.js')
+            _canvas_js_src = os.path.normpath(_canvas_js_src)
+            if os.path.isfile(_canvas_js_src):
+                _canvas_js_dst = f"{self.remote_dir}/static/synoptic_canvas.js"
+                self.run(f"mkdir -p {self.remote_dir}/static")
+                sftp_makedirs(f"{self.remote_dir}/static")
+                self.log_cb(f"[SFTP] → {_canvas_js_dst}  (synoptic_canvas.js)")
+                self._sftp.put(_canvas_js_src, _canvas_js_dst)
+            else:
+                self.log_cb("[WARN] synoptic_canvas.js introuvable dans ui/ — synoptique web non déployé")
 
             # Auto-sauvegarde du programme existant avant écrasement
             self.log_cb("[BACKUP] Sauvegarde automatique du programme existant…")
@@ -595,6 +715,13 @@ class RPiDeployer:
                     "curPage": 0, "images": []
                 })
                 self._sftp.putfo(_io.BytesIO(empty_syn.encode()), f"{self.remote_dir}/synoptic.json")
+
+            # ── Envoyer le diagramme FBD graphique complet ───────────────────
+            if fbd_diagram:
+                fbd_json = json.dumps(fbd_diagram, indent=2, ensure_ascii=False)
+                self._sftp.putfo(_io.BytesIO(fbd_json.encode("utf-8")), f"{self.remote_dir}/fbd_diagram.json")
+                nb_fbd = sum(len(p.get("blocks", [])) for p in fbd_diagram.get("pages", [])) if "pages" in fbd_diagram else 0
+                self.log_cb(f"[PROG] Diagramme FBD sauvegardé ({nb_fbd} blocs visuels)")
 
             # ── Autonomie : installer le service systemd ──────────────────────
             self.log_cb("[SVC] Configuration de l'autonomie (systemd)…")
