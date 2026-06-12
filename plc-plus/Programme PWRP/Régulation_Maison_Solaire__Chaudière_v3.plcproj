@@ -178,7 +178,7 @@
       "notify_plc": true,
       "report_enabled": true,
       "report_hour": 8,
-      "token": "8662987189:AAHITWx66aXlpfqTK94OMBqtVjbk5yuKU1E"
+      "token": "*********************************************"
     },
     "email": {
       "enabled": false,
