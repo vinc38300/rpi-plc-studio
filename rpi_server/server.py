@@ -14,6 +14,17 @@ from pathlib import Path
 
 # ── TelegramBot — import séparé pour ne pas être masqué par d'autres erreurs ──
 try:
+    from mqtt_bridge import MQTTBridge
+except Exception as _me:
+    import logging as _l; _l.getLogger("rpi-plc").warning(f"mqtt_bridge non charge : {_me}")
+    class MQTTBridge:
+        def __init__(self,*a,**k): self.enabled=False
+        def start(self): pass
+        def stop(self): pass
+        def configure_blocks(self,p): pass
+        def publish(self,r,v): pass
+
+try:
     from telegram_bot import TelegramBot
     HAS_TELEGRAM = True
 except ImportError as _te:
@@ -1469,7 +1480,7 @@ class PLCEngine:
             r_sec  = block.get("reg_sec")  or block.get("out_sec")
             self.write_register(r_hour, float(now_dt.hour))
             self.write_register(r_mday, float(now_dt.day))
-            self.write_register(r_wday, float((now_dt.weekday()+1)%7))
+            self.write_register(r_wday, float(now_dt.weekday()))        # 0=Lun..6=Dim (Python weekday)
             if r_min: self.write_register(r_min, float(now_dt.minute))
             if r_sec: self.write_register(r_sec, float(now_dt.second))
 
@@ -2437,6 +2448,7 @@ def load_config():
         except Exception as e: log.warning(f"config.json : {e}")
     return {"scan_time_ms":100,"web_port":5000,"web_enabled":True,"watchdog_sec":10,"auto_start":True,
             "security":{"enabled":False,"username":"admin","password":"plc1234"},
+            "mqtt":{"enabled":False,"host":"192.168.1.x","port":1883,"username":"","password":"","keepalive":60},
             "telegram":{"enabled":False,"token":"","chat_ids":[],"alarm_high":90.0,"alarm_low":2.0,"notify_relays":True,"notify_plc":True,"alarm_cooldown_s":600,"relay_cooldown_s":30,
                         "report_hour":8,"report_enabled":True},
             "analog":{"enabled":True,"r_ref_ohm":10000,"vcc":3.3,
@@ -3508,6 +3520,30 @@ def main():
         engine.load_program(program)
     else:
         log.warning("Aucun programme — en attente d'un déploiement")
+
+    # Pont MQTT
+    mqtt_bridge = MQTTBridge(config, engine)
+    if program:
+        mqtt_bridge.configure_blocks(program)
+    mqtt_bridge.start()
+
+    # Hook : reconfigure le pont MQTT quand un nouveau programme est deploye
+    _orig_load = engine.load_program
+    def _load_and_configure(prog):
+        _orig_load(prog)
+        mqtt_bridge.configure_blocks(prog if isinstance(prog, list) else [])
+    engine.load_program = _load_and_configure
+
+    # Hook : publie les RF des blocs MQTT publish apres chaque scan
+    _orig_update = getattr(engine, 'on_update', None)
+    def _on_update_mqtt(snap):
+        regs = snap.get("registers", {})
+        for rf in list(mqtt_bridge._pubs.keys()):
+            if rf in regs:
+                mqtt_bridge.publish(rf, regs[rf])
+        if _orig_update:
+            _orig_update(snap)
+    engine.on_update = _on_update_mqtt
 
     # Bot Telegram
     bot = TelegramBot(config, engine, recipes)

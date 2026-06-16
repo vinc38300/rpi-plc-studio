@@ -3469,126 +3469,119 @@ const ANIM_SYMBOLS={
       s+=`</svg>`;return s;}
   },
 
-  // ══ BALLON ECS — 2 sondes + dégradé couleur configurable ══
+  // ══ BALLON ECS — 2 sondes de température + consigne ══
   ballon_ecs:{
     label:'Ballon ECS (2 sondes)',
-    preview:`<svg viewBox="0 0 40 55" xmlns="http://www.w3.org/2000/svg">
+    defaultProps:{colorCold:'#1a6aff', colorHot:'#f85149'},
+    preview:`<svg viewBox="0 0 40 56" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="pg_p" x1="0" y1="1" x2="0" y2="0">
+        <linearGradient id="pg_prev" x1="0" y1="1" x2="0" y2="0">
           <stop offset="0%"   stop-color="#1a6aff"/>
-          <stop offset="50%"  stop-color="#00d4aa"/>
+          <stop offset="50%"  stop-color="#f0883e"/>
           <stop offset="100%" stop-color="#f85149"/>
         </linearGradient>
-        <clipPath id="cp_p"><rect x="7" y="7" width="26" height="41" rx="5"/></clipPath>
+        <clipPath id="cp_prev2"><rect x="7" y="4" width="26" height="44" rx="4"/></clipPath>
       </defs>
-      <rect x="7" y="7" width="26" height="41" rx="5" fill="#080d12"/>
-      <rect x="7" y="7" width="26" height="41" rx="5" fill="url(#pg_p)"/>
-      <ellipse cx="20" cy="7"  rx="13" ry="5" fill="#111820" stroke="#f85149" stroke-width="1.2"/>
-      <ellipse cx="20" cy="48" rx="13" ry="5" fill="#111820" stroke="#1a6aff" stroke-width="1.2"/>
-      <rect x="7" y="7" width="26" height="41" rx="5" fill="none" stroke="#f85149" stroke-width="1.2"/>
-      <text x="20" y="21" text-anchor="middle" font-size="5.5" font-weight="bold" fill="white" font-family="monospace" opacity="0.9">55.2°</text>
-      <text x="20" y="43" text-anchor="middle" font-size="5.5" font-weight="bold" fill="white" font-family="monospace" opacity="0.8">28.7°</text>
-      <text x="20" y="33" text-anchor="middle" font-size="4.5" fill="white" font-family="sans-serif" opacity="0.25">ECS</text>
+      <rect x="7" y="4" width="26" height="44" rx="4" fill="#0d1117"/>
+      <rect x="7" y="4" width="26" height="44" rx="4" fill="url(#pg_prev)" clip-path="url(#cp_prev2)"/>
+      <ellipse cx="20" cy="4"  rx="13" ry="5" fill="#161b22" stroke="#f85149" stroke-width="1.2"/>
+      <ellipse cx="20" cy="48" rx="13" ry="5" fill="#161b22" stroke="#1a6aff" stroke-width="1.2"/>
+      <rect x="7" y="4" width="26" height="44" rx="4" fill="none" stroke="#f85149" stroke-width="1.2"/>
+      <text x="20" y="22" text-anchor="middle" font-size="6" font-weight="bold" fill="white" font-family="monospace">55&#176;</text>
+      <text x="20" y="38" text-anchor="middle" font-size="6" font-weight="bold" fill="white" font-family="monospace">28&#176;</text>
     </svg>`,
     render(on,c,pw,ph,wgt){
-      // ── Lectures PLC ─────────────────────────────────────────────
-      const tHaut = wgt&&wgt.dvTempHaut ? getV(wgt.dvTempHaut) : null;
-      const tBas  = wgt&&wgt.dvTempBas  ? getV(wgt.dvTempBas)  : null;
-      const consRaw = wgt&&wgt.dvConsigne ? getV(wgt.dvConsigne) : null;
-      const consigne = consRaw!=null ? parseFloat(consRaw) : parseFloat((wgt&&wgt.consigneVal)||60);
+      // ─── Lectures PLC ────────────────────────────────────────────────────
+      const tHaut   = wgt&&wgt.dvTempHaut ? getV(wgt.dvTempHaut) : null;
+      const tBas    = wgt&&wgt.dvTempBas  ? getV(wgt.dvTempBas)  : null;
+      const consRaw = wgt&&wgt.dvConsigne ? getV(wgt.dvConsigne)  : null;
+      const consigne= consRaw!=null ? parseFloat(consRaw) : parseFloat(wgt&&wgt.consigneVal||60);
 
-      // ── Couleurs configurables (défauts bleu→rouge) ───────────────
-      const colCold = (wgt&&wgt.colorCold)||'#1a6aff';
-      const colHot  = (wgt&&wgt.colorHot) ||'#f85149';
+      // ─── Couleurs personnalisables du dégradé ────────────────────────────
+      const CC = (wgt&&wgt.colorCold)||'#1a6aff';   // couleur eau froide
+      const CH = (wgt&&wgt.colorHot) ||'#f85149';   // couleur eau chaude
 
-      // ── Interpolation couleur entre froide et chaude ───────────────
-      const hexRgb=(h)=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
-      const blendCol=(c1,c2,t)=>{
-        try{
-          const [r1,g1,b1]=hexRgb(c1);
-          const [r2,g2,b2]=hexRgb(c2);
-          const r=Math.round(r1+(r2-r1)*t),g=Math.round(g1+(g2-g1)*t),b=Math.round(b1+(b2-b1)*t);
-          return`rgb(${r},${g},${b})`;
-        }catch(e){return t>0.5?c2:c1;}
+      // Interpolation via color-mix(in oklch) : blending perceptuellement uniforme
+      const t2col=(t)=>{
+        if(t===null||t===undefined||isNaN(parseFloat(t))) return CC;
+        const r=Math.max(0,Math.min(1,(parseFloat(t)-10)/Math.max(1,consigne-10)));
+        const pct=Math.round(r*100);
+        return `color-mix(in oklch,${CH} ${pct}%,${CC})`;
       };
-      const t2ratio=(t)=>{
-        if(t===null||isNaN(t))return null;
-        return Math.max(0,Math.min(1,(parseFloat(t)-10)/Math.max(1,consigne-10)));
-      };
-      const rHaut = t2ratio(tHaut);
-      const rBas  = t2ratio(tBas);
-      const rMid  = (rHaut!==null&&rBas!==null)?(rHaut+rBas)/2:rHaut??rBas;
 
-      const cTop = rHaut!==null ? blendCol(colCold,colHot,rHaut) : '#1a2a4a';
-      const cMid = rMid !==null ? blendCol(colCold,colHot,rMid)  : '#0d1a30';
-      const cBot = rBas !==null ? blendCol(colCold,colHot,rBas)  : '#0a1020';
+      // ─── Valeurs dérivées ────────────────────────────────────────────────
+      const uid       = `b${Math.round((wgt&&wgt.x)||0)}_${Math.round((wgt&&wgt.y)||0)}`;
+      const atConsigne= tHaut!==null && parseFloat(tHaut)>=consigne-3;
+      const bdColor   = atConsigne?CH:'#30363d';
+      const tHStr     = tHaut!==null ? `${parseFloat(tHaut).toFixed(1)}°` : '--°';
+      const tBStr     = tBas !==null ? `${parseFloat(tBas ).toFixed(1)}°` : '--°';
+      const conStr    = `${parseFloat(consigne).toFixed(0)}°C`;
+      const cTop      = t2col(tHaut);
+      const cMid      = t2col(tHaut!==null&&tBas!==null?(parseFloat(tHaut)+parseFloat(tBas))/2:null);
+      const cBot      = t2col(tBas);
+      const cLblH     = tHaut!==null ? t2col(tHaut) : '#8b949e';
+      const cLblB     = tBas !==null ? t2col(tBas)  : '#8b949e';
 
-      // ── États visuels ─────────────────────────────────────────────
-      const uid=`b${Math.round((wgt&&wgt.x)||0)}_${Math.round((wgt&&wgt.y)||0)}`;
-      const atConsigne = rHaut!==null && rHaut>=0.97;
-      const bdColor = atConsigne ? blendCol(colCold,colHot,1) : '#30363d';
+      // Ligne de front thermique Y (dans corp y=13..119)
+      const htRatio= tHaut!==null?Math.max(0,Math.min(1,(parseFloat(tHaut)-10)/Math.max(1,consigne-10))):0;
+      const frontY = Math.round(119-(htRatio*106));
 
-      const tHStr = tHaut!==null?`${parseFloat(tHaut).toFixed(1)}°`:'--°';
-      const tBStr = tBas !==null?`${parseFloat(tBas ).toFixed(1)}°`:'--°';
-      const conStr= `SP ${parseFloat(consigne).toFixed(0)}°C`;
-
-      // ── Ligne de front thermique (milieu ballon) ──────────────────
-      // Corps: y=18 à y=128  (hauteur=110)
-      // Front = là où la transition chaude/froide est la plus marquée
-      const showFront = tHaut!==null&&tBas!==null&&Math.abs(parseFloat(tHaut)-parseFloat(tBas))>4;
-      const frontY = showFront ? Math.round(128-((rMid??0.5)*110)) : null;
-
-      return`<svg viewBox="0 0 80 130" xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${ph}" style="display:block;">
+      // ─── SVG — viewBox sans tuyaux ni raccords ───────────────────────────
+      return`<svg viewBox="0 0 84 138" xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${ph}" style="display:block;">
         <defs>
           <linearGradient id="wg_${uid}" x1="0" y1="1" x2="0" y2="0">
             <stop offset="0%"   stop-color="${cBot}" stop-opacity="0.97"/>
             <stop offset="50%"  stop-color="${cMid}" stop-opacity="0.97"/>
             <stop offset="100%" stop-color="${cTop}" stop-opacity="0.97"/>
           </linearGradient>
-          <clipPath id="bc_${uid}"><rect x="11" y="18" width="58" height="110" rx="8"/></clipPath>
-          <filter id="gl_${uid}" x="-25%" y="-25%" width="150%" height="150%">
-            <feGaussianBlur stdDeviation="3" result="b"/>
+          <clipPath id="bc_${uid}"><rect x="15" y="13" width="54" height="106" rx="7"/></clipPath>
+          <filter id="glow_${uid}" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.5" result="b"/>
             <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
         </defs>
 
         <!-- Corps ballon -->
-        <rect x="11" y="18" width="58" height="110" rx="8" fill="#080d12"/>
-        <rect x="11" y="18" width="58" height="110" rx="8" fill="url(#wg_${uid})"/>
-        <!-- Reflet latéral -->
-        <rect x="12" y="20" width="6" height="106" rx="3" fill="white" opacity="0.035"/>
+        <rect x="15" y="13" width="54" height="106" rx="7" fill="#080d12"/>
+        <rect x="15" y="13" width="54" height="106" rx="7" fill="url(#wg_${uid})"/>
+        <!-- Reflet lateral 3D -->
+        <rect x="16" y="15" width="5" height="102" rx="2.5" fill="white" opacity="0.035"/>
 
-        <!-- Ligne de front thermique -->
-        ${showFront&&frontY?
-          `<line x1="11" y1="${frontY}" x2="69" y2="${frontY}"
-                 stroke="white" stroke-width="0.9" stroke-dasharray="4 3"
-                 opacity="0.2" clip-path="url(#bc_${uid})"/>`:''}
+        <!-- Ligne de front thermique (stratification) -->
+        ${tHaut!==null&&tBas!==null&&Math.abs(parseFloat(tHaut)-parseFloat(tBas))>3
+          ?`<line x1="15" y1="${frontY}" x2="69" y2="${frontY}" stroke="white" stroke-width="0.8" stroke-dasharray="3 2" opacity="0.22" clip-path="url(#bc_${uid})"/>`
+          :''}
 
-        <!-- Calotte haute -->
-        <ellipse cx="40" cy="18"  rx="29" ry="9.5" fill="#0d1117" stroke="${bdColor}" stroke-width="2"/>
-        <!-- Calotte basse -->
-        <ellipse cx="40" cy="128" rx="29" ry="9.5" fill="#0d1117" stroke="${bdColor}" stroke-width="1.6"/>
-        <!-- Contour corps -->
-        <rect x="11" y="18" width="58" height="110" rx="8" fill="none" stroke="${bdColor}" stroke-width="2"/>
+        <!-- Calottes bombees -->
+        <ellipse cx="42" cy="13"  rx="27" ry="9" fill="#111820" stroke="${bdColor}" stroke-width="1.8"/>
+        <ellipse cx="42" cy="119" rx="27" ry="9" fill="#111820" stroke="${bdColor}" stroke-width="1.5"/>
+        <rect x="15" y="13" width="54" height="106" rx="7" fill="none" stroke="${bdColor}" stroke-width="1.8"/>
 
-        <!-- T° SONDE HAUTE -->
-        <text x="40" y="43" text-anchor="middle" font-size="15" font-weight="bold"
-              fill="white" font-family="monospace" opacity="0.95"
-              ${atConsigne?`filter="url(#gl_${uid})"`:''}>${tHStr}</text>
-        <text x="40" y="54" text-anchor="middle" font-size="7" fill="white"
-              font-family="sans-serif" opacity="0.45">▲ haute</text>
+        <!-- T sonde HAUTE -->
+        <text x="42" y="37" text-anchor="middle" font-size="15" font-weight="bold"
+              fill="${cLblH}" font-family="monospace" opacity="0.97"
+              ${atConsigne?`filter="url(#glow_${uid})"`:''}>${tHStr}</text>
+        <text x="42" y="48" text-anchor="middle" font-size="7" fill="white"
+              font-family="sans-serif" opacity="0.45">&#9650; sonde haute</text>
 
-        <!-- Label ECS + Consigne -->
-        <text x="40" y="75" text-anchor="middle" font-size="10" fill="white"
-              font-family="sans-serif" font-weight="bold" opacity="0.12">ECS</text>
-        <text x="40" y="87" text-anchor="middle" font-size="8" fill="${atConsigne?blendCol(colCold,colHot,1):'#8b949e'}"
-              font-family="monospace" opacity="${atConsigne?0.9:0.5}">${conStr}</text>
+        <!-- SP consigne centre -->
+        <text x="42" y="72" text-anchor="middle" font-size="8.5" fill="white"
+              font-family="monospace" opacity="0.15" font-weight="bold">ECS</text>
+        <text x="42" y="83" text-anchor="middle" font-size="7.5"
+              fill="${atConsigne?'#ffd740':'#8b949e'}" font-family="monospace"
+              opacity="${atConsigne?0.9:0.5}">SP ${conStr}</text>
 
-        <!-- T° SONDE BASSE -->
-        <text x="40" y="106" text-anchor="middle" font-size="15" font-weight="bold"
-              fill="white" font-family="monospace" opacity="0.85">${tBStr}</text>
-        <text x="40" y="117" text-anchor="middle" font-size="7" fill="white"
-              font-family="sans-serif" opacity="0.45">▼ basse</text>
+        <!-- T sonde BASSE -->
+        <text x="42" y="100" text-anchor="middle" font-size="15" font-weight="bold"
+              fill="${cLblB}" font-family="monospace" opacity="0.90">${tBStr}</text>
+        <text x="42" y="111" text-anchor="middle" font-size="7" fill="white"
+              font-family="sans-serif" opacity="0.45">&#9660; sonde basse</text>
+
+        <!-- Pastille consigne atteinte -->
+        ${atConsigne
+          ?`<circle cx="42" cy="6" r="4.5" fill="${CH}" opacity="0.9"/>
+            <text x="42" y="9.5" text-anchor="middle" font-size="5.5" fill="white" font-weight="bold">&#10003;</text>`
+          :''}
       </svg>`;
     }
   }
@@ -3684,7 +3677,9 @@ cvs.addEventListener('drop',e=>{
   else if(_dragSym){
     let w;
     if(_dragSym.type==='animated'){
-      w=mkW('animated',x,y,{animId:_dragSym.animId,label:_dragSym.label});
+      const animDef=ANIM_SYMBOLS[_dragSym.animId];
+      const extra=animDef&&animDef.defaultProps ? {...animDef.defaultProps} : {};
+      w=mkW('animated',x,y,{animId:_dragSym.animId,label:_dragSym.label,...extra});
     } else {
       w=mkW('symbol',x,y,{symId:_dragSym.symId,label:_dragSym.label});
     }
@@ -4387,14 +4382,11 @@ function showProps(w){
     h+=pC('color','Couleur actif',w.color||'#56d364')+pC('colorOff','Couleur inactif',w.colorOff||'#484f58');
   }
   if(w.type==='alarm_light'){
-    if(w.animId!=='ballon_ecs'){
-      h+=`<div class="prop-section">Variable</div>`;
-      h+=`<div class="prop-row"><div class="prop-label">Source</div><select class="prop-input" data-key="varRef"><option value="">— choisir —</option><optgroup label="Mémoires M">${mb}</optgroup>${gpIn?`<optgroup label="GPIO Entrées">${gpIn}</optgroup>`:''}<optgroup label="GPIO Sorties">${gp}</optgroup><optgroup label="Analogiques">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div>`;
-      h+=`<div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div><input class="prop-input" type="text" list="${_SYN_RF_DL}" data-key="varRef" value="${w.varRef||''}" placeholder="ex: RF0, M3, ANA0…" style="width:100%;box-sizing:border-box"></div>`;
-      h+=`<div class="prop-row" style="font-size:10px;color:var(--t3);padding:2px 6px">Allumé si valeur ≠ 0</div>`;
-      h+=pC('colorOn','Couleur alarme',w.colorOn||'#f85149')+pC('colorOff','Couleur normal',w.colorOff||'#484f58');
-    }
-    // Ballon ECS : colorCold/colorHot gérés dans la section spécifique ci-dessous
+    h+=`<div class="prop-section">Variable</div>`;
+    h+=`<div class="prop-row"><div class="prop-label">Source</div><select class="prop-input" data-key="varRef"><option value="">— choisir —</option><optgroup label="Mémoires M">${mb}</optgroup>${gpIn?`<optgroup label="GPIO Entrées">${gpIn}</optgroup>`:''}<optgroup label="GPIO Sorties">${gp}</optgroup><optgroup label="Analogiques">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div>`;
+    h+=`<div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div><input class="prop-input" type="text" list="${_SYN_RF_DL}" data-key="varRef" value="${w.varRef||''}" placeholder="ex: RF0, M3, ANA0…" style="width:100%;box-sizing:border-box"></div>`;
+    h+=`<div class="prop-row" style="font-size:10px;color:var(--t3);padding:2px 6px">Allumé si valeur ≠ 0</div>`;
+    h+=pC('colorOn','Couleur alarme',w.colorOn||'#f85149')+pC('colorOff','Couleur normal',w.colorOff||'#484f58');
   }
   if(w.type==='label'){h+=`<div class="prop-section">Texte</div>`+pT('text','Contenu',w.text||'')+pN('fontSize','Taille px',w.fontSize||14)+pC('color','Couleur',w.color||'#e6edf3')+`<label class="chk-row"><input type="checkbox" data-key="bold" ${w.bold?'checked':''}> Gras</label>`+`<div class="prop-row"><div class="prop-label">Alignement</div><select class="prop-input" data-key="align"><option value="center" ${(w.align||'center')==='center'?'selected':''}>Centre</option><option value="left" ${w.align==='left'?'selected':''}>Gauche</option><option value="right" ${w.align==='right'?'selected':''}>Droite</option></select></div>`+`<div class="prop-section">Fond (optionnel)</div>`+pC('bg','Couleur fond',w.bg||'')+pC('gradientColor2','Couleur 2 (dégradé)',w.gradientColor2||'')+`<div class="prop-row"><div class="prop-label">Direction</div><select class="prop-input" data-key="gradientDir"><option value="horizontal" ${(w.gradientDir||'horizontal')==='horizontal'?'selected':''}>Horizontal ↔</option><option value="vertical" ${w.gradientDir==='vertical'?'selected':''}>Vertical ↕</option><option value="radial" ${w.gradientDir==='radial'?'selected':''}>Radial ○</option></select></div>`+pN('radius','Arrondi',w.radius||4)+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);}
   // ── Texte dynamique ──────────────────────────────────────────────────────────
@@ -4528,20 +4520,19 @@ function showProps(w){
     </div>`;
     // ── Champs extra Ballon ECS ──────────────────────────────────────
     if(w.animId==='ballon_ecs'){
-      h+=`<div class="prop-section" style="color:#58a6ff">🌡 Sondes de température</div>`;
+      h+=`<div class="prop-section" style="color:#58a6ff">🌡 Ballon ECS — Sondes température</div>`;
       h+=`<div class="prop-row"><div class="prop-label">T° sonde haute</div>${rfAnComboFor('dvTempHaut')}</div>`;
       h+=`<div class="prop-row"><div class="prop-label">T° sonde basse</div>${rfAnComboFor('dvTempBas')}</div>`;
       h+=`<div class="prop-section" style="color:#ffd740">🎯 Consigne</div>`;
       h+=`<div class="prop-row"><div class="prop-label">Consigne (RF)</div>${rfComboFor('dvConsigne')}</div>`;
       h+=`<div class="prop-row"><div class="prop-label">Consigne fixe °C</div><input class="prop-input" type="number" data-key="consigneVal" min="20" max="90" step="1" value="${w.consigneVal||60}" placeholder="60"></div>`;
       h+=`<div class="prop-section" style="color:#a371f7">🎨 Couleurs du dégradé</div>`;
-      h+=pC('colorCold','Couleur froide (bas)',w.colorCold||'#1a6aff');
-      h+=pC('colorHot', 'Couleur chaude (haut)',w.colorHot ||'#f85149');
-      h+=`<div style="margin:4px 0 2px;padding:5px 7px;border-radius:5px;background:linear-gradient(to right,${w.colorCold||'#1a6aff'},${w.colorHot||'#f85149'});height:10px;opacity:0.8;"></div>`;
-      h+=`<div style="padding:5px 7px;font-size:9px;color:#8b949e;line-height:1.6;">
-        🌡 <b>dvTempHaut/dvTempBas</b> : sondes ANA ou registres RF<br>
-        🎯 <b>Consigne RF</b> : registre PLC — sinon valeur fixe utilisée<br>
-        🎨 Le dégradé est calculé en temps réel selon T° / consigne
+      h+=`<div class="prop-row"><div class="prop-label">Froid (bas)</div><input class="prop-input" type="color" data-key="colorCold" value="${w.colorCold||'#1a6aff'}" style="height:28px;padding:2px 4px;cursor:pointer"></div>`;
+      h+=`<div class="prop-row"><div class="prop-label">Chaud (haut)</div><input class="prop-input" type="color" data-key="colorHot" value="${w.colorHot||'#f85149'}" style="height:28px;padding:2px 4px;cursor:pointer"></div>`;
+      h+=`<div style="margin-top:4px;padding:5px 8px;background:#0d1117;border-radius:5px;font-size:9px;color:#8b949e;line-height:1.7;">
+        Le dégradé interpole entre <b style="color:${w.colorCold||'#1a6aff'}">Froid</b> et <b style="color:${w.colorHot||'#f85149'}">Chaud</b><br>
+        proportionnellement à la température vs consigne.<br>
+        Les textes de sonde prennent la même couleur interpolée.
       </div>`;
     }
   } else if(w.type==='plancher_w'){

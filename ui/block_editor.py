@@ -730,6 +730,7 @@ class BlockEditor(QWidget):
             if t == "MEM":    return p.get("bit", "M0")
             if t == "CONST":  return p.get("value", 0)
             if t in ("PT_IN","ANA_IN","SENSOR"): return p.get("reg_out", "RF0")
+            if t == "MQTT": return p.get("reg_out", "RF0")
             if t == "BACKUP": return p.get("varname", "backup0")
             if t == "AV":     return p.get("reg_out") or p.get("varname", "av0")  # FIX: reg_out = RF register écrit par l'AV
             # FIX : DV câblé vers XOR/OR/AND → retourner reg_out RF* si disponible
@@ -1055,6 +1056,7 @@ class BlockEditor(QWidget):
         # ── Tri topologique : gauche→droite, puis priorité type (sources avant calculs) ──
         _COMPILE_PRIO = {
             'SENSOR':0,'PT_IN':0,'ANA_IN':0,'AV':0,'DV':0,'BACKUP':0,'STOAV':0,
+            'MQTT':0,
             # PAGE_IN/PAGE_OUT supprimés — canvas infini (fils directs)
             'ADD':2,'SUB':2,'MUL':2,'DIV':2,'ABS':2,'SQRT':2,
             'MIN':2,'MAX':2,'MOD':2,'POW':2,'CLAMP':2,'CLAMP_A':2,
@@ -1411,13 +1413,24 @@ class BlockEditor(QWidget):
 
             elif bt == "LOCALTIME":
                 blk["type"]     = "localtime"
-                # FIX: le canvas stocke reg_hour/reg_wday (nouveaux noms)
-                # fallback sur out_hour/out_wday (anciens noms) pour compatibilité
                 blk["out_hour"] = p.get("reg_hour") or p.get("out_hour", "RF13")
                 blk["out_mday"] = p.get("reg_mday") or p.get("out_mday", "RF14")
                 blk["out_wday"] = p.get("reg_wday") or p.get("out_wday", "RF15")
                 if p.get("reg_min"):  blk["out_min"] = p["reg_min"]
                 if p.get("reg_sec"):  blk["out_sec"] = p["reg_sec"]
+                prog.append(blk)
+
+            elif bt == "MQTT":
+                blk["type"]     = "mqtt"
+                blk["topic"]    = p.get("topic", "")
+                blk["val_type"] = p.get("val_type", "float")   # float|bool
+                blk["retain"]   = bool(p.get("retain", False))
+                # Subscribe : le topic ecrit dans reg_out (RF*)
+                ro = p.get("reg_out", "")
+                if ro: blk["reg_out"] = ro
+                # Publish : reg_in (RF*) est publie vers le topic
+                ri = p.get("reg_in", "")
+                if ri: blk["reg_in"] = ri
                 prog.append(blk)
 
             # ── Actionneurs ───────────────────────────────────────────────

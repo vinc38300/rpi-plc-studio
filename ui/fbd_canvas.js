@@ -197,7 +197,8 @@ const DEFS = {
   SCALE:    {cat:'Analogique', col:'#1a2a1a',hdr:'#203520',bdg:'#80ff80',ins:['IN'],        outs:['OUT'],        desc:'Mise à l\'échelle'},
   PID:      {cat:'Analogique', col:'#1a0a2a',hdr:'#250f35',bdg:'#d080ff',ins:['PV','SP','EN'],outs:['OUT','ERR'], desc:'Régulateur PID'},
   // Analogique avancé (Proview)
-  SENSOR:   {cat:'Analogique', col:'#0a2020',hdr:'#103030',bdg:'#00ffe0',ins:[],            outs:['VAL'],        desc:'Capteur température (SensorFo)'},
+  SENSOR:   {cat:'Analogique', col:'#0a2020',hdr:'#103030',bdg:'#00ffe0',ins:[],            outs:['VAL'],        desc:'Capteur temperature (SensorFo)'},
+  MQTT:     {cat:'Analogique', col:'#0a1a2a',hdr:'#0d2340',bdg:'#58a6ff',ins:['PUB'],       outs:['SUB'],        desc:'Bloc MQTT — subscribe (lecture) et/ou publish (ecriture)'},
   ADD:      {cat:'Calcul',     col:'#1a2a0a',hdr:'#253510',bdg:'#b0ff80',ins:['IN1','IN2'], outs:['OUT'],        desc:'Addition'},
   SUB:      {cat:'Calcul',     col:'#1a2a0a',hdr:'#253510',bdg:'#b0ff80',ins:['IN1','IN2'], outs:['OUT'],        desc:'Soustraction'},
   MUL:      {cat:'Calcul',     col:'#1a2a0a',hdr:'#253510',bdg:'#b0ff80',ins:['IN1','IN2'], outs:['OUT'],        desc:'Multiplication'},
@@ -1979,6 +1980,16 @@ function pdisp(b){
   if(b.type==='CONTACTOR')return p.name||'K1';
   if(b.type==='VALVE3V') return p.name||'V3V';
   if(b.type==='RUNTIMCNT')return p.name||'Cpt';
+  if(b.type==='MQTT'){
+    const t=p.topic||'';
+    const parts=t.split('/');
+    // Affiche les 2 derniers segments si le topic est long.
+    // ASCII pur (pas de glyphe Unicode "…" qui peut se confondre
+    // avec "../" au rendu canvas en petite taille).
+    const short=parts.length>2?'(..)/'+parts.slice(-2).join('/'):t;
+    const dir=(p.reg_out&&p.reg_in)?'<->':(p.reg_out?'<-':'->');
+    return dir+' '+short;
+  }
   return'';
 }
 
@@ -2700,6 +2711,32 @@ function showBlockProps(b){
       MDAY = jour du mois (1-31)<br>
       WDAY = jour semaine (0=Dim..6=Sam)
     </div>`;
+  }else if(b.type==='MQTT'){
+    h+=`<div style="color:var(--fbd-text2);font-size:10px;padding:4px 0 6px">
+      <b>Subscribe (SUB)</b> : lit le topic → ecrit dans reg_out (RF*)<br>
+      <b>Publish (PUB)</b> : lit reg_in (RF*) → publie vers le topic<br>
+      Les deux peuvent etre actifs sur le meme bloc.
+    </div>`;
+    h+=pTxt('topic','Topic MQTT',p.topic||'');
+    h+=`<hr class="psep"><span class="pl">Subscribe → RF</span>`;
+    h+=pRF('reg_out','Registre destination (SUB)',p.reg_out||'');
+    h+=`<hr class="psep"><span class="pl">Publish ← RF</span>`;
+    h+=pRF('reg_in','Registre source (PUB)',p.reg_in||'');
+    h+=pSel('retain','Retain',p.retain?'1':'0',[{v:'0',l:'Non'},{v:'1',l:'Oui'}]);
+    h+=`<hr class="psep"><span class="pl">Type de valeur</span>`;
+    h+=pSel('val_type','Type',p.val_type||'float',[
+      {v:'float',l:'Numerique (float)'},
+      {v:'bool', l:'Booleen (0/1)'}
+    ]);
+    // Valeur actuelle (lecture protegee : liveState n'est jamais
+    // declare/alimente nulle part dans le projet -> evite le
+    // ReferenceError qui bloquait tout le panneau Proprietes)
+    const _rt=p.reg_out||'';
+    if(_rt && typeof liveState!=='undefined' && liveState && liveState.registers){
+      const _rv = liveState.registers[_rt];
+      if(_rv!=null && !isNaN(parseFloat(_rv)))
+        h+=`<div style="margin-top:6px;color:#58a6ff;font-size:11px">Valeur : <b>${parseFloat(_rv).toFixed(2)}</b></div>`;
+    }
   }else if(b.type==='SR_R'||b.type==='SR_S'){
     h+=pSel('bit','Bit memoire',b.params.bit||'M0',MEMS.map(m=>({v:m,l:m})));
     h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:4px 0">
@@ -3808,6 +3845,11 @@ function updateActiveStates(state){
         const ref=p.reg_out||p.analog_ref||'RF0';
         const rv=state.registers&&state.registers[ref];
         b.active=rv!=null&&Math.abs(parseFloat(rv))>0.01;
+        break;}
+      case'MQTT':{
+        const refM=p.reg_out||'';
+        const rvM=refM&&state.registers&&state.registers[refM];
+        b.active=rvM!=null&&Math.abs(parseFloat(rvM))>0.01;
         break;}
       case'NAND':
       case'NOR':{

@@ -166,5 +166,14 @@
       "mode": "input",
       "pull": "up"
     }
+  },
+  "mqtt": {
+    "enabled": true,
+    "host": "192.168.1.17",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "keepalive": 60,
+    "_comment": "Mettre enabled:true et renseigner l'IP du broker (ex: Mosquitto, Home Assistant). Installer paho-mqtt: sudo apt install python3-paho-mqtt"
   }
 }
