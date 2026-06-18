@@ -281,7 +281,8 @@ class ADS1115Manager:
 
 # ════════════════════════════════════════════════════════════════════════════════
 class HistoryDB:
-    RETENTION = 30  # jours
+    RETENTION     = 30   # jours — table 'history' (sondes ADS1115, inchangé)
+    RETENTION_VAR = 365  # jours — table 'history_var' (RF/AV/mémoire génériques)
 
     def __init__(self, path):
         self.path  = path
@@ -292,6 +293,15 @@ class HistoryDB:
                 voltage REAL, celsius REAL, PRIMARY KEY(ts,channel))""")
             c.execute("CREATE INDEX IF NOT EXISTS idx_ts ON history(ts)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_ch ON history(channel,ts)")
+            # ── Historisation générique : n'importe quel RF/AV/mémoire,
+            #    choisi directement par widget (propriété "Référence" du
+            #    widget Courbe historisée), indépendante de la table ADS1115
+            #    ci-dessus pour ne jamais perturber l'historique des sondes.
+            c.execute("""CREATE TABLE IF NOT EXISTS history_var (
+                ts INTEGER NOT NULL, ref TEXT NOT NULL,
+                value REAL, PRIMARY KEY(ts,ref))""")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_var_ts ON history_var(ts)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_var_ref ON history_var(ref,ts)")
             c.commit()
         log.info(f"Historique : {self.path}")
 
@@ -321,6 +331,27 @@ class HistoryDB:
                     "SELECT channel,celsius,ts FROM history WHERE ts IN "
                     "(SELECT MAX(ts) FROM history GROUP BY channel)").fetchall()
         return {r[0]: {"celsius": r[1], "ts": r[2]} for r in rows}
+
+    # ── Historisation générique (RF/AV/mémoire) ──────────────────────────
+    def insert_vars(self, values):
+        """values = {ref: float}. Échantillonnage 5 min, rétention 1 an."""
+        ts   = int(time.time())
+        rows = [(ts, k, v) for k, v in values.items() if v is not None]
+        if not rows: return
+        with self._lock:
+            with sqlite3.connect(self.path) as c:
+                c.executemany("INSERT OR REPLACE INTO history_var VALUES(?,?,?)", rows)
+                c.execute("DELETE FROM history_var WHERE ts<?", (ts - self.RETENTION_VAR*86400,))
+                c.commit()
+
+    def get_var_history(self, ref, hours=24):
+        since = int(time.time()) - hours * 3600
+        with self._lock:
+            with sqlite3.connect(self.path) as c:
+                rows = c.execute(
+                    "SELECT ts,value FROM history_var WHERE ref=? AND ts>=? ORDER BY ts",
+                    (ref, since)).fetchall()
+        return [{"ts": r[0], "v": r[1]} for r in rows]
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -360,6 +391,42 @@ class PLCEngine:
         self.on_update    = None
         self._last_ana    = 0.0
         self._last_db     = 0.0
+        self._last_db_vars       = 0.0   # dernier échantillonnage générique (5 min)
+        self._last_synoptic_scan = 0.0   # dernière relecture de synoptic.json (60s)
+        self._history_refs       = []    # refs RF/AV/mémoire à historiser (auto-détectées)
+
+    def _read_ref_value(self, ref):
+        """Lecture générique d'une référence (RF/AV/mémoire) pour l'historisation,
+        miroir du getV() côté synoptic_canvas.js."""
+        if not ref: return None
+        try:
+            if ref in self.registers: return float(self.registers[ref])
+            if ref in self.av_vars:   return float(self.av_vars[ref])
+            if ref in self.memory:    return 1.0 if self.memory[ref] else 0.0
+            if ref in self.dv_vars:   return 1.0 if self.dv_vars[ref] else 0.0
+        except (TypeError, ValueError):
+            return None
+        return None
+
+    def _refresh_history_refs(self):
+        """Relit synoptic.json et récupère les varRef de tous les widgets
+        de type 'trend_db' (toutes pages) — le périmètre de l'historisation
+        est donc choisi directement dans l'éditeur de synoptique, par widget,
+        sans config séparée à maintenir."""
+        try:
+            p = BASE_DIR / "synoptic.json"
+            if not p.exists():
+                self._history_refs = []
+                return
+            data = json.loads(p.read_text())
+            widgets = list(data.get("widgets", []))
+            for page in data.get("pages", []):
+                widgets.extend(page.get("widgets", []))
+            refs = {w.get("varRef") for w in widgets
+                    if w.get("type") == "trend_db" and w.get("varRef")}
+            self._history_refs = sorted(refs)
+        except Exception as e:
+            log.warning(f"Relecture refs historisation échouée : {e}")
 
     def init_gpio(self):
         if not ON_RPI: return
@@ -2107,6 +2174,17 @@ class PLCEngine:
                     if t0 - self._last_db >= 10.0:
                         self.db.insert(readings); self._last_db = t0
 
+                # ── Historisation générique RF/AV/mémoire (widgets "Courbe historisée") ──
+                if t0 - self._last_synoptic_scan >= 60.0:
+                    self._refresh_history_refs()
+                    self._last_synoptic_scan = t0
+                if t0 - self._last_db_vars >= 300.0:
+                    if self._history_refs:
+                        vals = {ref: self._read_ref_value(ref) for ref in self._history_refs}
+                        vals = {k: v for k, v in vals.items() if v is not None}
+                        if vals: self.db.insert_vars(vals)
+                    self._last_db_vars = t0
+
                 with self._lock: prog = list(self.program)
                 # Tri priorité d'exécution : sources → calculs → sorties
                 _PRIO = {
@@ -2849,6 +2927,26 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         return jsonify({"channel":ch,"hours":hours,"count":len(vals),
             "min":round(min(vals),2),"max":round(max(vals),2),
             "avg":round(sum(vals)/len(vals),2),"last":round(vals[-1],2)})
+
+    # ── Historisation générique (RF/AV/mémoire) — widget "Courbe historisée" ──
+    @app.route("/api/history/<ref>")
+    def api_history_var(ref):
+        hours = int(request.args.get("hours", 24))
+        return jsonify(db.get_var_history(ref, hours))
+
+    @app.route("/api/history/<ref>/csv")
+    def api_history_var_csv(ref):
+        hours = int(request.args.get("hours", 24))
+        rows = db.get_var_history(ref, hours)
+        import io, csv as _csv
+        from datetime import datetime as _dt
+        from flask import Response
+        buf = io.StringIO(); w = _csv.writer(buf)
+        w.writerow(["timestamp", "datetime", "ref", "value"])
+        for r in rows:
+            w.writerow([r["ts"], _dt.fromtimestamp(r["ts"]).strftime("%Y-%m-%d %H:%M:%S"), ref, r["v"]])
+        return Response(buf.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition": f"attachment;filename={ref}_{hours}h.csv"})
 
     @app.route("/scada")
     def scada(): return render_template("scada.html")

@@ -23,10 +23,14 @@ SERVER_FILES = [
     "recipes.py",
     "backup_manager.py",
     "auth.py",
+    "mqtt_bridge.py",
+    "calibration.py",
+    "report_generator.py",
     # config.json envoyé séparément avec fusion RPi (voir ci-dessous)
     "templates/index.html",
     "templates/scada.html",
     "templates/synoptic.html",
+    "templates/synoptic_mobile.html",
     "static/sw.js",
     "static/manifest.json",
     "static/icon-192.png",
@@ -317,6 +321,37 @@ class RPiDeployer:
         log(f"  {'✅' if prog_present else '⚠️ '} programme.json{'':>2}{'(présent)' if prog_present else '(absent — sera créé)'}")
         log(f"  {'✅' if syn_present else 'ℹ️ '} synoptic.json{'':>3}{'(présent)' if syn_present else '(absent — sera créé)'}")
 
+        # ── Comparaison taille par taille de TOUS les fichiers serveur ────────
+        # (server.py seul ne suffit pas : un fichier ajouté côté Studio comme
+        #  mqtt_bridge.py peut être absent du RPi sans jamais être détecté si
+        #  on ne vérifie que server.py.)
+        log("")
+        log("📦 Comparaison fichiers serveur (local ↔ distant) :")
+        stale_files   = []
+        missing_files = []
+        for rel in SERVER_FILES:
+            local_fp = os.path.join(SERVER_SRC, rel)
+            if not os.path.isfile(local_fp):
+                continue  # fichier source absent côté Studio, rien à comparer
+            local_size = os.path.getsize(local_fp)
+            _, rsize_out, _ = self.run(f"stat -c '%s' {rd}/{rel} 2>/dev/null || echo -1")
+            try:
+                remote_size = int(rsize_out.strip())
+            except ValueError:
+                remote_size = -1
+            if remote_size == -1:
+                missing_files.append(rel)
+                log(f"  ❌ {rel:35s} absent sur le RPi")
+            elif remote_size != local_size:
+                stale_files.append(rel)
+                log(f"  🟡 {rel:35s} distant {remote_size}o ≠ local {local_size}o")
+            else:
+                log(f"  ✅ {rel}")
+        result["missing_files"] = missing_files
+        result["stale_files"]   = stale_files
+        if missing_files or stale_files:
+            result["needs"].append("server_files_outdated")
+
         # ── Service systemd ──────────────────────────────────────────────────
         svc_inst   = run("systemctl list-unit-files rpi-plc.service 2>/dev/null | grep -c rpi-plc") != "0"
         svc_active = run("systemctl is-active rpi-plc.service 2>/dev/null") == "active"
@@ -334,9 +369,17 @@ class RPiDeployer:
         if not srv_present:
             action = "full_install"
             verdict = "🔴 Installation complète nécessaire (premier déploiement)"
-        elif needs:
+        elif "server_files_outdated" in needs:
+            action = "update_server"
+            n_missing = len(missing_files)
+            n_stale   = len(stale_files)
+            details = []
+            if n_missing: details.append(f"{n_missing} manquant(s)")
+            if n_stale:   details.append(f"{n_stale} obsolète(s)")
+            verdict = f"🟡 Fichiers serveur à synchroniser : {', '.join(details)} → {', '.join(missing_files+stale_files)}"
+        elif [n for n in needs if n != "server_files_outdated"]:
             action = "full_install"
-            verdict = f"🟡 Mise à jour nécessaire : {', '.join(needs)}"
+            verdict = f"🟡 Mise à jour nécessaire : {', '.join(n for n in needs if n != 'server_files_outdated')}"
         elif not svc_inst or not svc_active:
             action = "update_server"
             verdict = "🟡 Service à reconfigurer (server.py présent)"

@@ -54,7 +54,7 @@ Object.defineProperty(window,'widgets',{get:()=>pg().widgets,set:(v)=>{pg().widg
 
 let selected=null,editMode=false,showGrid=true;
 let _simCurrentTab='sondes';
-let idCounter=1,plcState={},rtBuffers={};
+let idCounter=1,plcState={},rtBuffers={},dbTrendCache={};
 let _bgImageCache={};  // cache : id → HTMLImageElement chargée
 
 // ═══════════════ PILOTAGE RPI DISTANT ════════════════════════════════
@@ -890,6 +890,7 @@ const WD={
   av_display: {w:160,h:80, label:'Variable',varRef:'av0', unit:'',  color:'#ffa030',bg:'#1a1000', decimals:1},
   bar:        {w:40, h:120,label:'Niveau', varRef:'RF0', unit:'%',  color:'#3fb950',bg:'#0a2010',min:0,max:100},
   trend:      {w:220,h:100,label:'Tendance',varRef:'ANA0',unit:'°C',color:'#58a6ff',bg:'#0d1f35',min:-10,max:100},
+  trend_db:   {w:260,h:110,label:'Courbe historisée',varRef:'RF0',unit:'',color:'#bc8cff',bg:'#170d2a',hours:24},
   value:      {w:120,h:60, label:'Valeur', varRef:'RF0', unit:'',   color:'#e6edf3',bg:'#1c2128',decimals:1},
   relay:      {w:140,h:70, label:'Relais K1',varRef:'17',color:'#3fb950',onLabel:'ACTIF',offLabel:'inactif'},
   setpoint:   {w:160,h:80, label:'Consigne',varRef:'RF0',unit:'°C', color:'#d29922',min:0,max:100,step:0.5},
@@ -1291,7 +1292,7 @@ function renderW(w, canvasOnly){
     ctx.rotate(ang);
     ctx.translate(-cx,-cy);
   }
-  switch(w.type){case'temperature':rTemp(w,v);break;case'gauge':rGauge(w,v);break;case'bar':rBar(w,v);break;case'trend':rTrend(w);break;case'value':rVal(w,v);break;case'relay':rRelay(w,v,canvasOnly);break;case'setpoint':rSP(w,v,canvasOnly);break;case'numentry':rNumEntry(w,v,canvasOnly);break;case'button':rBtn(w,canvasOnly);break;case'toggle':rToggle(w,v,canvasOnly);break;case'dv_push':rDvPush(w,v,canvasOnly);break;case'dv_toggle':rDvToggle(w,v,canvasOnly);break;case'label':rLabel(w);break;case'rect':rRect(w);break;case'pipe':rPipe(w);break;case'alarm_light':rAlarm(w,v);break;case'symbol':rSym(w,v);break;case'animated':rAnim(w,v,canvasOnly);break;case'image':rImg(w);break;case'nav_page':rNavPage(w,canvasOnly);break;case'nav_back':rNavBack(w,canvasOnly);break;case'cntdisplay':rCntDisplay(w);break;case'draw_circle':rDrawCircle(w);break;case'draw_ellipse':rDrawEllipse(w);break;case'draw_triangle':rDrawTriangle(w);break;case'draw_line':rDrawLine(w);break;case'temp_card':rTempCard(w,v);break;case'sp_card':rSpCard(w,v,canvasOnly);break;case'push_3d':rPush3d(w,v,canvasOnly);break;case'toggle_btn_3d':rToggleBtn3d(w,v,canvasOnly);break;case'toggle_3d':rToggle3d(w,v,canvasOnly);break;case'btn_3d':rBtn3d(w,canvasOnly);break;case'plancher_w':rPlancher(w);break;case'chaudiere_w':rChaudiere(w);break;case'solar_w':rSolar(w);break;case'zone_chauf_w':rZoneChauf(w);break;case'ecs_w':rEcsBloc(w);break;case'prog_h_w':rProgH(w);break;case'av_display':rAvDisplay(w,v);break;case'numeric':rNumeric(w,v);break;case'switch_m':rSwitchM(w,v,canvasOnly);break;case'dyn_text':rDynText(w,v);break;}
+  switch(w.type){case'temperature':rTemp(w,v);break;case'gauge':rGauge(w,v);break;case'bar':rBar(w,v);break;case'trend':rTrend(w);break;case'trend_db':rTrendDb(w);break;case'value':rVal(w,v);break;case'relay':rRelay(w,v,canvasOnly);break;case'setpoint':rSP(w,v,canvasOnly);break;case'numentry':rNumEntry(w,v,canvasOnly);break;case'button':rBtn(w,canvasOnly);break;case'toggle':rToggle(w,v,canvasOnly);break;case'dv_push':rDvPush(w,v,canvasOnly);break;case'dv_toggle':rDvToggle(w,v,canvasOnly);break;case'label':rLabel(w);break;case'rect':rRect(w);break;case'pipe':rPipe(w);break;case'alarm_light':rAlarm(w,v);break;case'symbol':rSym(w,v);break;case'animated':rAnim(w,v,canvasOnly);break;case'image':rImg(w);break;case'nav_page':rNavPage(w,canvasOnly);break;case'nav_back':rNavBack(w,canvasOnly);break;case'cntdisplay':rCntDisplay(w);break;case'draw_circle':rDrawCircle(w);break;case'draw_ellipse':rDrawEllipse(w);break;case'draw_triangle':rDrawTriangle(w);break;case'draw_line':rDrawLine(w);break;case'temp_card':rTempCard(w,v);break;case'sp_card':rSpCard(w,v,canvasOnly);break;case'push_3d':rPush3d(w,v,canvasOnly);break;case'toggle_btn_3d':rToggleBtn3d(w,v,canvasOnly);break;case'toggle_3d':rToggle3d(w,v,canvasOnly);break;case'btn_3d':rBtn3d(w,canvasOnly);break;case'plancher_w':rPlancher(w);break;case'chaudiere_w':rChaudiere(w);break;case'solar_w':rSolar(w);break;case'zone_chauf_w':rZoneChauf(w);break;case'ecs_w':rEcsBloc(w);break;case'prog_h_w':rProgH(w);break;case'av_display':rAvDisplay(w,v);break;case'numeric':rNumeric(w,v);break;case'switch_m':rSwitchM(w,v,canvasOnly);break;case'dyn_text':rDynText(w,v);break;}
   if(ang) ctx.restore();
 }
 
@@ -1302,6 +1303,52 @@ function rTemp(w,val){const al=val!=null&&(val>(w.alarmHigh??85)||val<(w.alarmLo
 function rGauge(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,cx=w.x+w.w/2,cy=w.y+w.h/2+5,r=Math.min(w.w,w.h)/2-12,s=Math.PI*.75,e2=Math.PI*2.25,c=w.color||'#d080ff';ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.strokeStyle=_bg4();ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.arc(cx,cy,r,s,e2);ctx.stroke();ctx.strokeStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,s,s+(e2-s)*p);ctx.stroke();ctx.fillStyle=c;ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val!=null?val.toFixed(1):'—',cx,cy);ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textBaseline='top';ctx.fillText(w.label||'',cx,w.y+3);}
 function rBar(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,c=w.color||'#3fb950';ctx.fillStyle=w.bg||'#0d2010';rr(ctx,w.x,w.y,w.w,w.h,6);ctx.fill();const bh=(w.h-20)*p;ctx.fillStyle=c;rr(ctx,w.x+4,w.y+w.h-10-bh,w.w-8,bh,3);ctx.fill();ctx.fillStyle=c;ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(val!=null?val.toFixed(0)+(w.unit||''):'—',w.x+w.w/2,w.y+3);}
 function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+7,w.y+4);if(buf.length<2)return;const mn=Math.min(...buf.map(p=>p.y)),mx=Math.max(...buf.map(p=>p.y)),sp=mx-mn||1;const px=i=>w.x+5+(i/(buf.length-1))*(w.w-10),py=v=>w.y+w.h-7-((v-mn)/sp)*(w.h-20);ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();buf.forEach((p,i)=>i===0?ctx.moveTo(px(i),py(p.y)):ctx.lineTo(px(i),py(p.y)));ctx.stroke();const lp=buf[buf.length-1];ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(buf.length-1),py(lp.y),3,0,Math.PI*2);ctx.fill();ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(lp.y.toFixed(1)+(w.unit||'°C'),w.x+w.w-5,w.y+4);}
+
+// ── Courbe historisée (BDD, persistante) ──────────────────────────────────
+// Contrairement à rTrend (buffer mémoire navigateur, perdu au reload), cette
+// version interroge /api/history/<ref> côté serveur — la donnée survit aux
+// rechargements de page et aux redémarrages du Raspberry Pi. Le ref suivi
+// (RF/AV/mémoire) est simplement la propriété varRef du widget : le moteur
+// PLC détecte automatiquement les widgets 'trend_db' présents dans
+// synoptic.json et historise leurs varRef toutes les 5 minutes côté serveur.
+function rTrendDb(w){
+  const c=w.color||'#58a6ff';
+  ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();
+  ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillText(w.label||w.varRef||'',w.x+7,w.y+4);
+
+  const now=Date.now(),hours=w.hours||24;
+  if(!dbTrendCache[w.id])dbTrendCache[w.id]={data:[],fetchedAt:0,loading:false};
+  const cache=dbTrendCache[w.id];
+  if(w.varRef && now-cache.fetchedAt>30000 && !cache.loading){
+    cache.loading=true;
+    fetch(`/api/history/${encodeURIComponent(w.varRef)}?hours=${hours}`)
+      .then(r=>r.json())
+      .then(rows=>{cache.data=rows;cache.fetchedAt=Date.now();cache.loading=false;})
+      .catch(()=>{cache.loading=false;});
+  }
+
+  const buf=cache.data;
+  if(!buf||buf.length<2){
+    ctx.fillStyle='#484f58';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(cache.loading?'Chargement…':'Pas de données',w.x+w.w/2,w.y+w.h/2);
+    return;
+  }
+  const tNow=Math.floor(now/1000),tMin=tNow-hours*3600;
+  const mn=Math.min(...buf.map(p=>p.v)),mx=Math.max(...buf.map(p=>p.v)),sp=(mx-mn)||1;
+  const px=ts=>w.x+5+((ts-tMin)/(tNow-tMin||1))*(w.w-10);
+  const py=v=>w.y+w.h-16-((v-mn)/sp)*(w.h-30);
+  ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();
+  buf.forEach((p,i)=>{const x=px(p.ts),y=py(p.v);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.stroke();
+  const lp=buf[buf.length-1];
+  ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(lp.ts),py(lp.v),3,0,Math.PI*2);ctx.fill();
+  ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';
+  ctx.fillText(lp.v.toFixed(1)+(w.unit||''),w.x+w.w-5,w.y+4);
+  ctx.fillStyle='#6e7681';ctx.font='9px sans-serif';ctx.textBaseline='bottom';
+  ctx.textAlign='left'; ctx.fillText(`-${hours}h`,w.x+5,w.y+w.h-3);
+  ctx.textAlign='right';ctx.fillText('maintenant',w.x+w.w-5,w.y+w.h-3);
+}
 function rVal(w,val){ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+w.w/2,w.y+4);ctx.fillStyle=w.color||'#e6edf3';ctx.font='bold 16px sans-serif';ctx.textBaseline='middle';const v=val!=null?(isNaN(parseFloat(val))?String(val):parseFloat(val).toFixed(w.decimals??1)+(w.unit||'')):'—';ctx.fillText(v,w.x+w.w/2,w.y+w.h/2+4);}
 function rAvDisplay(w,val){
   // Boîte fond
@@ -2905,6 +2952,62 @@ const ANIM_SYMBOLS={
       s+=`<text x="${w*0.5}" y="${h*0.75}" text-anchor="middle" font-size="${h*0.14}" fill="${on?c+'aa':'#484f58'}">kWh</text>`;
       s+=`</svg>`;return s;}
   },
+  batterie_niveau:{
+    label:'Batterie (niveau)',
+    preview:`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="10" width="26" height="20" rx="3" fill="none" stroke="#3fb950" stroke-width="1.8"/>
+      <rect x="32" y="16" width="3" height="8" rx="1" fill="#3fb950"/>
+      <rect x="9" y="14" width="14" height="12" fill="#3fb95055"/>
+    </svg>`,
+    render(on,c,w,h,wObj){
+      // Lecture directe du registre lié (0-100%), indépendamment du booléen 'on'
+      const niveau=(wObj&&wObj.varRef!=null)?getV(wObj.varRef):null;
+      const known=niveau!=null&&!isNaN(niveau);
+      const pct=known?Math.max(0,Math.min(100,niveau)):0;
+      // Détection "en charge" par dérivée temporelle (pas besoin d'un 2e registre)
+      const now=Date.now();
+      if(wObj){
+        if(wObj._battPrevT==null){wObj._battPrev=pct;wObj._battPrevT=now;wObj._battCharging=false;}
+        else if(now-wObj._battPrevT>1500){
+          const delta=pct-wObj._battPrev;
+          if(delta>0.3) wObj._battCharging=true;
+          else if(delta<-0.05) wObj._battCharging=false;
+          wObj._battPrev=pct;wObj._battPrevT=now;
+        }
+      }
+      const charging=wObj?!!wObj._battCharging:false;
+      const co=!known?'#484f58':pct<15?'#f85149':pct<40?'#d29922':'#3fb950';
+      const t=now/1000;
+      let s=`<svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" style="display:block;">`;
+      s+=`<defs><filter id="glow_batt"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+      s+=`<rect x="4" y="8" width="82" height="44" rx="5" fill="#0d1117" stroke="${co}" stroke-width="2.5"/>`;
+      s+=`<rect x="86" y="20" width="8" height="20" rx="2" fill="${co}"/>`;
+      const innerX=8,innerY=12,innerW=74,innerH=36,fillW=innerW*(pct/100);
+      s+=`<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="#161b22"/>`;
+      if(known){
+        s+=`<rect x="${innerX}" y="${innerY}" width="${fillW.toFixed(1)}" height="${innerH}" fill="${co}" opacity="0.85"/>`;
+        if(charging){
+          const shimmer=(Math.sin(t*4)*0.25+0.55);
+          s+=`<rect x="${innerX}" y="${innerY}" width="${fillW.toFixed(1)}" height="${innerH}" fill="white" opacity="${(shimmer*0.18).toFixed(2)}"/>`;
+        }
+      }
+      for(let i=1;i<4;i++){
+        const lx=innerX+innerW*i/4;
+        s+=`<line x1="${lx}" y1="${innerY}" x2="${lx}" y2="${innerY+innerH}" stroke="#0d1117" stroke-width="1.5" opacity="0.6"/>`;
+      }
+      if(charging){
+        const blink=(Math.sin(t*3)+1)/2;
+        s+=`<g filter="url(#glow_batt)" opacity="${(0.55+0.45*blink).toFixed(2)}"><path d="M48 14 L36 34 L46 34 L42 50 L58 28 L48 28Z" fill="#ffd740"/></g>`;
+      }
+      if(known&&pct<15&&!charging){
+        const blink=(Math.sin(t*5)+1)/2;
+        s+=`<rect x="4" y="8" width="82" height="44" rx="5" fill="none" stroke="#f85149" stroke-width="${(2+2*blink).toFixed(1)}" opacity="${(0.4+0.5*blink).toFixed(2)}"/>`;
+      }
+      s+=`<text x="45" y="33" text-anchor="middle" font-size="15" font-weight="bold" font-family="monospace" fill="${known?'#fff':'#484f58'}" opacity="0.92">${known?Math.round(pct)+'%':'—'}</text>`;
+      s+=`</svg>`;
+      return s;
+    }
+  },
 
 
   // ── NOUVEAUX SYMBOLES ──────────────────────────────────────────────────
@@ -4122,7 +4225,7 @@ function showProps(w){
     <span style="font-size:11px;">🔒 Verrouiller (ne bouge plus)</span>
   </label>`;
   if(!['label','symbol','image','dyn_text'].includes(w.type))h+=`<div class="prop-section">Général</div>`+pT('label','Étiquette',w.label||'');
-  if(['temperature','gauge','bar','trend','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(w.type!=='trend')h+=pT('unit','Unité',w.unit||'°C');h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117');if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}}
+  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend','trend_db'].includes(w.type))h+=pT('unit','Unité',w.unit||'°C');h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117');if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
   if(w.type==='numeric'){
     h+=`<div class="prop-section">Registre RF / Variable</div>`;
     h+=`<div class="prop-row"><div class="prop-label">Registre RF</div>
