@@ -9,7 +9,7 @@
     "port": 22,
     "user": "rpi1",
     "password": "",
-    "key_path": "/home/famille/.ssh/rpi_plc_id_ed25519",
+    "key_path": "/home/famille/.ssh/rpi_plc_id_**********",
     "remote_dir": "/home/rpi1/rpi-plc",
     "web_port": 5000,
     "gpio_config": {
