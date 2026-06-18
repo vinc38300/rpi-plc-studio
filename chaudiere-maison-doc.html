@@ -135,6 +135,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);font-
   <a href="#page-offsets">Offsets CTN</a>
   <a href="#page-chauffage">Chauffage Maison</a>
   <a href="#page-forcage">Forçage manuel</a>
+  <a href="#page-batterie">Batterie lithium</a>
 
   <div class="nav-section">Régulations</div>
   <a href="#reg-planning">Planning Jours/Nuits</a>
@@ -635,6 +636,56 @@ est actif ou non. Les valeurs numériques se mettent à jour à chaque cycle (10
     <tr><td>BP_Forcage_V3V_chaudière</td><td>Active K2 (V3V chaudière/solaire) en continu</td></tr>
   </tbody>
 </table>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="page-batterie"><span class="icon">🔋</span> Page — Batterie lithium</h2>
+
+<div class="section-intro">
+  Affiche le niveau de charge (SOC) de la batterie de stockage via le widget animé
+  <strong>Batterie (niveau)</strong>, avec jauge colorée selon seuil et détection automatique
+  de l'état de charge.
+</div>
+
+<h3>Deux méthodes pour alimenter le niveau</h3>
+<p>Le widget lit simplement la valeur 0–100 du registre RF/AV qui lui est lié — la source
+de ce registre peut être l'une ou l'autre des méthodes suivantes :</p>
+
+<table>
+  <thead><tr><th>Méthode</th><th>Principe</th><th>Précision</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>PyBlock <code>niveau_batterie_lion</code></strong></td>
+      <td>Calcule le SOC à partir de la tension du pack (A1), du nombre d'éléments en
+      série (A2) et d'une table de correspondance tension/SOC propre au Li-ion
+      (3.0–4.20 V/élément). Filtre passe-bas pour lisser la jauge.</td>
+      <td>Approximative — dérive possible si le pack est presque toujours en charge/décharge
+      active au moment de la lecture.</td>
+    </tr>
+    <tr>
+      <td><strong>Bloc MQTT (BMS / Victron Venus OS)</strong></td>
+      <td>Le BMS publie déjà un SOC calculé par comptage ampères-heures. Topic Venus OS :
+      <code>N/&lt;portalId&gt;/system/0/Dc/Battery/Soc</code>. Relier directement ce topic
+      à un registre RF via un bloc MQTT (reg_out), puis lier ce RF au widget — sans passer
+      par le PyBlock.</td>
+      <td>Fiable — c'est la méthode à privilégier si un BMS/Venus OS est disponible.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note"><div class="ci">ℹ</div><p>Si vous utilisez la méthode MQTT, pensez au réglage <code>mqtt.enabled</code> dans
+<code>config.json</code> et au paquet <code>python3-paho-mqtt</code> (inclus depuis le
+<code>.deb</code> serveur 3.4-3). Venus OS arrête de publier sans abonné actif — un
+"keepalive" sur <code>R/&lt;portalId&gt;/keepalive</code> est nécessaire au démarrage de la
+connexion (voir doc outil, section MQTT).</p></div>
+
+<h3>Alarme niveau bas</h3>
+<p>La jauge passe au rouge avec contour clignotant sous 15% — seuil cohérent avec le coude
+de tension abrupt du Li-ion en fin de décharge, qu'on utilise le PyBlock ou un SOC BMS direct.</p>
+
+<h3>Historique</h3>
+<p>Un widget <strong>Courbe historisée</strong> peut être ajouté sur cette page, lié au même
+registre, pour suivre l'évolution du niveau sur 24h/7j/30j — échantillonnage automatique
+toutes les 5 minutes côté serveur, conservé 1 an (voir doc outil, widgets Mesures).</p>
 
 <!-- ══════════════════════════════════════════════════════ -->
 <h2 id="reg-planning"><span class="icon">📅</span> Régulation — Planning Jours/Nuits (P5_JOURS)</h2>

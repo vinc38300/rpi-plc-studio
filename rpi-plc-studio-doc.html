@@ -323,9 +323,9 @@ footer {
   <a href="#syn-nav-widgets" class="sub">Widgets de navigation</a>
   <a href="#syn-nav-bar" class="sub">Barre navigation fixe</a>
   <a href="#syn-sidebar">Sidebar ongletée (v2)</a>
-  <a href="#syn-widgets">Les 13 widgets PLC</a>
+  <a href="#syn-widgets">Les 14 widgets PLC</a>
   <a href="#syn-pid">Symboles P&amp;ID (30)</a>
-  <a href="#syn-anim">Symboles animés (6)</a>
+  <a href="#syn-anim">Symboles animés (7)</a>
   <a href="#syn-images">Import d'images</a>
   <a href="#syn-vue">Mode vue opérateur</a>
   <a href="#pwa">Application mobile PWA</a>
@@ -385,9 +385,9 @@ footer {
     <li><a href="#synoptique-doc">Éditeur de synoptique v2</a>
       <ul class="sub-toc">
         <li><a href="#syn-sidebar">Sidebar ongletée</a></li>
-        <li><a href="#syn-widgets">Les 13 widgets PLC</a></li>
+        <li><a href="#syn-widgets">Les 14 widgets PLC</a></li>
         <li><a href="#syn-pid">30 symboles P&amp;ID</a></li>
-        <li><a href="#syn-anim">6 symboles animés</a></li>
+        <li><a href="#syn-anim">7 symboles animés</a></li>
         <li><a href="#syn-images">Import d'images</a></li>
         <li><a href="#syn-vue">Mode vue opérateur</a></li>
       </ul>
@@ -1141,7 +1141,32 @@ sudo i2cdetect -y 1
     <div class="block-card-desc">Fournit l'heure et le jour courant du système RPi. HOUR = heure (0–23), MDAY = jour du mois (1–31), WDAY = jour de la semaine (0=Dimanche … 6=Samedi).</div>
     <div class="block-ports"><span class="port-out">HOUR</span><span class="port-out">MDAY</span><span class="port-out">WDAY</span></div>
   </div>
+  <div class="block-card">
+    <div class="block-card-header"><span class="block-badge" style="color:#bc8cff;border-color:#bc8cff40">MQTT</span><span class="block-card-title">Pont MQTT (subscribe / publish)</span></div>
+    <div class="block-card-desc">
+      Abonne un registre RF à un topic MQTT (subscribe) et/ou publie un registre RF vers un topic (publish) — un seul bloc fait les deux selon ce qui est câblé.<br><br>
+      <strong>Propriétés :</strong> <em>Topic</em>, <em>Type de valeur</em> (float / bool), <em>Retain</em>.<br>
+      • <em>reg_out</em> (entrée câblée vers le bloc) : registre RF écrit avec la valeur reçue sur le topic (subscribe)<br>
+      • <em>reg_in</em> (sortie câblée depuis le bloc) : registre RF dont la valeur est publiée vers le topic (publish)<br><br>
+      <strong>Connexion au broker :</strong> configurée globalement (pas par bloc) dans <code>config.json</code>, section <code>mqtt</code> :
+      <pre><code>"mqtt": {
+  "enabled": true,
+  "host": "192.168.1.50",
+  "port": 1883,
+  "username": "",
+  "password": "",
+  "keepalive": 60
+}</code></pre>
+    </div>
+    <div class="block-ports"><span class="port-in">reg_in (publish)</span><span class="port-out">reg_out (subscribe)</span></div>
+  </div>
 </div>
+
+<div class="warn"><div class="ci">⚠</div><p><strong>Dépendance :</strong> le bloc MQTT nécessite le paquet <code>python3-paho-mqtt</code> (inclus dans les dépendances du <code>.deb</code> serveur ≥ 3.4-3 ; sur une installation antérieure, <code>sudo apt install python3-paho-mqtt</code>). Sans ce paquet, le pont MQTT se désactive silencieusement — le serveur démarre normalement mais les topics ne sont jamais lus ni publiés, sans erreur visible dans l'interface. Vérifier <code>journalctl -u rpi-plc</code> en cas de doute.</p></div>
+
+<div class="note"><div class="ci">ℹ</div><p><strong>Republish uniquement sur changement :</strong> côté publish, le pont n'émet que si la valeur du registre a changé depuis le dernier scan (anti-doublon). C'est invisible pour la plupart des usages, mais ça veut dire qu'un bloc MQTT publish <strong>ne peut pas servir de "keepalive" périodique</strong> pour un broker qui exige une republication régulière même à valeur constante (cas de Venus OS — voir ci-dessous). Pour forcer une republication périodique, faire varier légèrement la valeur publiée (ex. alterner avec un OSCIL/TIMER) plutôt que publier une constante.</p></div>
+
+<div class="note"><div class="ci">ℹ</div><p><strong>Cas Victron Venus OS :</strong> le SOC batterie est disponible sur <code>N/&lt;portalId&gt;/system/0/Dc/Battery/Soc</code>, mais Venus OS arrête de publier si personne n'a envoyé de "keepalive" — abonnez-vous d'abord (ou publiez une fois) sur <code>R/&lt;portalId&gt;/keepalive</code> pour réveiller le broker avant de relier le topic SOC à un bloc MQTT subscribe.</p></div>
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
@@ -1903,6 +1928,7 @@ sudo systemctl restart rpi-plc</code></pre>
   <li><strong>Export CSV</strong> : bouton ⬇ CSV télécharge le fichier horodaté</li>
   <li><strong>12 mini-graphes temps réel</strong> : toutes les sondes en un coup d'œil (2 minutes glissantes)</li>
 </ul>
+<div class="note"><div class="ci">ℹ</div><p>Cet onglet n'historise que les <strong>sondes analogiques ANA0–ANA11</strong> (table <code>history</code>, rétention 30 jours). Pour historiser n'importe quel autre registre RF/AV/mémoire (ex. niveau de batterie), utiliser le widget synoptique <strong>Courbe historisée</strong> — table séparée <code>history_var</code>, rétention 1 an, voir <a href="#syn-widgets">Les 14 widgets PLC</a>.</p></div>
 
 <h3 id="commandes">Onglet 🎛 Commandes</h3>
 <p>Contrôle interactif complet :</p>
@@ -2516,7 +2542,7 @@ sudo tailscale up
 </table>
 
 <!-- ─── WIDGETS PLC ─── -->
-<h3 id="syn-widgets">Les 13 widgets PLC — Référence détaillée</h3>
+<h3 id="syn-widgets">Les 14 widgets PLC — Référence détaillée</h3>
 
 <h4>📊 Mesures</h4>
 
@@ -2580,6 +2606,22 @@ sudo tailscale up
       <strong>Cas d'usage :</strong> suivi température départ chaudière, tendance extérieure.
     </div>
     <div class="block-ports"><span class="port-in">ANA / RF</span></div>
+  </div>
+  <div class="block-card" style="border-color:#bc8cff40;">
+    <div class="block-card-header"><span class="block-badge" style="color:#bc8cff;border-color:#bc8cff40">🗄📈 Courbe historisée</span></div>
+    <div class="block-card-desc">
+      <strong>Rôle :</strong> comme Courbe tendance, mais persistante — lit l'historique stocké en base SQLite côté serveur au lieu du buffer mémoire navigateur. Survit aux rechargements de page et aux redémarrages du Raspberry Pi.<br><br>
+      <strong>Propriétés :</strong><br>
+      • <em>Référence</em> : n'importe quel RF / AV / mémoire — c'est ce choix qui détermine ce qui est historisé, aucune configuration séparée à faire<br>
+      • <em>Fenêtre (h)</em> : plage affichée, 24h par défaut<br>
+      • <em>Couleur</em> / <em>Fond</em><br>
+      • Axe temporel avec repères "-Nh" → "maintenant"<br><br>
+      <strong>Fonctionnement :</strong> le moteur PLC scanne <code>synoptic.json</code> toutes les 60 s, détecte automatiquement les références utilisées par tous les widgets de ce type (toutes pages confondues), et échantillonne ces références toutes les <strong>5 minutes</strong> dans une table SQLite dédiée (<code>history_var</code>), conservée <strong>1 an</strong>. Le widget interroge <code>GET /api/history/&lt;ref&gt;?hours=N</code> côté navigateur toutes les 30 s.<br><br>
+      <strong>Export :</strong> <code>GET /api/history/&lt;ref&gt;/csv?hours=N</code> pour téléchargement.<br>
+      <strong>Taille conseillée :</strong> 260 × 110 px minimum.<br>
+      <strong>Cas d'usage :</strong> niveau de batterie sur 24h, suivi long terme d'une consigne, historique d'un compteur d'énergie.
+    </div>
+    <div class="block-ports"><span class="port-in">RF / AV / M</span></div>
   </div>
   <div class="block-card">
     <div class="block-card-header"><span class="block-badge" style="color:#e6edf3;border-color:#30363d">123 Valeur numérique</span></div>
@@ -2747,10 +2789,10 @@ sudo tailscale up
 <div class="note"><div class="ci">ℹ</div><p>Tous les symboles P&amp;ID sont des SVG vectoriels : ils restent nets à toutes les tailles. Redimensionner librement sans perte de qualité.</p></div>
 
 <!-- ─── SYMBOLES ANIMÉS ─── -->
-<h3 id="syn-anim">Symboles animés — 6 équipements (nouveauté v2)</h3>
+<h3 id="syn-anim">Symboles animés — 7 équipements (nouveauté v2)</h3>
 
 <div class="section-intro">
-  Les symboles animés sont des widgets SVG inline avec animations CSS. Ils réagissent en temps réel à l'état d'une variable PLC : <strong>animation active quand ON, symbole gris figé quand OFF</strong>. Visibles uniquement en mode Opérateur (en mode Édition, un placeholder gris les représente).
+  Les symboles animés sont des widgets SVG inline avec animations CSS. Ils réagissent en temps réel à l'état d'une variable PLC : <strong>animation active quand ON, symbole gris figé quand OFF</strong>. Visibles uniquement en mode Opérateur (en mode Édition, un placeholder gris les représente). <em>Exception : Batterie (niveau) lit une valeur numérique 0–100 plutôt qu'un simple ON/OFF — voir sa fiche ci-dessous.</em>
 </div>
 
 <p>Disponibles dans l'onglet 🏭 → groupe <strong>⚡ Animés</strong> en bas de la palette :</p>
@@ -2815,6 +2857,17 @@ sudo tailscale up
       <strong>Variable :</strong> bit M (débit actif, pompe en marche).
     </div>
     <div class="block-ports"><span class="port-in">M / GPIO</span></div>
+  </div>
+  <div class="block-card" style="border-color:#3fb95040;">
+    <div class="block-card-header"><span class="block-badge" style="color:#3fb950;border-color:#3fb95040">🔋 Batterie (niveau)</span></div>
+    <div class="block-card-desc">
+      <strong>⚠ Cas particulier :</strong> contrairement aux 6 autres symboles animés ci-dessus, ce widget n'est pas piloté par un booléen ON/OFF mais lit <strong>directement la valeur numérique 0–100</strong> de la référence liée — c'est un niveau de batterie, pas un équipement marche/arrêt.<br><br>
+      <strong>Affichage :</strong> jauge remplie proportionnellement, couleur automatique selon seuil (vert ≥40%, orange 15–40%, rouge &lt;15% avec contour clignotant). Détection automatique de l'état de charge par la <strong>pente</strong> de la valeur (pas besoin d'un second registre) : un éclair animé apparaît quand le niveau monte.<br><br>
+      <strong>Propriété :</strong> <em>Variable ON/OFF</em> (champ "Saisie libre") → en réalité la référence RF/AV à lire pour le niveau (ex. sortie <code>OA1</code> d'un PyBlock de calcul SOC, ou registre alimenté directement par un bloc MQTT si un BMS/Venus OS publie déjà un SOC précis).<br>
+      <strong>Taille conseillée :</strong> 100 × 60 px minimum.<br>
+      <strong>Cas d'usage :</strong> batterie de stockage solaire, onduleur, pack Li-ion/LiFePO4.
+    </div>
+    <div class="block-ports"><span class="port-in">RF / AV</span></div>
   </div>
 </div>
 
