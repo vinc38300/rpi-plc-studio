@@ -470,6 +470,9 @@ Object.defineProperty(window,'htmlDiv',{
 function _resize(){
   const w=document.getElementById('canvasWrap');cvs.width=w.clientWidth;cvs.height=w.clientHeight;
   const _hd=_getHtmlDiv();if(_hd){_hd.style.width=cvs.width+'px';_hd.style.height=cvs.height+'px';}renderAll();
+  // Hook fit-to-width : synoptic.html enregistre window.onAfterResize = _fitToWidth
+  // pour que applyMode() → _resize() → refit automatique (desktop ET mobile)
+  if(typeof window.onAfterResize==='function') window.onAfterResize();
 }
 window.addEventListener('resize',_resize);
 // ═══════════════ GESTION DES PAGES ═══════════════
@@ -4025,8 +4028,12 @@ function saveSynoptic(){
 }
 
 // ═══════════════ TOOLBAR ═══════════════
-function toggleMode(){
-  editMode=!editMode;
+// applyMode() applique l'état visuel (sidebar/toolbar/bouton/taille canvas)
+// correspondant à la valeur ACTUELLE de editMode, de façon idempotente :
+// on peut l'appeler autant de fois qu'on veut, elle remet toujours le DOM
+// en cohérence avec editMode (contrairement à l'ancien toggleMode() qui
+// supposait que le DOM était déjà synchronisé avec editMode avant de basculer).
+function applyMode(){
   renderPagesBar();
   // Toolbar principale (mode édition uniquement)
   const tb=document.getElementById('toolbar');
@@ -4035,12 +4042,12 @@ function toggleMode(){
   const navBar=document.getElementById('nav-fixed-bar');
   const navToggleBtn=document.getElementById('nav-bar-toggle');
   if(!editMode){
-    // Passage en mode opérateur → forcer la nav bar visible
+    // Mode opérateur → forcer la nav bar visible
     showNavBar=true;
     if(navBar) navBar.className='visible';
     if(navToggleBtn) navToggleBtn.className='tbtn on';
   } else {
-    // Retour en mode édition → cacher la nav bar (selon préférence)
+    // Mode édition → cacher la nav bar (selon préférence)
     if(!showNavBar && navBar) navBar.className='';
   }
   renderNavFixed();
@@ -4062,7 +4069,15 @@ function toggleMode(){
   const pp=document.getElementById('propsPanel');
   if(editMode){sb&&sb.classList.remove('hidden');pp&&pp.classList.remove('hidden');}
   else{sb&&sb.classList.add('hidden');pp&&pp.classList.add('hidden');selected=null;showProps(null);}
-  renderAll();
+  // Le masquage/affichage de la sidebar et du panneau propriétés change la
+  // largeur dispo de #canvasWrap : on recalcule la taille du canvas
+  // maintenant que le DOM a la bonne classe (sinon le canvas garde sa
+  // taille figée et laisse un vide à droite/en bas en mode opérateur).
+  _resize();
+}
+function toggleMode(){
+  editMode=!editMode;
+  applyMode();
 }
 function toggleGrid(){
   showGrid=!showGrid;
@@ -4825,10 +4840,14 @@ window.setSynopticTheme = setSynopticTheme;
 
 // Basculement mode Opérateur / Édition depuis Python
 window.setOperatorMode = function(enabled) {
-  // enabled=true  → on veut le mode Opérateur → editMode doit être false
-  // enabled=false → on veut le mode Édition   → editMode doit être true
-  if(enabled && editMode)   { toggleMode(); }   // Édition → Opérateur
-  if(!enabled && !editMode) { toggleMode(); }   // Opérateur → Édition
+  // enabled=true  → mode Opérateur → editMode=false
+  // enabled=false → mode Édition   → editMode=true
+  // On applique TOUJOURS l'état demandé (idempotent), sans présumer que le
+  // DOM est déjà synchronisé avec la valeur courante de editMode : c'est
+  // cette présomption qui causait l'ancien bug (sidebar visible au premier
+  // chargement malgré editMode déjà à false).
+  editMode = !enabled;
+  applyMode();
 };
 
 // ── setGpioConfig — appelé par le studio quand la config GPIO change ───────────

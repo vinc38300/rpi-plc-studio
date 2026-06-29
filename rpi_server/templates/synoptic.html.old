@@ -481,66 +481,46 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
 <script src="/static/synoptic_canvas.js"></script>
 
 <script>
-/* ═══ FIT-TO-WIDTH — desktop ET mobile ════════════════════════════════════
-   Principe : CSS zoom sur #canvasWrap scale canvas + widgets-html ensemble.
-   · Desktop (viewport > bounds.xMax) : zoom > 1, contenu remplit l'écran
-   · Mobile / écran étroit            : zoom < 1, tout le contenu visible
-   Le pan vertical est géré par le scroll natif du navigateur.
+/* ═══ MOBILE — fit-to-width + touch pan/zoom ══════════════════════════════
+   Principe : on applique CSS zoom sur #canvasWrap (pas sur le canvas seul).
+   Cela scale canvas + widgets-html ensemble, sans vide noir ni décalage.
+   Le pan est géré par overflow:auto sur le parent .canvas-wrap.
    ════════════════════════════════════════════════════════════════════════ */
 (function(){
-  var wrap  = document.getElementById('canvasWrap');
-  var inner = document.querySelector('.canvas-wrap');
-  if(!wrap || !inner) return;
+  var _isMobile = window.innerWidth<=700 || document.body.classList.contains('force-mobile');
+  if(!_isMobile) return;
 
-  // Scroll natif activé pour tous (pan vertical mobile + desktop si besoin)
-  inner.style.overflow              = 'auto';
+  var wrap    = document.getElementById('canvasWrap');    // overflow:hidden → auto
+  var inner   = document.querySelector('.canvas-wrap');   // le parent flex
+  if(!wrap) return;
+
+  // ── Activer le scroll natif sur la zone canvas ──────────────────────────
+  // On retire overflow:hidden et on laisse le navigateur gérer le pan natif
+  inner.style.overflow = 'auto';
   inner.style.webkitOverflowScrolling = 'touch';
 
+  // ── Fit-to-width ─────────────────────────────────────────────────────────
   function _fitToWidth(){
     if(typeof window.getSynopticBounds !== 'function') return;
-
-    // Ne pas re-fitter en mode édition (sidebar visible)
-    var sb = document.getElementById('sidebar');
-    if(sb && !sb.classList.contains('hidden')) return;
-
-    var bounds = window.getSynopticBounds();
-    if(!bounds || bounds.xMax <= 0) return;
-
-    // ── 1. Caler le canvas exactement sur les bounds du contenu ────────────
-    //    (évite que _resize() ait mis cvs.width = viewport et que le zoom
-    //     provoque un dépassement : 1920 * 1.265 = 2428px → overflow)
-    var synCvs = document.getElementById('syn-canvas');
-    var htmlDiv = document.getElementById('widgets-html');
-    if(synCvs){ synCvs.width = bounds.xMax; synCvs.height = bounds.yMax; }
-    if(htmlDiv){ htmlDiv.style.width = bounds.xMax+'px'; htmlDiv.style.height = bounds.yMax+'px'; }
-    if(window.renderAll) window.renderAll();
-
-    // ── 2. Zoom pour remplir exactement la largeur disponible ───────────────
-    //    Desktop 1920px / bounds 1518px → ratio = 1.265 (upscale léger)
-    //    Mobile  390px  / bounds 1518px → ratio = 0.257 (zoom out)
-    var ratio = window.innerWidth / bounds.xMax;
-    ratio = Math.max(0.10, ratio);   // plancher 10% (garde contre synoptique vide)
-
+    var bounds  = window.getSynopticBounds();
+    var sw      = window.innerWidth;
+    var margin  = 4;
+    var ratio   = (sw - margin*2) / bounds.xMax;
+    ratio = Math.min(ratio, 1.0);   // jamais > 100%
+    ratio = Math.max(0.15, ratio);  // plancher 15%
     wrap.style.zoom = ratio;
+    // Après zoom, scroller en haut à gauche
     inner.scrollTop  = 0;
     inner.scrollLeft = 0;
   }
 
-  // ── Hooks ──────────────────────────────────────────────────────────────
-  // synoptic_canvas.js appelle onSynopticLoaded après chaque chargement/page
+  // Appelé par synoptic_canvas.js après chaque chargement / changement de page
   window.onSynopticLoaded = function(){ setTimeout(_fitToWidth, 80); };
 
-  // synoptic_canvas.js appelle onAfterResize à la fin de _resize()
-  // → applyMode() → _resize() → _fitToWidth() automatique
-  window.onAfterResize = _fitToWidth;
+  // Bouton ⌖ → refit
+  window._synResetView = function(){ _fitToWidth(); };
 
-  // Bouton ⌖ reset-vue
-  window._synResetView = _fitToWidth;
-
-  // Re-fit sur redimensionnement fenêtre
-  window.addEventListener('resize', function(){ setTimeout(_fitToWidth, 60); });
-
-  // Afficher le bouton ⌖ reset-vue (utile sur tous écrans)
+  // Afficher le bouton ⌖
   var rvb = document.getElementById('reset-view-btn');
   if(rvb) rvb.style.display = '';
 })();

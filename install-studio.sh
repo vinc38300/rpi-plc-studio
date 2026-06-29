@@ -8,7 +8,7 @@
 #
 # UTILISATION :
 #   Méthode 1 — via le .deb (recommandé, résout les dépendances automatiquement) :
-#     sudo apt install ./rpi-plc-studio_3.4-1.deb
+#     sudo apt install ./rpi-plc-studio_3.4-3.deb
 #
 #   Méthode 2 — ce script (installation directe depuis les sources) :
 #     sudo bash install-studio.sh
@@ -90,7 +90,7 @@ ok "Python $PY_VER"
 
 # ── Vérifier si .deb disponible ───────────────────────────────────────────────
 DEB_FILE=""
-for p in "$SCRIPT_DIR/rpi-plc-studio_${VERSION}-1.deb" \
+for p in "$SCRIPT_DIR/rpi-plc-studio_3.4-3.deb" \
           "$SCRIPT_DIR/rpi-plc-studio_"*.deb \
           "./rpi-plc-studio_"*.deb; do
     # shellcheck disable=SC2086
@@ -272,7 +272,7 @@ rsync_or_cp "$SRC_ROOT/resources" "$APP_DIR/resources" && ok "→ resources/"
 # rpi_server (pour le déploiement depuis le studio)
 for f in server.py auth.py backup_manager.py calibration.py config.json \
           recipes.py report_generator.py rpi-plc.service setup_autonomy.sh \
-          synoptic.json telegram_bot.py testeur_plc.html; do
+          synoptic.json telegram_bot.py mqtt_bridge.py testeur_plc.html; do
     [ -f "$SRC_ROOT/rpi_server/$f" ] && \
         cp "$SRC_ROOT/rpi_server/$f" "$APP_DIR/rpi_server/"
 done

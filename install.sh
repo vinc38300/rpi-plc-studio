@@ -9,7 +9,7 @@
 #
 # UTILISATION :
 #   Méthode 1 — via le .deb (recommandé) :
-#     sudo dpkg -i rpi-plc_3.4-1.deb && sudo apt-get install -f
+#     sudo dpkg -i rpi-plc_3.4-4-serveur-arm64.deb && sudo apt-get install -f
 #
 #   Méthode 2 — ce script (installation directe depuis les sources) :
 #     sudo bash install.sh
@@ -315,7 +315,7 @@ if [ "$HAS_SOURCES" = true ]; then
 
     # Copier les fichiers serveur
     for f in server.py auth.py backup_manager.py calibration.py recipes.py \
-              report_generator.py telegram_bot.py testeur_plc.html synoptic.json; do
+              report_generator.py telegram_bot.py mqtt_bridge.py testeur_plc.html synoptic.json; do
         [ -f "$SRC/$f" ] && cp "$SRC/$f" "$APP_DIR/" && ok "→ $f"
     done
 
@@ -340,7 +340,7 @@ else
     # Aucune source trouvée → instructions .deb
     warn "Sources non trouvées dans $SCRIPT_DIR"
     info "→ Installer via le paquet .deb :"
-    info "  sudo dpkg -i rpi-plc_3.4-1.deb && sudo apt-get install -f"
+    info "  sudo dpkg -i rpi-plc_3.4-4-serveur-arm64.deb && sudo apt-get install -f"
 
     # Vérifier si /opt/rpi-plc existe déjà (installé par .deb)
     if [ -f "$APP_DIR/server.py" ]; then
