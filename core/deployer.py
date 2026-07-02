@@ -481,7 +481,7 @@ class RPiDeployer:
                 try:
                     local3 = _jcfg3.loads(open(cfg_local3).read())
                     for k, v in local3.items():
-                        if k != "telegram":
+                        if k not in ("telegram", "security"):
                             rpi_cfg3[k] = v
                 except Exception:
                     pass
@@ -507,6 +507,20 @@ class RPiDeployer:
                             tg_base3["token"] = sv
                     elif sv != "" and sv is not None:
                         tg_base3[sk] = sv
+
+            # Appliquer security depuis extra_config — préserve la config RPi si absente
+            if extra_config and "security" in extra_config:
+                sec3 = extra_config["security"]
+                sec_base3 = rpi_cfg3.setdefault("security", {})
+                for sk, sv in sec3.items():
+                    if sv != "" and sv is not None:
+                        sec_base3[sk] = sv
+                self.log_cb(
+                    "[CONFIG] security: "
+                    f"enabled={rpi_cfg3['security'].get('enabled')} "
+                    f"user={rpi_cfg3['security'].get('username','?')} "
+                    f"https={rpi_cfg3['security'].get('https', False)}"
+                )
 
             _tg3 = rpi_cfg3.get("telegram", {})
             self.log_cb(
@@ -630,13 +644,13 @@ class RPiDeployer:
                 pass
 
             # 2. Appliquer les paramètres locaux (GPIO, scan_time, web_port…)
-            #    sauf telegram qu'on gère séparément
+            #    sauf telegram et security qu'on gère séparément
             cfg_local_path = os.path.join(SERVER_SRC, "config.json")
             if os.path.isfile(cfg_local_path):
                 try:
                     local_cfg = _jcfg.loads(open(cfg_local_path).read())
                     for k, v in local_cfg.items():
-                        if k != "telegram":
+                        if k not in ("telegram", "security"):
                             rpi_cfg[k] = v
                 except Exception:
                     pass
@@ -665,6 +679,20 @@ class RPiDeployer:
                         # sinon : conserver le token RPi existant
                     elif sv != "" and sv is not None:
                         tg_rpi[sk] = sv
+
+            # 3c. Appliquer extra_config security — préserve la config RPi si absente de extra_config
+            if extra_config and "security" in extra_config:
+                sec_new = extra_config["security"]
+                sec_rpi = rpi_cfg.setdefault("security", {})
+                for sk, sv in sec_new.items():
+                    if sv != "" and sv is not None:
+                        sec_rpi[sk] = sv
+                self.log_cb(
+                    "[CONFIG] security: "
+                    f"enabled={rpi_cfg['security'].get('enabled')} "
+                    f"user={rpi_cfg['security'].get('username','?')} "
+                    f"https={rpi_cfg['security'].get('https', False)}"
+                )
 
             tg = rpi_cfg.get("telegram", {})
             self.log_cb(

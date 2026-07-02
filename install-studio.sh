@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  RPi-PLC Studio v3.4 — Script d'installation PC Linux                      ║
+# ║  RPi-PLC Studio v3.5 — Script d'installation PC Linux                      ║
 # ║  Compatible : Ubuntu 22.04+, Debian 12 (Bookworm)+, Linux Mint 21+         ║
 # ║              Architecture x86_64 (amd64)                                   ║
 # ║  Licence MIT                                                                ║
@@ -8,7 +8,7 @@
 #
 # UTILISATION :
 #   Méthode 1 — via le .deb (recommandé, résout les dépendances automatiquement) :
-#     sudo apt install ./rpi-plc-studio_3.4-3.deb
+#     sudo apt install ./rpi-plc-studio_3.5-1.deb
 #
 #   Méthode 2 — ce script (installation directe depuis les sources) :
 #     sudo bash install-studio.sh
@@ -31,7 +31,7 @@ sep()  { echo -e "${BLUE}══════════════════�
 
 # ── Paramètres ────────────────────────────────────────────────────────────────
 APP_DIR="/opt/rpi-plc-studio"
-VERSION="3.4"
+VERSION="3.5"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 sep
@@ -90,7 +90,7 @@ ok "Python $PY_VER"
 
 # ── Vérifier si .deb disponible ───────────────────────────────────────────────
 DEB_FILE=""
-for p in "$SCRIPT_DIR/rpi-plc-studio_3.4-3.deb" \
+for p in "$SCRIPT_DIR/rpi-plc-studio_3.5-1.deb" \
           "$SCRIPT_DIR/rpi-plc-studio_"*.deb \
           "./rpi-plc-studio_"*.deb; do
     # shellcheck disable=SC2086

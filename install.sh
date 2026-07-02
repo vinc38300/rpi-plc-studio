@@ -9,7 +9,7 @@
 #
 # UTILISATION :
 #   Méthode 1 — via le .deb (recommandé) :
-#     sudo dpkg -i rpi-plc_3.4-4-serveur-arm64.deb && sudo apt-get install -f
+#     sudo dpkg -i rpi-plc_3.5-1-serveur.deb && sudo apt-get install -f
 #
 #   Méthode 2 — ce script (installation directe depuis les sources) :
 #     sudo bash install.sh
@@ -34,7 +34,7 @@ APP_DIR="/opt/rpi-plc"
 DATA_DIR_DEFAULT="$HOME/rpi-plc-data"   # sera ajusté à l'utilisateur réel
 SERVICE_NAME="rpi-plc"
 WEB_PORT=5000
-VERSION="3.4"
+VERSION="3.5"
 
 # ── Vérifications préliminaires ───────────────────────────────────────────────
 sep
@@ -340,7 +340,7 @@ else
     # Aucune source trouvée → instructions .deb
     warn "Sources non trouvées dans $SCRIPT_DIR"
     info "→ Installer via le paquet .deb :"
-    info "  sudo dpkg -i rpi-plc_3.4-4-serveur-arm64.deb && sudo apt-get install -f"
+    info "  sudo dpkg -i rpi-plc_3.5-1-serveur.deb && sudo apt-get install -f"
 
     # Vérifier si /opt/rpi-plc existe déjà (installé par .deb)
     if [ -f "$APP_DIR/server.py" ]; then

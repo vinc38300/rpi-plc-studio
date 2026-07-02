@@ -724,8 +724,9 @@ function rNavBack(w,canvasOnly){
   const bg = w.bg     || '#1e293b';
   const icon= w.icon  || '←';
   const shape = w.shape || 'rect';
-  const label = w.label || 'Retour';
+  const label = w.label || '';
 
+  ctx.globalAlpha=w.opacity??1;
   ctx.fillStyle=bg;
   if(shape==='pill'){
     rr(ctx,w.x,w.y,w.w,w.h,w.h/2); ctx.fill();
@@ -742,6 +743,7 @@ function rNavBack(w,canvasOnly){
     rr(ctx,w.x,w.y,w.w,w.h,8); ctx.fill();
     ctx.strokeStyle=c; ctx.lineWidth=1.5; ctx.stroke();
   }
+  ctx.globalAlpha=1;
   // Icône à droite
   const cx=w.x+w.w-14, cy=w.y+w.h/2;
   ctx.fillStyle=c; ctx.font=`bold ${Math.min(14,w.h*0.5)}px sans-serif`;
@@ -764,9 +766,10 @@ function rNavPage(w,canvasOnly){
   const bg = w.bg     || '#1a2f45';
   const icon= w.icon  || '→';
   const shape = w.shape || 'rect'; // rect | pill | arrow
-  const label = w.label || 'Vue suivante';
+  const label = w.label || '';
 
   // Fond
+  ctx.globalAlpha=w.opacity??1;
   ctx.fillStyle=bg;
   if(shape==='pill'){
     rr(ctx,w.x,w.y,w.w,w.h,w.h/2); ctx.fill();
@@ -784,6 +787,7 @@ function rNavPage(w,canvasOnly){
     rr(ctx,w.x,w.y,w.w,w.h,8); ctx.fill();
     ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
   }
+  ctx.globalAlpha=1;
 
   // Icône à gauche
   const iconX = w.x+14, cy = w.y+w.h/2;
@@ -1241,8 +1245,10 @@ function writeMemory(r,v)  { cb('memory_write',r,v?1.0:0.0); }
 function rNumeric(w, val){
   const c = w.color||'#58a6ff';
   const bg = w.bg||_bg3();
+  ctx.globalAlpha = w.opacity??1;
   ctx.fillStyle = bg; ctx.strokeStyle = _brd(); ctx.lineWidth = 1;
   rr(ctx, w.x, w.y, w.w, w.h, 6); ctx.fill(); ctx.stroke();
+  ctx.globalAlpha = 1;
   if(w.label){ ctx.fillStyle='#8b949e'; ctx.font='10px sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText(w.label, w.x+6, w.y+4); }
@@ -1268,7 +1274,7 @@ function rSwitchM(w, val, canvasOnly){
   // Label
   ctx.fillStyle = _t2(); ctx.font='11px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  const lbl = w.label||w.varRef||'';
+  const lbl = w.label||'';
   // Si label long : première partie avant " — "
   const parts = lbl.split(' — ');
   const mainLbl = parts[0]||lbl;
@@ -1302,10 +1308,10 @@ function renderW(w, canvasOnly){
 function rr(c,x,y,w,h,r){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+r,r);c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x+w-r,y+h,r);c.lineTo(x+r,y+h);c.arcTo(x,y+h,x,y+h-r,r);c.lineTo(x,y+r);c.arcTo(x,y,x+r,y,r);c.closePath();}
 function hov(w,html,canvasOnly){if(editMode||canvasOnly)return;const _hd=_getHtmlDiv();if(!_hd)return;const d=document.createElement('div');d.style.cssText=`position:absolute;left:${w.x}px;top:${w.y}px;width:${w.w}px;height:${w.h}px;pointer-events:auto;`;d.innerHTML=html;_hd.appendChild(d);}
 
-function rTemp(w,val){const al=val!=null&&(val>(w.alarmHigh??85)||val<(w.alarmLow??3)),c=al?'#f85149':(w.color||'#00d4ff');ctx.fillStyle=w.bg||_bg3();ctx.strokeStyle=al?'#f85149':_brd();ctx.lineWidth=al?2:1;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.stroke();ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'Sonde',w.x+30,w.y+7);ctx.fillStyle=c;ctx.font='16px sans-serif';ctx.fillText('🌡',w.x+6,w.y+4);const txt=val!=null&&!isNaN(val)?val.toFixed(1)+'°C':'N/C';ctx.fillStyle=c;ctx.font=`bold ${val!=null?24:14}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,w.x+w.w/2,w.y+w.h/2+8);const p=val!=null?Math.min(1,Math.max(0,(val+50)/200)):0;ctx.fillStyle=_bg4();rr(ctx,w.x+8,w.y+w.h-16,w.w-16,4,2);ctx.fill();ctx.fillStyle=c;rr(ctx,w.x+8,w.y+w.h-16,(w.w-16)*p,4,2);ctx.fill();const hi=w.alarmHigh??85,lo=w.alarmLow??3;ctx.fillStyle='#484f58';ctx.font='8px sans-serif';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText(`↑${hi}° ↓${lo}°`,w.x+8,w.y+w.h-18);}
-function rGauge(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,cx=w.x+w.w/2,cy=w.y+w.h/2+5,r=Math.min(w.w,w.h)/2-12,s=Math.PI*.75,e2=Math.PI*2.25,c=w.color||'#d080ff';ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.strokeStyle=_bg4();ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.arc(cx,cy,r,s,e2);ctx.stroke();ctx.strokeStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,s,s+(e2-s)*p);ctx.stroke();ctx.fillStyle=c;ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val!=null?val.toFixed(1):'—',cx,cy);ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textBaseline='top';ctx.fillText(w.label||'',cx,w.y+3);}
-function rBar(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,c=w.color||'#3fb950';ctx.fillStyle=w.bg||'#0d2010';rr(ctx,w.x,w.y,w.w,w.h,6);ctx.fill();const bh=(w.h-20)*p;ctx.fillStyle=c;rr(ctx,w.x+4,w.y+w.h-10-bh,w.w-8,bh,3);ctx.fill();ctx.fillStyle=c;ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(val!=null?val.toFixed(0)+(w.unit||''):'—',w.x+w.w/2,w.y+3);}
-function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+7,w.y+4);if(buf.length<2)return;const mn=Math.min(...buf.map(p=>p.y)),mx=Math.max(...buf.map(p=>p.y)),sp=mx-mn||1;const px=i=>w.x+5+(i/(buf.length-1))*(w.w-10),py=v=>w.y+w.h-7-((v-mn)/sp)*(w.h-20);ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();buf.forEach((p,i)=>i===0?ctx.moveTo(px(i),py(p.y)):ctx.lineTo(px(i),py(p.y)));ctx.stroke();const lp=buf[buf.length-1];ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(buf.length-1),py(lp.y),3,0,Math.PI*2);ctx.fill();ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(lp.y.toFixed(1)+(w.unit||'°C'),w.x+w.w-5,w.y+4);}
+function rTemp(w,val){const al=val!=null&&(val>(w.alarmHigh??85)||val<(w.alarmLow??3)),c=al?'#f85149':(w.color||'#00d4ff');ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();ctx.strokeStyle=al?'#f85149':_brd();ctx.lineWidth=al?2:1;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.stroke();ctx.globalAlpha=1;ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+30,w.y+7);ctx.fillStyle=c;ctx.font='16px sans-serif';ctx.fillText('🌡',w.x+6,w.y+4);const txt=val!=null&&!isNaN(val)?val.toFixed(1)+(w.unit??'°C'):'N/C';ctx.fillStyle=c;ctx.font=`bold ${val!=null?24:14}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,w.x+w.w/2,w.y+w.h/2+8);const p=val!=null?Math.min(1,Math.max(0,(val+50)/200)):0;ctx.fillStyle=_bg4();rr(ctx,w.x+8,w.y+w.h-16,w.w-16,4,2);ctx.fill();ctx.fillStyle=c;rr(ctx,w.x+8,w.y+w.h-16,(w.w-16)*p,4,2);ctx.fill();const hi=w.alarmHigh??85,lo=w.alarmLow??3;ctx.fillStyle='#484f58';ctx.font='8px sans-serif';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText(`↑${hi}° ↓${lo}°`,w.x+8,w.y+w.h-18);}
+function rGauge(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,cx=w.x+w.w/2,cy=w.y+w.h/2+5,r=Math.min(w.w,w.h)/2-12,s=Math.PI*.75,e2=Math.PI*2.25,c=w.color||'#d080ff';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=_bg4();ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.arc(cx,cy,r,s,e2);ctx.stroke();ctx.strokeStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,s,s+(e2-s)*p);ctx.stroke();ctx.fillStyle=c;ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val!=null?val.toFixed(1)+(w.unit||''):'—',cx,cy);ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textBaseline='top';ctx.fillText(w.label||'',cx,w.y+3);}
+function rBar(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,c=w.color||'#3fb950';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d2010';rr(ctx,w.x,w.y,w.w,w.h,6);ctx.fill();ctx.globalAlpha=1;const bh=(w.h-20)*p;ctx.fillStyle=c;rr(ctx,w.x+4,w.y+w.h-10-bh,w.w-8,bh,3);ctx.fill();ctx.fillStyle=c;ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(val!=null?val.toFixed(0)+(w.unit||''):'—',w.x+w.w/2,w.y+3);}
+function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+7,w.y+4);if(buf.length<2)return;const mn=Math.min(...buf.map(p=>p.y)),mx=Math.max(...buf.map(p=>p.y)),sp=mx-mn||1;const px=i=>w.x+5+(i/(buf.length-1))*(w.w-10),py=v=>w.y+w.h-7-((v-mn)/sp)*(w.h-20);ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();buf.forEach((p,i)=>i===0?ctx.moveTo(px(i),py(p.y)):ctx.lineTo(px(i),py(p.y)));ctx.stroke();const lp=buf[buf.length-1];ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(buf.length-1),py(lp.y),3,0,Math.PI*2);ctx.fill();ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(lp.y.toFixed(1)+(w.unit||''),w.x+w.w-5,w.y+4);}
 
 // ── Courbe historisée (BDD, persistante) ──────────────────────────────────
 // Contrairement à rTrend (buffer mémoire navigateur, perdu au reload), cette
@@ -1316,9 +1322,9 @@ function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.fi
 // synoptic.json et historise leurs varRef toutes les 5 minutes côté serveur.
 function rTrendDb(w){
   const c=w.color||'#58a6ff';
-  ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();
+  ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;
   ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
-  ctx.fillText(w.label||w.varRef||'',w.x+7,w.y+4);
+  ctx.fillText(w.label||'',w.x+7,w.y+4);
 
   const now=Date.now(),hours=w.hours||24;
   if(!dbTrendCache[w.id])dbTrendCache[w.id]={data:[],fetchedAt:0,loading:false};
@@ -1352,21 +1358,23 @@ function rTrendDb(w){
   ctx.textAlign='left'; ctx.fillText(`-${hours}h`,w.x+5,w.y+w.h-3);
   ctx.textAlign='right';ctx.fillText('maintenant',w.x+w.w-5,w.y+w.h-3);
 }
-function rVal(w,val){ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+w.w/2,w.y+4);ctx.fillStyle=w.color||'#e6edf3';ctx.font='bold 16px sans-serif';ctx.textBaseline='middle';const v=val!=null?(isNaN(parseFloat(val))?String(val):parseFloat(val).toFixed(w.decimals??1)+(w.unit||'')):'—';ctx.fillText(v,w.x+w.w/2,w.y+w.h/2+4);}
+function rVal(w,val){ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+w.w/2,w.y+4);ctx.fillStyle=w.color||'#e6edf3';ctx.font='bold 16px sans-serif';ctx.textBaseline='middle';const v=val!=null?(isNaN(parseFloat(val))?String(val):parseFloat(val).toFixed(w.decimals??1)+(w.unit||'')):'—';ctx.fillText(v,w.x+w.w/2,w.y+w.h/2+4);}
 function rAvDisplay(w,val){
   // Boîte fond
+  ctx.globalAlpha=w.opacity??1;
   ctx.fillStyle=w.bg||'#1a1000';
   ctx.strokeStyle=w.color||'#ffa030';
   ctx.lineWidth=1.5;
   rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.stroke();
+  ctx.globalAlpha=1;
   // Badge AV haut-gauche
   ctx.fillStyle=w.color||'#ffa030';
   ctx.font='bold 9px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
-  ctx.fillText('AV: '+(w.varRef||'av0'),w.x+8,w.y+6);
+  ctx.fillText(w.varRef?'AV: '+w.varRef:'',w.x+8,w.y+6);
   // Label
   ctx.fillStyle='#aaaaaa';
   ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
-  ctx.fillText(w.label||w.varRef||'Variable',w.x+w.w/2,w.y+6);
+  ctx.fillText(w.label||'',w.x+w.w/2,w.y+6);
   // Valeur principale
   const dec=w.decimals!=null?w.decimals:2;
   const unit=w.unit||'';
@@ -1418,11 +1426,15 @@ function rNumEntry(w,val,canvasOnly){
   ctx.strokeStyle=c+'60';ctx.lineWidth=1.5;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.stroke();
   // Label + badge AV/RF
   ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
-  ctx.fillText(w.label||'Consigne',w.x+9,w.y+6);
-  // Badge petite indication à droite
-  const badge = isAV ? `AV:${w.varRef}` : (w.varRef||'');
-  ctx.fillStyle=c+'99';ctx.font='9px monospace';ctx.textAlign='right';ctx.textBaseline='top';
-  ctx.fillText(badge,w.x+w.w-7,w.y+6);
+  ctx.fillText(w.label||'',w.x+9,w.y+6);
+  // Badge petite indication à droite — masquable via "Afficher ref."
+  if(w.showRef !== false){
+    const badge = isAV ? `AV:${w.varRef}` : (w.varRef||'');
+    if(badge){
+      ctx.fillStyle=c+'99';ctx.font='9px monospace';ctx.textAlign='right';ctx.textBaseline='top';
+      ctx.fillText(badge,w.x+w.w-7,w.y+6);
+    }
+  }
   // Zone valeur actuelle (PLC)
   ctx.fillStyle=c+'22';rr(ctx,w.x+7,w.y+20,w.w-14,28,6);ctx.fill();
   ctx.fillStyle=c;ctx.font='bold 17px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
@@ -1505,7 +1517,7 @@ function rBtn(w,canvasOnly){
     ctx.strokeStyle=c;ctx.lineWidth=1.5;rr(ctx,x,y,bw,bh,r);ctx.stroke();
   }
   ctx.fillStyle=c;ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(w.label||'Action',x+bw/2,y+bh/2);
+  ctx.fillText(w.label||'',x+bw/2,y+bh/2);
   ctx.globalAlpha=1;
   if(!editMode)hov(w,`<button onclick="doAction('${w.action||''}','${w.varRef||''}')" style="position:absolute;inset:0;width:100%;height:100%;background:transparent;border:none;cursor:pointer;"></button>`,canvasOnly);
 }
@@ -1553,7 +1565,7 @@ function rDvPush(w,val,canvasOnly){
   if(on){ ctx.beginPath(); ctx.arc(cx2,cy2,14,0,Math.PI*2); ctx.strokeStyle=c+'60'; ctx.lineWidth=3; ctx.stroke(); }
   ctx.beginPath(); ctx.arc(cx2-3,cy2-3,4,0,Math.PI*2); ctx.fillStyle=on?'#ffffff50':'#ffffff20'; ctx.fill();
   ctx.fillStyle=on?c:'#8b949e'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText(w.label||'BP', w.x+w.w/2, w.y+w.h-16);
+  ctx.fillText(w.label||'', w.x+w.w/2, w.y+w.h-16);
   ctx.fillStyle='#484f58'; ctx.font='8px monospace'; ctx.textAlign='right'; ctx.textBaseline='top';
   ctx.fillText('DV:'+w.varRef, w.x+w.w-5, w.y+4);
   if(!editMode) hov(w,`<button onmousedown="writeDV('${w.varRef}',true)" onmouseup="writeDV('${w.varRef}',false)" onmouseleave="writeDV('${w.varRef}',false)" ontouchstart="writeDV('${w.varRef}',true)" ontouchend="writeDV('${w.varRef}',false)" style="position:absolute;inset:0;width:100%;height:100%;background:transparent;border:none;cursor:pointer;-webkit-tap-highlight-color:transparent;" title="Maintenir = actif · Relâcher = inactif"></button>`,canvasOnly);
@@ -1608,7 +1620,7 @@ function rTempCard(w, val){
   ctx.fillStyle=al?'#e53935':'#757575';
   ctx.font='10px "Segoe UI",sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
-  const lbl=(w.label||'Température').substring(0,18);
+  const lbl=(w.label||'').substring(0,18);
   ctx.fillText(lbl, x+8, y+10);
 
   // Icône thermomètre (petit, coin droit)
@@ -1666,7 +1678,7 @@ function rSpCard(w, val, canvasOnly){
   ctx.fillStyle='#757575';
   ctx.font='10px "Segoe UI",sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText((w.label||'Consigne').substring(0,18), x+28, y+9);
+  ctx.fillText((w.label||'').substring(0,18), x+28, y+9);
 
   // Valeur
   const valStr = val!=null && !isNaN(val) ? parseFloat(val).toFixed(1) : '– –';
@@ -2012,7 +2024,7 @@ function rBtn3d(w, canvasOnly){
   ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=3;
   ctx.font=`bold ${Math.min(13,bh*0.3)}px "Segoe UI",sans-serif`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(w.label||'Action', x+bw/2, y+bh/2);
+  ctx.fillText(w.label||'', x+bw/2, y+bh/2);
   ctx.shadowBlur=0;
 
   if(!editMode){
@@ -2029,7 +2041,7 @@ function rCntDisplay(w){
   ctx.fillStyle=_bg3();rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();
   ctx.strokeStyle=c+'60';ctx.lineWidth=1.5;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.stroke();
   ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
-  ctx.fillText(w.label||'Compteur',w.x+9,w.y+6);
+  ctx.fillText(w.label||'',w.x+9,w.y+6);
   ctx.fillStyle='#484f58';ctx.font='8px monospace';ctx.textAlign='right';
   ctx.fillText(bid?'⏱ '+bid:'— non lié —',w.x+w.w-6,w.y+6);
   const rows=[];
@@ -3628,7 +3640,15 @@ const ANIM_SYMBOLS={
       const cLblH     = tHaut!==null ? t2col(tHaut) : '#8b949e';
       const cLblB     = tBas !==null ? t2col(tBas)  : '#8b949e';
 
-      // Ligne de front thermique Y (dans corp y=13..119)
+      // ─── Textes personnalisables ─────────────────────────────────────────
+      const txtHaut    = wgt&&wgt.txtHaut   !==undefined ? wgt.txtHaut    : 'sonde haute';
+      const txtBas     = wgt&&wgt.txtBas    !==undefined ? wgt.txtBas     : 'sonde basse';
+      const txtCentre  = wgt&&wgt.txtCentre !==undefined ? wgt.txtCentre  : 'ECS';
+      const txtSP      = wgt&&wgt.txtSP     !==undefined ? wgt.txtSP      : 'SP';
+      const fsTemp     = parseFloat(wgt&&wgt.fsTemp    ) || 13;   // taille températures
+      const fsLabel    = parseFloat(wgt&&wgt.fsLabel   ) || 7.5;  // taille labels sonde haute/basse
+      const fsCentre   = parseFloat(wgt&&wgt.fsCentre  ) || 8.5;  // taille texte centre (ECS)
+      const fsSP       = parseFloat(wgt&&wgt.fsSP      ) || 7.5;  // taille consigne SP
       const htRatio= tHaut!==null?Math.max(0,Math.min(1,(parseFloat(tHaut)-10)/Math.max(1,consigne-10))):0;
       const frontY = Math.round(119-(htRatio*106));
 
@@ -3641,9 +3661,14 @@ const ANIM_SYMBOLS={
             <stop offset="100%" stop-color="${cTop}" stop-opacity="0.97"/>
           </linearGradient>
           <clipPath id="bc_${uid}"><rect x="15" y="13" width="54" height="106" rx="7"/></clipPath>
+          <!-- Glow quand consigne atteinte -->
           <filter id="glow_${uid}" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="2.5" result="b"/>
             <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <!-- Ombre portée texte pour lisibilité sur fond coloré -->
+          <filter id="tsh_${uid}" x="-15%" y="-30%" width="130%" height="160%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2.2" flood-color="#000000" flood-opacity="0.85"/>
           </filter>
         </defs>
 
@@ -3655,7 +3680,7 @@ const ANIM_SYMBOLS={
 
         <!-- Ligne de front thermique (stratification) -->
         ${tHaut!==null&&tBas!==null&&Math.abs(parseFloat(tHaut)-parseFloat(tBas))>3
-          ?`<line x1="15" y1="${frontY}" x2="69" y2="${frontY}" stroke="white" stroke-width="0.8" stroke-dasharray="3 2" opacity="0.22" clip-path="url(#bc_${uid})"/>`
+          ?`<line x1="15" y1="${frontY}" x2="69" y2="${frontY}" stroke="white" stroke-width="0.8" stroke-dasharray="3 2" opacity="0.30" clip-path="url(#bc_${uid})"/>`
           :''}
 
         <!-- Calottes bombees -->
@@ -3663,25 +3688,33 @@ const ANIM_SYMBOLS={
         <ellipse cx="42" cy="119" rx="27" ry="9" fill="#111820" stroke="${bdColor}" stroke-width="1.5"/>
         <rect x="15" y="13" width="54" height="106" rx="7" fill="none" stroke="${bdColor}" stroke-width="1.8"/>
 
-        <!-- T sonde HAUTE -->
-        <text x="42" y="37" text-anchor="middle" font-size="15" font-weight="bold"
-              fill="${cLblH}" font-family="monospace" opacity="0.97"
-              ${atConsigne?`filter="url(#glow_${uid})"`:''}>${tHStr}</text>
-        <text x="42" y="48" text-anchor="middle" font-size="7" fill="white"
-              font-family="sans-serif" opacity="0.45">&#9650; sonde haute</text>
+        <!-- T sonde HAUTE — toujours blanc + ombre pour lisibilité quel que soit le fond -->
+        <text x="42" y="39" text-anchor="middle" font-size="${fsTemp}" font-weight="bold"
+              fill="white" font-family="monospace"
+              filter="url(#${atConsigne?`glow_${uid}`:`tsh_${uid}` })">${tHStr}</text>
+        <text x="42" y="50" text-anchor="middle" font-size="${fsLabel}" fill="white"
+              font-family="sans-serif" opacity="0.85" filter="url(#tsh_${uid})">&#9650; ${txtHaut}</text>
 
         <!-- SP consigne centre -->
-        <text x="42" y="72" text-anchor="middle" font-size="8.5" fill="white"
-              font-family="monospace" opacity="0.15" font-weight="bold">ECS</text>
-        <text x="42" y="83" text-anchor="middle" font-size="7.5"
-              fill="${atConsigne?'#ffd740':'#8b949e'}" font-family="monospace"
-              opacity="${atConsigne?0.9:0.5}">SP ${conStr}</text>
+        <text x="42" y="72" text-anchor="middle" font-size="${fsCentre}" fill="white"
+              font-family="monospace" opacity="0.20" font-weight="bold">${txtCentre}</text>
+        ${wgt&&wgt.dvConsigne?`<rect x="14" y="76" width="56" height="14" rx="4" fill="none"
+              stroke="white" stroke-width="0.8" stroke-dasharray="2 1.5" opacity="0.35"/>
+              <text x="67" y="80" font-size="6" fill="white" opacity="0.55">&#9998;</text>`:''}
+        <text x="42" y="83" text-anchor="middle" font-size="${fsSP}"
+              fill="${atConsigne?'#ffd740':'white'}" font-family="monospace"
+              filter="url(#tsh_${uid})"
+              opacity="${atConsigne?1:0.7}">${txtSP} ${conStr}</text>
+        ${(!editMode && wgt && wgt.dvConsigne)?`<rect x="14" y="76" width="56" height="14" rx="4" fill="transparent"
+              style="pointer-events:auto;cursor:pointer;"
+              onclick="_spEdit('${wgt.id}','${wgt.dvConsigne}',${consigne},20,90,1,'°C','white')"/>`:''}
 
-        <!-- T sonde BASSE -->
-        <text x="42" y="100" text-anchor="middle" font-size="15" font-weight="bold"
-              fill="${cLblB}" font-family="monospace" opacity="0.90">${tBStr}</text>
-        <text x="42" y="111" text-anchor="middle" font-size="7" fill="white"
-              font-family="sans-serif" opacity="0.45">&#9660; sonde basse</text>
+        <!-- T sonde BASSE — toujours blanc + ombre -->
+        <text x="42" y="101" text-anchor="middle" font-size="${fsTemp}" font-weight="bold"
+              fill="white" font-family="monospace"
+              filter="url(#tsh_${uid})">${tBStr}</text>
+        <text x="42" y="112" text-anchor="middle" font-size="${fsLabel}" fill="white"
+              font-family="sans-serif" opacity="0.85" filter="url(#tsh_${uid})">&#9660; ${txtBas}</text>
 
         <!-- Pastille consigne atteinte -->
         ${atConsigne
@@ -4235,7 +4268,7 @@ function showProps(w){
     <span style="font-size:11px;">🔒 Verrouiller (ne bouge plus)</span>
   </label>`;
   if(!['label','symbol','image','dyn_text'].includes(w.type))h+=`<div class="prop-section">Général</div>`+pT('label','Étiquette',w.label||'');
-  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend','trend_db'].includes(w.type))h+=pT('unit','Unité',w.unit||'°C');h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117');if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
+  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend','trend_db'].includes(w.type))h+=pT('unit','Unité',w.unit||'°C');h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117')+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
   if(w.type==='numeric'){
     h+=`<div class="prop-section">Registre RF / Variable</div>`;
     h+=`<div class="prop-row"><div class="prop-label">Registre RF</div>
@@ -4246,6 +4279,7 @@ function showProps(w){
     h+=pN('decimals','Décimales',w.decimals??1,'0','4','1');
     h+=pC('color','Couleur valeur',w.color||'#58a6ff');
     h+=pC('bg','Fond',w.bg||'#0d1117');
+    h+=pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);
   }
   if(w.type==='av_display'){
     h+=`<div class="prop-section">Variable AV / RF</div>`;
@@ -4255,6 +4289,7 @@ function showProps(w){
     h+=pN('decimals','Décimales',w.decimals??2);
     h+=pC('color','Couleur valeur',w.color||'#ffa030');
     h+=pC('bg','Fond',w.bg||'#1a1000');
+    h+=pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);
   }
   if(w.type==='relay'){
   const _isRelayGpio = w.varRef && /^\d+$/.test(String(w.varRef));
@@ -4327,13 +4362,14 @@ function showProps(w){
         value="${isAV?w.varRef:''}" placeholder="ex: temp_interieur"
         style="font-family:monospace;font-size:11px;"></div>`;
     h+=pT('unit','Unité',w.unit||'°C')+pN('min','Min',w.min??0)+pN('max','Max',w.max??100)+pN('step','Pas',w.step??1)+pN('decimals','Décimales',w.decimals??1,'0','4','1')+pC('color','Couleur',w.color||'#e06c75');
+    h+=pB('showRef','Afficher réf. RF/AV', w.showRef!==false);
   }
   if(w.type==='button'){h+=`<div class="prop-section">Action</div><div class="prop-row"><div class="prop-label">Type</div><select class="prop-input" data-key="action"><option value="plc_start" ${w.action==='plc_start'?'selected':''}>▶ Démarrer PLC</option><option value="plc_stop" ${w.action==='plc_stop'?'selected':''}>■ Arrêter PLC</option><option value="set_mem" ${w.action==='set_mem'?'selected':''}>M→1</option><option value="reset_mem" ${w.action==='reset_mem'?'selected':''}>M→0</option><option value="set_dv" ${w.action==='set_dv'?'selected':''}>DV→true (marche)</option><option value="reset_dv" ${w.action==='reset_dv'?'selected':''}>DV→false (arrêt)</option><option value="pulse_dv" ${w.action==='pulse_dv'?'selected':''}>DV impulsion (200ms)</option></select></div>`;
   if(['set_mem','reset_mem'].includes(w.action))
     h+=`<div class="prop-row"><div class="prop-label">Bit M</div><select class="prop-input" data-key="varRef">${mb}</select></div>`;
   if(['set_dv','reset_dv','pulse_dv'].includes(w.action))
     h+=`<div class="prop-row"><div class="prop-label">Nom variable</div><input type="text" class="prop-input" data-key="varRef" value="${w.varRef||''}" placeholder="ex: marche_pompe" style="font-family:monospace;font-size:11px;"></div>`;
-  h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#1a2f45')+`<div class="prop-section">Style bouton</div><div class="prop-row"><div class="prop-label">Enjoliveur</div><select class="prop-input" data-key="btnStyle"><option value="flat" ${(w.btnStyle||'flat')==='flat'?'selected':''}>Plat</option><option value="raised" ${w.btnStyle==='raised'?'selected':''}>Relief 3D</option><option value="neon" ${w.btnStyle==='neon'?'selected':''}>Néon lumineux</option><option value="industrial" ${w.btnStyle==='industrial'?'selected':''}>Industriel (rivets)</option><option value="pill" ${w.btnStyle==='pill'?'selected':''}>Pilule</option></select></div>`;}
+  h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#1a2f45')+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05)+`<div class="prop-section">Style bouton</div><div class="prop-row"><div class="prop-label">Enjoliveur</div><select class="prop-input" data-key="btnStyle"><option value="flat" ${(w.btnStyle||'flat')==='flat'?'selected':''}>Plat</option><option value="raised" ${w.btnStyle==='raised'?'selected':''}>Relief 3D</option><option value="neon" ${w.btnStyle==='neon'?'selected':''}>Néon lumineux</option><option value="industrial" ${w.btnStyle==='industrial'?'selected':''}>Industriel (rivets)</option><option value="pill" ${w.btnStyle==='pill'?'selected':''}>Pilule</option></select></div>`;}
   if(w.type==='toggle'){
   const _isMt = w.varRef && /^M\d+$/.test(String(w.varRef));  // FIX: Mardi != M-bit
   h+=`<div class="prop-section">Variable cible</div>`
@@ -4523,6 +4559,7 @@ function showProps(w){
     h+=`<div class="prop-row"><div class="prop-label">Alignement</div><select class="prop-input" data-key="align"><option value="left" ${(w.align||'left')==='left'?'selected':''}>Gauche</option><option value="center" ${w.align==='center'?'selected':''}>Centre</option><option value="right" ${w.align==='right'?'selected':''}>Droite</option></select></div>`;
     h+=`<div class="prop-section">Fond (optionnel)</div>`;
     h+=pC('bg','Couleur fond',w.bg||'');
+    h+=pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);
     h+=pN('radius','Arrondi',w.radius||4);
     h+=pT('label','Étiquette',w.label||'');
   }
@@ -4595,6 +4632,7 @@ function showProps(w){
       </select></div>`;
     h+=pC('color','Couleur accent',w.color||'#2563eb');
     h+=pC('bg','Fond',w.bg||'#1a2f45');
+    h+=pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);
     h+=pC('textColor','Couleur texte',w.textColor||'');
   } else if(w.type==='cntdisplay'){
     h+=`<div class="prop-section">Compteur de marche</div>`;
@@ -4619,6 +4657,7 @@ function showProps(w){
       </select></div>`;
     h+=pC('color','Couleur accent',w.color||'#475569');
     h+=pC('bg','Fond',w.bg||'#1e293b');
+    h+=pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);
     h+=pC('textColor','Couleur texte',w.textColor||'');
   } else if(w.type==='image'){const iop=userImages.map(i=>`<option value="${i.id}" ${w.imageId===i.id?'selected':''}>${i.name}</option>`).join('');h+=`<div class="prop-section">Image</div><div class="prop-row"><div class="prop-label">Source</div><select class="prop-input" data-key="imageId">${iop||'<option>Aucune image</option>'}</select></div>`+pT('label','Étiquette',w.label||'')+`<div class="prop-row"><div class="prop-label">Ajustement</div><select class="prop-input" data-key="fit"><option value="contain" ${w.fit==='contain'?'selected':''}>Proportionnel</option><option value="stretch" ${w.fit==='stretch'?'selected':''}>Étiré</option></select></div>`+pN('opacity','Opacité',w.opacity??1,'0','1',0.05);}
   if(w.type==='animated'){
@@ -4652,6 +4691,16 @@ function showProps(w){
         proportionnellement à la température vs consigne.<br>
         Les textes de sonde prennent la même couleur interpolée.
       </div>`;
+      h+=`<div class="prop-section" style="color:#e6edf3">✏️ Textes affichés</div>`;
+      h+=pT('txtHaut',   'Label sonde haute',  w.txtHaut  ??'sonde haute');
+      h+=pT('txtBas',    'Label sonde basse',  w.txtBas   ??'sonde basse');
+      h+=pT('txtCentre', 'Texte centre (ECS)', w.txtCentre??'ECS');
+      h+=pT('txtSP',     'Préfixe consigne',   w.txtSP    ??'SP');
+      h+=`<div class="prop-section" style="color:#e6edf3">🔡 Taille des polices</div>`;
+      h+=pN('fsTemp',   'Températures px',   w.fsTemp  ||13,  4, 40, 0.5);
+      h+=pN('fsLabel',  'Labels sonde px',   w.fsLabel ||7.5, 4, 24, 0.5);
+      h+=pN('fsCentre', 'Texte centre px',   w.fsCentre||8.5, 4, 24, 0.5);
+      h+=pN('fsSP',     'Consigne SP px',    w.fsSP    ||7.5, 4, 24, 0.5);
     }
   } else if(w.type==='plancher_w'){
     h+=`<div class="prop-section" style="color:#ff7043">🔥 Plancher chauffant</div>`;
@@ -4818,6 +4867,7 @@ function showProps(w){
 function pT(k,l,v){return`<div class="prop-row"><div class="prop-label">${l}</div><input type="text" class="prop-input" data-key="${k}" value="${String(v).replace(/"/g,'&quot;')}"></div>`;}
 function pN(k,l,v,mn='',mx='',st=1){return`<div class="prop-row"><div class="prop-label">${l}</div><input type="number" class="prop-input" data-key="${k}" value="${v}" min="${mn}" max="${mx}" step="${st}"></div>`;}
 function pC(k,l,v){return`<div class="prop-row"><div class="prop-label">${l}</div><input type="color" class="prop-input prop-color" data-key="${k}" value="${v}"></div>`;}
+function pB(k,l,v){return`<div class="prop-row"><div class="prop-label">${l}</div><label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="prop-input" data-key="${k}" ${v?'checked':''}><span style="font-size:11px;color:var(--t2)">${v?'Oui':'Non'}</span></label></div>`;}
 function delSel(){if(!selected)return;widgets=widgets.filter(w=>w!==selected);selected=null;showProps(null);renderAll();_dirty=true;}
 
 // ═══════════════ TOAST ═══════════════
@@ -5183,7 +5233,7 @@ function _mHdr(w, title, icon, accent){
   ctx.fill();
   ctx.fillStyle = accent;
   ctx.font = 'bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(icon+' '+title, w.x+8, w.y+11);
+  ctx.fillText(title?(icon+' '+title):icon, w.x+8, w.y+11);
 }
 function _mRow(x,y,w,label,val,unit,color,ry,rh){
   ctx.fillStyle = _bg4()+'80';
@@ -5229,7 +5279,7 @@ function rPlancher(w){
   rr(ctx,w.x,w.y,w.w,w.h,10); ctx.stroke();
 
   // Header
-  _mHdr(w, w.label||'Plancher chauffant', '🔥', accent);
+  _mHdr(w, w.label||'', '🔥', accent);
 
   // Rows
   const rowH = 18;
@@ -5276,7 +5326,7 @@ function rChaudiere(w){
   ctx.fillStyle=_bg3(); rr(ctx,w.x,w.y,w.w,w.h,10); ctx.fill();
   ctx.strokeStyle=alm?'#f85149':accent+'60'; ctx.lineWidth=alm?2:1;
   rr(ctx,w.x,w.y,w.w,w.h,10); ctx.stroke();
-  _mHdr(w, w.label||'Chaudière', '🔥', accent);
+  _mHdr(w, w.label||'', '🔥', accent);
 
   const rowH=18;
   const rows=[
@@ -5317,7 +5367,7 @@ function rSolar(w){
   ctx.fillStyle=_bg3(); rr(ctx,w.x,w.y,w.w,w.h,10); ctx.fill();
   ctx.strokeStyle=alm?'#f85149':accent+'60'; ctx.lineWidth=alm?2:1;
   rr(ctx,w.x,w.y,w.w,w.h,10); ctx.stroke();
-  _mHdr(w, w.label||'Solaire thermique', '☀', accent);
+  _mHdr(w, w.label||'', '☀', accent);
 
   const rowH=16;
   const rows=[
@@ -5358,7 +5408,7 @@ function rZoneChauf(w){
   ctx.fillStyle=_bg3(); rr(ctx,w.x,w.y,w.w,w.h,10); ctx.fill();
   ctx.strokeStyle=accent+'60'; ctx.lineWidth=1;
   rr(ctx,w.x,w.y,w.w,w.h,10); ctx.stroke();
-  _mHdr(w, w.label||'Zone chauffage', '🏠', accent);
+  _mHdr(w, w.label||'', '🏠', accent);
 
   // Jauge circulaire de température
   const cx=w.x+w.w/2, cy=w.y+50;
@@ -5412,7 +5462,7 @@ function rEcsBloc(w){
   ctx.fillStyle=_bg3(); rr(ctx,w.x,w.y,w.w,w.h,10); ctx.fill();
   ctx.strokeStyle=alm?'#f85149':accent+'60'; ctx.lineWidth=alm?2:1;
   rr(ctx,w.x,w.y,w.w,w.h,10); ctx.stroke();
-  _mHdr(w, w.label||'Eau chaude sanitaire', '💧', accent);
+  _mHdr(w, w.label||'', '💧', accent);
 
   // Représentation ballon cylindrique
   const tx=w.x+w.w*0.25, ty=w.y+32, tw=40, th=55;
@@ -5457,7 +5507,7 @@ function rProgH(w){
   rr(ctx,w.x,w.y,w.w,w.h,10); ctx.stroke();
 
   // Header
-  _mHdr(w, w.label||'Planning Jour/Nuit', '📅', accent);
+  _mHdr(w, w.label||'', '📅', accent);
 
   // Badge mode
   const modeLabel = is_vac?'🏖 VACANCES': is_jour?'☀ JOUR':'🌙 NUIT';
