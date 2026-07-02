@@ -1,0 +1,18 @@
+# 2. Vérifier que le SSH fonctionne
+ssh -T git@github.com
+# → doit répondre : "Hi vincentlux! You've successfully authenticated..."
+
+# 3. Récupérer d'abord les changements distants
+git pull origin main
+
+# 4. Ajouter tous les fichiers modifiés/nouveaux
+git add .
+
+# 5. Vérifier ce qui va être commité
+git status
+
+# 6. Commiter
+git commit -m "v3.5-1 : corrections ballon ECS, synoptic, deployer, .deb"
+
+# 7. Pousser vers GitHub
+git push origin main
