@@ -2728,6 +2728,14 @@ function showBlockProps(b){
       {v:'float',l:'Numerique (float)'},
       {v:'bool', l:'Booleen (0/1)'}
     ]);
+    h+=`<hr class="psep"><span class="pl">Watchdog (Subscribe)</span>`;
+    h+=`<div style="color:var(--fbd-text2);font-size:9px;padding:0 0 4px">
+      Remet reg_out a 0 si aucun message recu depuis ce delai.
+      0 = desactive (comportement par defaut). A activer seulement sur les
+      topics qui doivent retomber a 0 en cas d'arret de publication
+      (ex: charge/decharge batterie), pas sur les capteurs lents.
+    </div>`;
+    h+=pNum('stale_timeout','Timeout figé (s, 0=désactivé)',p.stale_timeout??0,0,3600,1);
     // Valeur actuelle (lecture protegee : liveState n'est jamais
     // declare/alimente nulle part dans le projet -> evite le
     // ReferenceError qui bloquait tout le panneau Proprietes)

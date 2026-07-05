@@ -1431,6 +1431,19 @@ class BlockEditor(QWidget):
                 # Publish : reg_in (RF*) est publie vers le topic
                 ri = p.get("reg_in", "")
                 if ri: blk["reg_in"] = ri
+                # FIX : stale_timeout (watchdog "topic fige") n'etait jamais
+                # recopie dans le bloc compile -> reste bien dans le .plcproj
+                # (panneau proprietes) mais disparait a chaque compilation, donc
+                # le watchdog cote mqtt_bridge.py ne s'activait jamais, meme
+                # configure et redeploye.
+                st = p.get("stale_timeout")
+                if st:
+                    try:
+                        stf = float(st)
+                        if stf > 0:
+                            blk["stale_timeout"] = stf
+                    except (TypeError, ValueError):
+                        pass
                 prog.append(blk)
 
             # ── Actionneurs ───────────────────────────────────────────────
