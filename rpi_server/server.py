@@ -2605,8 +2605,8 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
             return Response(p.read_text(encoding="utf-8"), mimetype="text/html")
         return "testeur_plc.html absent", 404
 
-    def on_plc_update(s):
-        # Appliquer la calibration aux températures avant émission
+    def _apply_calibration(s):
+        """Applique offset/gain/nom de calibration.json sur un snapshot analog. Mutation en place."""
         if calibration:
             for ch, info in s.get("analog", {}).items():
                 raw = info.get("celsius")
@@ -2616,6 +2616,11 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
                     cal_name = calibration.get_name(ch)
                     if cal_name and cal_name != ch:
                         info["name"] = cal_name
+        return s
+
+    def on_plc_update(s):
+        # Appliquer la calibration aux températures avant émission
+        _apply_calibration(s)
         sio.emit("plc_update", s)
         # ── Notifications Telegram ──────────────────────────────────────
         if hasattr(bot, 'check_alarms'):
@@ -2632,7 +2637,7 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
     def index(): return render_template("index.html")
 
     @app.route("/api/state")
-    def api_state(): return jsonify(engine.snapshot())
+    def api_state(): return jsonify(_apply_calibration(engine.snapshot()))
 
     @app.route("/api/status")
     def api_status():
@@ -3632,25 +3637,31 @@ def main():
         mqtt_bridge.configure_blocks(prog if isinstance(prog, list) else [])
     engine.load_program = _load_and_configure
 
-    # Hook : publie les RF des blocs MQTT publish apres chaque scan
-    _orig_update = getattr(engine, 'on_update', None)
-    def _on_update_mqtt(snap):
-        regs = snap.get("registers", {})
-        for rf in list(mqtt_bridge._pubs.keys()):
-            if rf in regs:
-                mqtt_bridge.publish(rf, regs[rf])
-        if _orig_update:
-            _orig_update(snap)
-    engine.on_update = _on_update_mqtt
-
     # Bot Telegram
-    bot = TelegramBot(config, engine, recipes)
+    bot = TelegramBot(config, engine, recipes, calibration=calibration)
     bot.start()
 
     # Démarrer Flask EN PREMIER — avant le scan GPIO
     if not args.no_web and config.get("web_enabled", True):
         start_web(engine, db, port, recipes, backup, bot, calibration)
         import time as _tw; _tw.sleep(1)  # laisser Flask lier le port
+
+    # Hook : publie les RF des blocs MQTT publish apres chaque scan.
+    # IMPORTANT : placé APRES start_web() et CHAINE (au lieu d'écraser) le hook
+    # que start_web() installe sur engine.on_update (calibration.apply() +
+    # notifications Telegram + emission socket.io). Avant ce correctif, ce hook
+    # étant posé AVANT start_web(), l'affectation faite par start_web() écrasait
+    # celui-ci silencieusement sur les déploiements où l'ordre était inversé,
+    # empêchant l'offset/gain de calibration de s'appliquer aux mesures.
+    _orig_update = getattr(engine, 'on_update', None)
+    def _on_update_mqtt(snap):
+        if _orig_update:
+            _orig_update(snap)
+        regs = snap.get("registers", {})
+        for rf in list(mqtt_bridge._pubs.keys()):
+            if rf in regs:
+                mqtt_bridge.publish(rf, regs[rf])
+    engine.on_update = _on_update_mqtt
 
     if config.get("auto_start", True) and program:
         engine.start(); log.info("Scan démarré automatiquement")

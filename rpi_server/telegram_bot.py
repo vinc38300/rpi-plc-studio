@@ -63,10 +63,11 @@ def _safe_name(name: str) -> str:
 class TelegramBot:
     POLL_TIMEOUT = 25
 
-    def __init__(self, config: dict, engine, recipe_manager=None):
+    def __init__(self, config: dict, engine, recipe_manager=None, calibration=None):
         self.cfg            = config.get("telegram", {})
         self.engine         = engine
         self.recipes        = recipe_manager
+        self.calibration    = calibration  # CalibrationManager — seuils d'alarme par sonde
         self.enabled        = self.cfg.get("enabled", False)
         self.token          = self.cfg.get("token", "")
         self.chat_ids       = [str(c) for c in self.cfg.get("chat_ids", [])]
@@ -197,6 +198,17 @@ class TelegramBot:
 
     # ── Surveillance ──────────────────────────────────────────────────────────
 
+    def _alarm_thresholds(self, ana_id: str) -> tuple:
+        """Seuils (haut, bas) pour une sonde : calibration.json si dispo,
+        sinon repli sur le seuil global de la config Telegram."""
+        if self.calibration is not None:
+            try:
+                hi, lo = self.calibration.get_alarms(ana_id)
+                return float(hi), float(lo)
+            except Exception:
+                pass
+        return self.alarm_high, self.alarm_low
+
     def check_alarms(self, analog: dict):
         if not self.enabled or not self.chat_ids:
             return
@@ -229,18 +241,19 @@ class TelegramBot:
             if t < -60 or t > 150:
                 continue
             name = sensor_names.get(ana_id) or info.get("name", ana_id)
+            hi, lo = self._alarm_thresholds(ana_id)
             khi, klo = f"{ana_id}_hi", f"{ana_id}_lo"
-            if t > self.alarm_high:
+            if t > hi:
                 if now - self._last_alarm.get(khi, 0) > self._alarm_cooldown:
                     self._last_alarm[khi] = now
                     self.send(f"🔴 *ALARME HAUTE — {_md_escape(name)}*\n"
-                              f"Température : *{t:.1f}°C* (seuil {self.alarm_high}°C)\n"
+                              f"Température : *{t:.1f}°C* (seuil {hi}°C)\n"
                               f"_{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}_")
-            elif t < self.alarm_low:
+            elif t < lo:
                 if now - self._last_alarm.get(klo, 0) > self._alarm_cooldown:
                     self._last_alarm[klo] = now
                     self.send(f"🔵 *ALARME GEL — {_md_escape(name)}*\n"
-                              f"Température : *{t:.1f}°C* (seuil {self.alarm_low}°C)\n"
+                              f"Température : *{t:.1f}°C* (seuil {lo}°C)\n"
                               f"_{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}_")
             else:
                 self._last_alarm.pop(khi, None)
@@ -302,8 +315,9 @@ class TelegramBot:
                 t    = info.get("celsius")
                 name = info.get("name", aid)
                 if t is not None and t == t:
-                    icon = ("🔴" if t > self.alarm_high
-                            else "🔵" if t < self.alarm_low else "🟢")
+                    hi, lo = self._alarm_thresholds(aid)
+                    icon = ("🔴" if t > hi
+                            else "🔵" if t < lo else "🟢")
                     lines.append(f"  {icon} {_md_escape(name)} : *{t:.1f}°C*")
             actifs = [cfg.get("name", f"GPIO{p}") for p, cfg in gpio.items()
                       if cfg.get("mode") == "output" and cfg.get("value")]
@@ -589,8 +603,9 @@ class TelegramBot:
                     continue
                 # Nom : depuis le mapping SENSOR, sinon depuis la config analog
                 name = sensor_names.get(aid) or info.get("name", aid)
-                icon = ("🔴" if t > self.alarm_high
-                        else "🔵" if t < self.alarm_low else "🟢")
+                hi, lo = self._alarm_thresholds(aid)
+                icon = ("🔴" if t > hi
+                        else "🔵" if t < lo else "🟢")
                 lines.append(f"{icon} *{_md_escape(name)}* : {t:.1f}°C")
                 shown += 1
 

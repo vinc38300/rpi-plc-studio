@@ -180,6 +180,29 @@ header .sp{flex:1;}
   color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;
   display:none;}
 .temp-card.alarm .temp-alarm-badge{display:block;}
+.temp-thresh{font-size:10px;color:var(--text3);margin-top:6px;cursor:pointer;
+  display:inline-block;padding:2px 8px;border-radius:10px;background:var(--bg3);
+  border:1px solid var(--border);transition:all .15s;}
+.temp-thresh:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── CALIBRATION ── */
+.cal-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;transition:border-color .3s,background .3s;}
+.cal-card.cal-flash{border-color:var(--accent);background:#0d1f35;}
+.cal-card.cal-disabled{opacity:.55;}
+.cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.cal-live{font-size:13px;font-weight:700;color:var(--cyan);}
+.cal-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;
+  display:block;margin:8px 0 4px;}
+.cal-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);
+  padding:7px 10px;border-radius:var(--r2);font-size:13px;font-family:var(--font);box-sizing:border-box;}
+.cal-input.high{color:var(--red);}
+.cal-input.low{color:var(--accent);}
+.cal-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.cal-check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);
+  margin:10px 0 4px;cursor:pointer;}
+.cal-actions{display:flex;gap:8px;margin-top:10px;}
+.cal-actions .btn{flex:1;padding:8px 10px;font-size:12px;min-height:38px;}
 
 /* ── SORTIE RELAIS ── */
 .relay-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
@@ -390,24 +413,27 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0;}
 
 <!-- ══ PAGE TEMPÉRATURES ══ -->
 <div class="page" id="page-temperatures">
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
     <div style="font-size:13px;color:var(--text2)">
-      Seuil alarme :
-      <input type="number" id="alarm-threshold" value="85" min="0" max="200" step="1"
+      Seuils par défaut :
+      <input type="number" id="alarm-threshold" value="90" min="0" max="200" step="1"
         style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);
                padding:4px 8px;border-radius:var(--r2);font-size:13px;text-align:center;">
-      °C
-    </div>
-    <div style="font-size:13px;color:var(--text2)">
-      Seuil bas :
-      <input type="number" id="alarm-low" value="5" min="-50" max="100" step="1"
+      °C haut /
+      <input type="number" id="alarm-low" value="3" min="-50" max="100" step="1"
         style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);
                padding:4px 8px;border-radius:var(--r2);font-size:13px;text-align:center;">
-      °C
+      °C bas
     </div>
+    <button class="btn" onclick="applyGlobalThresholds()">⇩ Appliquer à toutes les sondes</button>
     <button class="btn primary" onclick="showTab('historique',document.querySelectorAll('.tab')[2])">
       📈 Voir historique
     </button>
+  </div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:16px;">
+    Chaque sonde a maintenant son propre seuil, réglable dans l'onglet
+    <a href="#" onclick="event.preventDefault();showTab('calibration',document.querySelectorAll('.tab')[10])" style="color:var(--accent)">🔧 Calibration</a>.
+    Cliquez le badge de seuil sur une sonde pour la régler directement.
   </div>
   <div class="grid-auto" id="temps-grid"></div>
 </div>
@@ -711,8 +737,8 @@ sudo tailscale up
 <div class="page" id="page-calibration">
   <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
     <div style="font-size:13px;color:var(--text2)">
-      Corriger les écarts de mesure de chaque sonde NTC10K.
-      Offset = valeur ajoutée. Gain = facteur multiplicatif (défaut 1.0).
+      Corriger les écarts de mesure de chaque sonde NTC10K et régler ses seuils d'alarme individuels.
+      Offset = valeur ajoutée. Gain = facteur multiplicatif (défaut 1.0). Décochez « actifs » pour ignorer offset/gain sans toucher aux seuils.
     </div>
     <button class="btn primary" onclick="loadCalibration()">⟳ Actualiser</button>
     <a href="/api/report/html?hours=24" target="_blank" class="btn success">📄 Rapport 24h</a>
@@ -795,8 +821,17 @@ let synChart  = null;
 let miniCharts = {};
 let selectedSonde = 'ANA0';
 let firstBuild = true;
-let alarmThreshold = 85;
-let alarmLow = 5;
+let alarmThreshold = 90;
+let alarmLow = 3;
+let calData = {}; // cache calibration.json: {ANA0:{name,offset,gain,alarm_high,alarm_low,enabled}, ...}
+
+function getThresholds(id){
+  const c = calData[id];
+  if(c && c.alarm_high!=null && c.alarm_low!=null){
+    return {high:c.alarm_high, low:c.alarm_low};
+  }
+  return {high:alarmThreshold, low:alarmLow};
+}
 
 // ═══════════════════════════════════════════════════════════
 // SOCKET.IO
@@ -830,6 +865,7 @@ function renderAll(s){
 
   updateAlarms(analog, s);
   updateRtBuffers(analog);
+  updateCalLive(analog);
 
   renderSynoptique(s, analog, gpio, regs, mem);
   renderTemperatures(analog);
@@ -973,11 +1009,12 @@ function renderSynoptique(s, analog, gpio, regs, mem){
 }
 
 function mkTempMini(id, name, t){
+  const th = getThresholds(id);
   const pct = t!=null&&!isNaN(t) ? Math.min(100,Math.max(0,(t+50)/250*100)) : 0;
-  const cls  = t==null||isNaN(t)?'nc':t>alarmThreshold?'hot':t>50?'warm':t<alarmLow?'cold':'ok';
-  const barColor = t>alarmThreshold?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+  const cls  = t==null||isNaN(t)?'nc':t>th.high?'hot':t>50?'warm':t<th.low?'cold':'ok';
+  const barColor = t>th.high?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
   const d = document.createElement('div');
-  d.className='temp-card'+(t!=null&&t>alarmThreshold?' alarm':'');
+  d.className='temp-card'+(t!=null&&t>th.high?' alarm':'');
   d.id=`mini-tc-${id}`;
   d.innerHTML=`<div class="temp-alarm-badge">ALARME</div>
     <div class="temp-name"><span>${name}</span>
@@ -1019,8 +1056,8 @@ function updateSynChart(){
 let tempsBuilt = false;
 
 function renderTemperatures(analog){
-  alarmThreshold = parseFloat(document.getElementById('alarm-threshold')?.value||85);
-  alarmLow       = parseFloat(document.getElementById('alarm-low')?.value||5);
+  alarmThreshold = parseFloat(document.getElementById('alarm-threshold')?.value||90);
+  alarmLow       = parseFloat(document.getElementById('alarm-low')?.value||3);
 
   const grid = document.getElementById('temps-grid');
   if(!grid) return;
@@ -1035,8 +1072,9 @@ function renderTemperatures(analog){
       card.className='temp-card';
       card.id=`tc-${id}`;
       const t = v.celsius;
+      const th = getThresholds(id);
       const pct = t!=null&&!isNaN(t)?Math.min(100,Math.max(0,(t+50)/250*100)):0;
-      const barColor = t>alarmThreshold?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+      const barColor = t>th.high?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
       card.innerHTML=`
         <div class="temp-alarm-badge">ALARME</div>
         <div class="temp-name">
@@ -1048,24 +1086,30 @@ function renderTemperatures(analog){
         <div class="temp-meta">
           <span id="tmeta-${id}">${v.voltage!=null?(v.voltage.toFixed(3)+'V'):'—'} ${v.sim?'SIM':'HW'}</span>
           <span>${v.probe||'NTC10K'}</span>
-        </div>`;
+        </div>
+        <div class="temp-thresh" id="tth-${id}" title="Régler la calibration et les seuils de cette sonde">🔧 ${th.high}° / ${th.low}°</div>`;
       card.onclick = ()=>{ selectedSonde=id; document.getElementById('syn-chart-label').textContent=v.name||id; };
+      const thEl = card.querySelector(`#tth-${id}`);
+      if(thEl) thEl.onclick = (e)=>{ e.stopPropagation(); goToCalibration(id); };
       grid.appendChild(card);
     });
   } else {
     list.forEach(([id,v])=>{
       const t = v.celsius;
+      const th = getThresholds(id);
       const pct = t!=null&&!isNaN(t)?Math.min(100,Math.max(0,(t+50)/250*100)):0;
-      const barColor = t>alarmThreshold?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
-      const cls = t==null||isNaN(t)?'nc':t>alarmThreshold?'hot':t>50?'warm':t<alarmLow?'cold':'ok';
+      const barColor = t>th.high?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+      const cls = t==null||isNaN(t)?'nc':t>th.high?'hot':t>50?'warm':t<th.low?'cold':'ok';
       const tvEl = document.getElementById(`tv-${id}`);
       if(tvEl){ tvEl.textContent=t!=null&&!isNaN(t)?t.toFixed(1)+'°C':'N/C'; tvEl.className=`temp-val ${cls}`; }
       const tbEl = document.getElementById(`tb-${id}`);
       if(tbEl){ tbEl.style.width=pct+'%'; tbEl.style.background=barColor; }
       const tmEl = document.getElementById(`tmeta-${id}`);
       if(tmEl) tmEl.textContent=`${v.voltage!=null?(v.voltage.toFixed(3)+'V'):'—'} ${v.sim?'SIM':'HW'}`;
+      const tthEl = document.getElementById(`tth-${id}`);
+      if(tthEl) tthEl.textContent = `🔧 ${th.high}° / ${th.low}°`;
       const card = document.getElementById(`tc-${id}`);
-      if(card) card.className='temp-card'+(t!=null&&t>alarmThreshold?' alarm':'');
+      if(card) card.className='temp-card'+(t!=null&&t>th.high?' alarm':'');
     });
   }
 }
@@ -1425,16 +1469,17 @@ function updateMiniCharts(){
 // ALARMES
 // ═══════════════════════════════════════════════════════════
 function updateAlarms(analog, s){
-  alarmThreshold=parseFloat(document.getElementById('alarm-threshold')?.value||85);
-  alarmLow=parseFloat(document.getElementById('alarm-low')?.value||5);
+  alarmThreshold=parseFloat(document.getElementById('alarm-threshold')?.value||90);
+  alarmLow=parseFloat(document.getElementById('alarm-low')?.value||3);
   const now=Date.now();
   Object.entries(analog).forEach(([id,v])=>{
     const t=v.celsius;
     if(t==null||isNaN(t)) return;
-    if(t>alarmThreshold){
-      addAlarm(id,'high',`${v.name||id} : ${t.toFixed(1)}°C > seuil ${alarmThreshold}°C`,now);
-    } else if(t<alarmLow){
-      addAlarm(id,'low',`${v.name||id} : ${t.toFixed(1)}°C < seuil bas ${alarmLow}°C`,now);
+    const th=getThresholds(id);
+    if(t>th.high){
+      addAlarm(id,'high',`${v.name||id} : ${t.toFixed(1)}°C > seuil ${th.high}°C`,now);
+    } else if(t<th.low){
+      addAlarm(id,'low',`${v.name||id} : ${t.toFixed(1)}°C < seuil bas ${th.low}°C`,now);
     } else {
       clearAlarmFor(id);
     }
@@ -1826,6 +1871,133 @@ async function logout(){
   await api('/api/logout','POST');
   window.location.href='/login';
 }
+
+// ═══════════════════════════════════════════════════════════
+// CALIBRATION (offset/gain + seuils d'alarme par sonde)
+// ═══════════════════════════════════════════════════════════
+async function loadCalibrationSilent(){
+  const d = await api('/api/calibration');
+  if(d) calData = d;
+  return d;
+}
+
+// Met à jour uniquement la valeur "live" affichée en haut de chaque carte
+// Calibration, sans reconstruire toute la grille. Appelé à chaque plc_update.
+// Sans effet (getElementById renvoie null) si l'onglet Calibration n'a jamais
+// été ouvert — pas besoin de vérifier l'existence de la grille au préalable.
+function updateCalLive(analog){
+  Object.entries(analog).forEach(([id,v])=>{
+    const el = document.getElementById(`cal-live-${id}`);
+    if(!el) return;
+    const t = v.celsius;
+    el.textContent = (t!=null && !isNaN(t)) ? t.toFixed(1)+'°C' : 'N/C';
+  });
+}
+
+async function loadCalibration(){
+  const d = await loadCalibrationSilent();
+  const grid = document.getElementById('cal-grid');
+  if(!grid) return;
+  if(!d){ toast('Erreur chargement calibration','err'); return; }
+
+  const chans = Object.keys(d).sort((a,b)=>parseInt(a.slice(3))-parseInt(b.slice(3)));
+  grid.innerHTML = chans.map(ch=>{
+    const c = d[ch]||{};
+    const live = state.analog?.[ch]?.celsius;
+    const liveTxt = (live!=null && !isNaN(live)) ? live.toFixed(1)+'°C' : 'N/C';
+    const en = c.enabled!==false;
+    return `
+    <div class="cal-card${en?'':' cal-disabled'}" id="cal-card-${ch}">
+      <div class="cal-head">
+        <span class="temp-addr">${ADS_LABEL[ch]||ch}</span>
+        <span class="cal-live" id="cal-live-${ch}">${liveTxt}</span>
+      </div>
+      <label class="cal-lbl">Nom</label>
+      <input class="cal-input" id="cal-name-${ch}" type="text"
+        value="${(c.name||'').replace(/"/g,'&quot;')}" placeholder="${ch}">
+      <div class="cal-row2">
+        <div><label class="cal-lbl">Offset (°C)</label>
+          <input class="cal-input" id="cal-offset-${ch}" type="number" step="0.1" value="${c.offset??0}"></div>
+        <div><label class="cal-lbl">Gain</label>
+          <input class="cal-input" id="cal-gain-${ch}" type="number" step="0.01" value="${c.gain??1}"></div>
+      </div>
+      <div class="cal-row2">
+        <div><label class="cal-lbl">Alarme haute (°C)</label>
+          <input class="cal-input high" id="cal-high-${ch}" type="number" step="1" value="${c.alarm_high??90}"></div>
+        <div><label class="cal-lbl">Alarme basse (°C)</label>
+          <input class="cal-input low" id="cal-low-${ch}" type="number" step="1" value="${c.alarm_low??3}"></div>
+      </div>
+      <label class="cal-check">
+        <input type="checkbox" id="cal-en-${ch}" ${en?'checked':''}
+          onchange="this.closest('.cal-card').classList.toggle('cal-disabled', !this.checked)">
+        Offset/gain actifs
+      </label>
+      <div class="cal-actions">
+        <button class="btn primary" onclick="saveCalibration('${ch}')">💾 Enregistrer</button>
+        <button class="btn danger" onclick="resetCalibration('${ch}')" title="Remet offset=0 et gain=1.0 (garde le nom et les seuils)">↺ Offset/gain</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function saveCalibration(ch){
+  const body = {
+    name:       document.getElementById(`cal-name-${ch}`)?.value.trim()||'',
+    offset:     parseFloat(document.getElementById(`cal-offset-${ch}`)?.value||0),
+    gain:       parseFloat(document.getElementById(`cal-gain-${ch}`)?.value||1),
+    alarm_high: parseFloat(document.getElementById(`cal-high-${ch}`)?.value||90),
+    alarm_low:  parseFloat(document.getElementById(`cal-low-${ch}`)?.value||3),
+    enabled:    document.getElementById(`cal-en-${ch}`)?.checked!==false,
+  };
+  const r = await api(`/api/calibration/${ch}`,'POST',body);
+  if(r?.ok){
+    toast(`${ch} : calibration enregistrée`,'ok');
+    calData[ch] = {...calData[ch], ...body};
+    if(state.analog) renderTemperatures(state.analog);
+  } else toast('Erreur sauvegarde calibration','err');
+}
+
+async function resetCalibration(ch){
+  const r = await api('/api/calibration/reset','POST',{channel:ch});
+  if(r?.ok){
+    toast(`${ch} : offset/gain réinitialisés`,'ok');
+    await loadCalibration();
+    if(state.analog) renderTemperatures(state.analog);
+  } else toast('Erreur réinitialisation','err');
+}
+
+async function applyGlobalThresholds(){
+  const hi = parseFloat(document.getElementById('alarm-threshold')?.value||90);
+  const lo = parseFloat(document.getElementById('alarm-low')?.value||3);
+  if(!confirm(`Appliquer ${hi}°C (haut) / ${lo}°C (bas) à toutes les sondes ? Les seuils individuels actuels seront écrasés.`)) return;
+  await loadCalibrationSilent();
+  for(let i=0;i<12;i++){
+    const ch = `ANA${i}`;
+    const cur = calData[ch]||{};
+    await api(`/api/calibration/${ch}`,'POST',{
+      name: cur.name||'', offset: cur.offset??0, gain: cur.gain??1,
+      alarm_high: hi, alarm_low: lo, enabled: cur.enabled!==false,
+    });
+  }
+  await loadCalibrationSilent();
+  if(state.analog) renderTemperatures(state.analog);
+  toast('Seuils appliqués à toutes les sondes','ok');
+}
+
+async function goToCalibration(id){
+  showTab('calibration', document.querySelectorAll('.tab')[10]);
+  await loadCalibration();
+  const card = document.getElementById(`cal-card-${id}`);
+  if(card){
+    card.scrollIntoView({behavior:'smooth', block:'center'});
+    card.classList.add('cal-flash');
+    setTimeout(()=>card.classList.remove('cal-flash'), 1500);
+  }
+}
+
+// Charger la calibration dès le démarrage pour que les seuils par sonde
+// soient disponibles avant même d'ouvrir l'onglet Calibration
+loadCalibrationSilent();
 
 // Mettre à jour showTab
 const _origShowTab = showTab;
