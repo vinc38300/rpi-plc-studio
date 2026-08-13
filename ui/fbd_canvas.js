@@ -193,6 +193,7 @@ const DEFS = {
   // Analogique
   PT_IN:    {cat:'Analogique', col:'#0a1f2a',hdr:'#102535',bdg:'#00d4ff',ins:[],            outs:['TEMP','FAULT'],desc:'Sonde PT100/PT1000'},
   ANA_IN:   {cat:'Analogique', col:'#0a1a2a',hdr:'#102030',bdg:'#58cfff',ins:[],            outs:['VAL'],        desc:'Entrée ADS1115 (0-5V)'},
+  DS_IN:    {cat:'Analogique', col:'#0a2a1f',hdr:'#0f3527',bdg:'#00ffa0',ins:[],            outs:['TEMP'],       desc:'Sonde DS18B20 (1-Wire)'},
   COMPARE_F:{cat:'Analogique', col:'#2a1f0a',hdr:'#352810',bdg:'#ffaa00',ins:['IN','SP'],   outs:['GT','LT','EQ'],desc:'Comparaison flottante'},
   SCALE:    {cat:'Analogique', col:'#1a2a1a',hdr:'#203520',bdg:'#80ff80',ins:['IN'],        outs:['OUT'],        desc:'Mise à l\'échelle'},
   PID:      {cat:'Analogique', col:'#1a0a2a',hdr:'#250f35',bdg:'#d080ff',ins:['PV','SP','EN'],outs:['OUT','ERR'], desc:'Régulateur PID'},
@@ -722,6 +723,7 @@ let GPIO_OUT  = [5, 6, 11, 13, 9, 19, 10, 26, 22, 21, 27, 20, 17, 16, 4, 12];  /
 let GPIO_NAMES = {"4":"Sortie K15","5":"Sortie K1","6":"Sortie K2","7":"Entr\u00e9e TOR 8","8":"Entr\u00e9e TOR 7","9":"Sortie K5","10":"Sortie K7","11":"Sortie K3","12":"Sortie K16","13":"Sortie K4","14":"Entr\u00e9e TOR 1","15":"Entr\u00e9e TOR 2","16":"Sortie K14","17":"Sortie K13","18":"Entr\u00e9e TOR 3","19":"Sortie K6","20":"Sortie K12","21":"Sortie K10","22":"Sortie K9","23":"Entr\u00e9e TOR 4","24":"Entr\u00e9e TOR 5","25":"Entr\u00e9e TOR 6","26":"Sortie K8","27":"Sortie K11"};  // initialisé depuis config.json
 const MEMS      = Array.from({length:16},(_,i)=>`M${i}`);
 const ANA_REFS  = ['PT0','PT1','PT2','PT3','ANA0','ANA1','ANA2','ANA3'];
+const DS_REFS   = Array.from({length:8},(_,i)=>`DS${i}`);   // DS0..DS7 (cf core/plc_engine.py + rpi_server/server.py)
 const REG_REFS  = Array.from({length:256},(_,i)=>`RF${i}`);  // RF0..RF255 (RF0..RF99 manuels, RF100+ compilateur de fils)
 const PT_TYPES  = [{v:'pt100',l:'PT100 (100Ω)'},{v:'pt1000',l:'PT1000 (1kΩ)'}];
 const ADS_CH    = [{v:0,l:'CH0'},{v:1,l:'CH1'},{v:2,l:'CH2'},{v:3,l:'CH3'}];
@@ -1128,6 +1130,7 @@ function defParams(t){
   if(['CTU','CTD','CTUD'].includes(t))return{preset:10};
   if(t==='PT_IN')   return{analog_ref:'PT0',pt_type:'pt100',spi_ch:0,reg_out:'RF0',wires:3,name:'Sonde PT100'};
   if(t==='ANA_IN')  return{analog_ref:'ANA0',ads_ch:0,reg_out:'RF1',name:'Entrée analogique'};
+  if(t==='DS_IN')   return{analog_ref:'DS0',rom_id:'',resolution:12,reg_out:'RF2',name:'Sonde DS18B20'};
   if(t==='COMPARE_F')return{reg_ref:'RF0',threshold:80.0,hysteresis:1.0,op:'gt'};
   if(t==='SCALE')   return{reg_ref:'RF1',reg_out:'RF2',in_lo:0.0,in_hi:5.0,out_lo:0.0,out_hi:100.0};
   if(t==='PID')     return{pv_ref:'RF0',setpoint:50.0,kp:1.0,ki:0.1,kd:0.0,out_min:0.0,out_max:100.0,reg_out:'RF3'};
@@ -1847,7 +1850,7 @@ function drawBlock(b,sel){
 function _getSimValue(b){
   if(!_simState||!b.params)return null;
   const p=b.params;
-  const ANALOG_TYPES=['SENSOR','PT_IN','ANA_IN','ADD','SUB','MUL','DIV',
+  const ANALOG_TYPES=['SENSOR','PT_IN','ANA_IN','DS_IN','ADD','SUB','MUL','DIV',
     'AVG','MIN','MAX','ABS','SQRT','MOD','POW','SCALE','FILT1','INTEG',
     'DERIV','DEADB','RAMP','CLAMP','BACKUP','AV','STOAV','CONN','CONN_TX','CONN_RX'];
   if(!ANALOG_TYPES.includes(b.type))return null;
@@ -1874,8 +1877,8 @@ function _getSimValue(b){
     return null;
   }
 
-  // SENSOR / PT_IN / ANA_IN → valeur °C ou tension
-  if(['SENSOR','PT_IN','ANA_IN'].includes(b.type)){
+  // SENSOR / PT_IN / ANA_IN / DS_IN → valeur °C ou tension
+  if(['SENSOR','PT_IN','ANA_IN','DS_IN'].includes(b.type)){
     const ref=p.analog_ref||p.reg_out;
     if(ref&&_simState.analog&&_simState.analog[ref]!=null){
       const celsius=_simState.analog[ref].celsius??_simState.analog[ref];
@@ -1942,6 +1945,7 @@ function pdisp(b){
   if(['CTU','CTD','CTUD'].includes(b.type))return`PV=${p.preset}`;
   if(b.type==='PT_IN')  return p.name||p.analog_ref||'PT0';
   if(b.type==='ANA_IN') return p.name||p.analog_ref||'ANA0';
+  if(b.type==='DS_IN')  return p.name||p.analog_ref||'DS0';
   if(b.type==='COMPARE_F')return`${p.reg_ref} ${p.op||'>'} ${p.threshold}`;
   if(b.type==='SCALE')  return`${p.reg_ref}→${p.reg_out}`;
   if(b.type==='PID')    return`SP=${p.setpoint} Kp=${p.kp}`;
@@ -2546,6 +2550,23 @@ function showBlockProps(b){
       <input class="pi" id="sim_val_${b.id}" type="range" min="0" max="5" step="0.01"
         value="${b._simVal||0}" style="flex:1" data-bid="${b.id}">
       <span id="sim_lbl_${b.id}" style="color:#58cfff;min-width:50px">${(b._simVal||0).toFixed(3)}V</span>
+    </div>`;
+  }else if(b.type==='DS_IN'){
+    h+=pTxt('name','Nom de la sonde',b.params.name||'Sonde DS18B20');
+    h+=pSel('analog_ref','Référence',b.params.analog_ref||'DS0',DS_REFS.map(r=>({v:r,l:r})));
+    h+=pTxt('rom_id','ID ROM 1-Wire (optionnel)',b.params.rom_id||'');
+    h+=`<div style="color:var(--fbd-text3);font-size:9px;padding:0 2px 4px">
+      Laisser vide = assignation automatique par ordre de découverte sur le bus.
+      Ex: 28-000008a1b2c3 (voir config.json → analog.ds18b20).</div>`;
+    h+=pSel('resolution','Résolution',b.params.resolution||12,[
+      {v:9,l:'9 bits (0.5°C, ~94ms)'},{v:10,l:'10 bits (0.25°C, ~188ms)'},
+      {v:11,l:'11 bits (0.125°C, ~375ms)'},{v:12,l:'12 bits (0.0625°C, ~750ms)'}]);
+    h+=pRF('reg_out','Registre sortie (°C)',b.params.reg_out||'RF2');
+    h+=`<hr class="psep"><span class="pl">Simulation — Valeur °C</span>`;
+    h+=`<div style="display:flex;gap:6px;align-items:center">
+      <input class="pi" id="sim_val_${b.id}" type="range" min="-40" max="125" step="0.1"
+        value="${b._simVal??20}" style="flex:1" data-bid="${b.id}">
+      <span id="sim_lbl_${b.id}" style="color:#00ffa0;min-width:50px">${(b._simVal??20).toFixed(1)}°C</span>
     </div>`;
   }else if(b.type==='COMPARE_F'){
     h+=pRF('reg_ref','Registre mesuré',b.params.reg_ref||'RF0');
@@ -3193,17 +3214,20 @@ function showBlockProps(b){
     });
   });
 
-  // Curseur simulation analogique (PT_IN / ANA_IN)
+  // Curseur simulation analogique (PT_IN / ANA_IN / DS_IN)
   const simSlider=document.getElementById(`sim_val_${b.id}`);
   if(simSlider){
     simSlider.addEventListener('input',e=>{
       const val=parseFloat(e.target.value);
       b._simVal=val;
       const lbl=document.getElementById(`sim_lbl_${b.id}`);
-      if(lbl) lbl.textContent=b.type==='PT_IN'?val.toFixed(1)+'°C':val.toFixed(3)+'V';
+      if(lbl) lbl.textContent=(b.type==='PT_IN'||b.type==='DS_IN')?val.toFixed(1)+'°C':val.toFixed(3)+'V';
       if(window.pybridge){
-        const ref=b.params.analog_ref||(b.type==='PT_IN'?'PT0':'ANA0');
-        window.pybridge.set_analog_sim(ref, val);
+        const ref=b.params.analog_ref||(b.type==='PT_IN'?'PT0':b.type==='DS_IN'?'DS0':'ANA0');
+        // DS18B20 est un capteur numérique : pas de tension à simuler,
+        // on force directement la température (comme le forçage °C existant).
+        if(b.type==='DS_IN') window.pybridge.set_analog_celsius(ref, val);
+        else window.pybridge.set_analog_sim(ref, val);
       }
     });
   }
@@ -3849,6 +3873,7 @@ function updateActiveStates(state){
       case'PID':{const pid=state.pids&&state.pids[b.id];b.active=pid?Math.abs(pid.output)>0.01:false;break;}
       case'PT_IN':
       case'ANA_IN':
+      case'DS_IN':
       case'SENSOR':{
         const ref=p.reg_out||p.analog_ref||'RF0';
         const rv=state.registers&&state.registers[ref];

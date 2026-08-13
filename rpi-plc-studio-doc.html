@@ -11,7 +11,7 @@
   --border: #30363d; --text: #e6edf3; --text2: #8b949e; --text3: #484f58;
   --accent: #58a6ff; --green: #3fb950; --red: #f85149; --amber: #d29922;
   --purple: #bc8cff; --teal: #39d353; --cyan: #00d4ff; --orange: #f0883e;
-  --r: 8px; --font: 'Segoe UI', system-ui, sans-serif;
+  --r: 8px; --font: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,19 +35,21 @@ nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 }
 .nav-logo h1 { font-size: 18px; font-weight: 800; color: var(--accent); }
 .nav-logo h1 span { color: var(--green); }
-.nav-logo p { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.nav-logo p { font-size: 12px; color: var(--text3); margin-top: 2px; }
 .nav-section {
-  padding: 14px 20px 4px; font-size: 10px; font-weight: 700;
-  color: var(--text3); text-transform: uppercase; letter-spacing: 1.5px;
+  padding: 14px 20px 4px; font-size: 12px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 1px;
+  flex-shrink: 0;
 }
 nav a {
-  display: block; padding: 6px 20px 6px 28px; font-size: 13px;
+  display: block; padding: 6px 20px 6px 28px; font-size: 14px;
   color: var(--text2); text-decoration: none; border-left: 2px solid transparent;
   transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 nav a:hover { color: var(--text); background: var(--bg3); }
 nav a.active { color: var(--accent); border-left-color: var(--accent); background: #0d1f35; }
-nav a.sub { padding-left: 36px; font-size: 12px; }
+nav a.sub { padding-left: 36px; font-size: 13px; }
 
 /* ── MAIN ── */
 main { max-width: 960px; padding: 48px 48px 80px; }
@@ -1053,6 +1055,11 @@ sudo i2cdetect -y 1
     <div class="block-ports"><span class="port-out">VAL (°C)</span></div>
   </div>
   <div class="block-card">
+    <div class="block-card-header"><span class="block-badge" style="color:#4fd1c5;border-color:#4fd1c540">DS_IN</span><span class="block-card-title">Sonde DS18B20 (1-Wire)</span></div>
+    <div class="block-card-desc">Lecture d'une sonde numérique DS18B20 sur le bus 1-Wire (GPIO4 par défaut, résistance de tirage 4,7 kΩ vers 3,3 V, <code>dtoverlay=w1-gpio</code>). Contrairement à SENSOR/ANA_IN, pas de pont diviseur ni de calcul résistance→°C : le capteur renvoie directement une valeur numérique, lue en tâche de fond sans bloquer le cycle PLC. Fusionnée dans le même cache que les sondes ANA → visible avec les mêmes commandes (SCADA, <code>/temp</code> Telegram, historique). Une sonde par référence <code>DSx</code> doit être déclarée dans <code>config.json → analog.ds18b20</code> (id, nom, et <code>serial</code> optionnel — laissé vide, la sonde est assignée par ordre de découverte sur le bus ; à renseigner explicitement si plusieurs sondes DS18B20 coexistent).</div>
+    <div class="block-ports"><span class="port-out">VAL (°C)</span></div>
+  </div>
+  <div class="block-card">
     <div class="block-card-header"><span class="block-badge" style="color:#ffaa00;border-color:#ffaa0040">COMPARE_F</span><span class="block-card-title">Comparateur flottant avec hystérésis</span></div>
     <div class="block-card-desc">Compare un registre RF à un seuil avec hystérésis pour éviter les oscillations. Opérations : &gt;, &lt;, ≥, ≤, = (±hystérésis). Sorties GT, LT, EQ selon le résultat.</div>
     <div class="block-ports"><span class="port-in">IN</span><span class="port-in">SP</span><span class="port-out">GT/LT/EQ</span></div>
@@ -1655,13 +1662,13 @@ T_celsius = T_kelvin - 273.15
 
 <h3>Déploiement manuel (ligne de commande)</h3>
 <pre><code><span class="comment"># Copier le dossier rpi_server sur le RPi</span>
-rsync -av rpi_server/ <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="fa8a93bacbc3c8d4cbccc2d4cbd4cbcaca">[email&#160;protected]</a>:~/rpi_server/
+rsync -av rpi_server/ pi@IP-RPi:~/rpi_server/
 
 <span class="comment"># Copier un programme spécifique</span>
-scp mon_programme.json <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="601009205159524e5156584e514e515050">[email&#160;protected]</a>:~/rpi_server/programme.json
+scp mon_programme.json pi@IP-RPi:~/rpi_server/programme.json
 
 <span class="comment"># Redémarrer le service</span>
-ssh <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="37475e77060e051906010f190619060707">[email&#160;protected]</a> "sudo systemctl restart rpi-plc"</code></pre>
+ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
 
 <h3 id="server">Serveur autonome — server.py</h3>
 <p>Le serveur tourne sur le RPi et réunit deux fonctions : le <strong>moteur PLC</strong> et l'<strong>interface web</strong>.</p>
@@ -2040,6 +2047,7 @@ sudo systemctl restart rpi-plc</code></pre>
   <tr><td>RF13</td><td>Heure courante (sortie LOCALTIME.HOUR)</td></tr>
   <tr><td>RF14</td><td>Jour du mois (sortie LOCALTIME.MDAY)</td></tr>
   <tr><td>RF15</td><td>Jour de la semaine (sortie LOCALTIME.WDAY)</td></tr>
+  <tr><td>RF16 et au-delà</td><td>Libres — le registre de sortie d'un bloc DS_IN (sondes DS18B20) n'est pas limité à une plage réservée, contrairement à RF0–RF11 pour les sondes ANA ; choisir n'importe quel RF non utilisé (ex. RF100)</td></tr>
 </table>
 
 <h3>Bits mémoire M0–M31</h3>
@@ -2059,7 +2067,8 @@ sudo systemctl restart rpi-plc</code></pre>
 <h3>Exemple 1 — Régulation de température simple</h3>
 <p>Maintenir une température à 60°C avec hystérésis de 2°C :</p>
 <pre><code><span class="comment">// Page 1 — Lecture sonde et comparaison</span>
-SENSOR(ref=ANA0) → RF0    <span class="comment">// Sonde 1 → RF0</span>
+SENSOR(ref=ANA0) → RF0    <span class="comment">// Sonde 1 (NTC, pont diviseur) → RF0</span>
+DS_IN(ref=DS0) → RF100    <span class="comment">// Sonde 1-Wire DS18B20 → RF100 (config.json → analog.ds18b20)</span>
 COMPARE_F(RF0, seuil=60, hyst=2, op=lt) → M0   <span class="comment">// T < 60°C ?</span>
 
 <span class="comment">// Page 2 — Activation relais</span>
@@ -3395,7 +3404,7 @@ else:
 
 </main>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 // Navigation active sur scroll
 const sections = document.querySelectorAll('h2[id], h3[id]');
 const n

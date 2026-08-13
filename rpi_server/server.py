@@ -280,6 +280,149 @@ class ADS1115Manager:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
+class DS18B20Manager:
+    """Gère les sondes numériques 1-Wire DS18B20 (bus unique, typiquement
+    GPIO4 + résistance pull-up 4.7kΩ, activé via dtoverlay=w1-gpio).
+
+    Contrairement à l'ADS1115 (pont diviseur + calcul résistance→°C), la
+    DS18B20 est un capteur numérique : le kernel Linux (module w1-therm)
+    expose chaque sonde sous /sys/bus/w1/devices/28-xxxxxxxxxxxx/w1_slave.
+    Lire ce fichier déclenche une conversion (~750ms en 12 bits) → la lecture
+    est faite dans un thread dédié pour ne jamais bloquer le cycle PLC.
+
+    Config (config.json → analog.ds18b20, optionnelle) :
+      [{"id":"DS0","name":"Sonde extérieure","serial":"28-000008a1b2c3"}, ...]
+    Si "serial" est omis, la sonde est assignée par ordre de découverte sur
+    le bus (pratique pour démarrer vite, mais l'ordre peut changer si une
+    sonde est débranchée/rebranchée — préférer le serial explicite en prod).
+    """
+    W1_BASE = Path("/sys/bus/w1/devices")
+    POLL_S  = 4.0   # période de lecture — largement > temps de conversion (~750ms)
+
+    def __init__(self, config):
+        self.ds_configs = config.get("analog", {}).get("ds18b20", [])
+        self._lock       = threading.Lock()
+        self._cache       = {}   # {id: {"celsius","name","serial","fault","sim"}}
+        self._sim         = {}   # {id: celsius} — simulation manuelle (mode non-RPi)
+        self._celsius_override = {}   # {id: celsius} — forçage panneau simulation
+        self._running     = False
+        self._thread      = None
+        self._available   = False
+        self._init()
+
+    def _init(self):
+        # Pré-remplir le cache pour affichage immédiat, avant la 1ère lecture
+        for cfg in self.ds_configs:
+            aid = cfg.get("id")
+            if not aid:
+                continue
+            self._cache[aid] = {"celsius": 20.0, "name": cfg.get("name", aid),
+                                 "serial": cfg.get("serial", ""), "fault": False,
+                                 "sim": not ON_RPI}
+        if not ON_RPI:
+            log.info("DS18B20 : mode simulation")
+            return
+        if not self.W1_BASE.exists():
+            log.warning("DS18B20 : /sys/bus/w1/devices absent — module w1-gpio/w1-therm "
+                        "chargé ? (dtoverlay=w1-gpio dans /boot/firmware/config.txt)")
+            return
+        self._available = True
+        self._running    = True
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="ds18b20-poll")
+        self._thread.start()
+        log.info("DS18B20 : thread de lecture 1-Wire démarré")
+
+    def _discover_serials(self):
+        """Liste les sondes 28-xxxx présentes sur le bus, triées (ordre stable)."""
+        try:
+            return sorted(p.name for p in self.W1_BASE.glob("28-*"))
+        except Exception:
+            return []
+
+    def _read_serial(self, serial):
+        """Lit et parse /sys/bus/w1/devices/{serial}/w1_slave.
+        Retourne (celsius, fault) — fault=True si CRC invalide, sonde
+        débranchée, ou lecture hors plage physique DS18B20 (-55..125°C)."""
+        path = self.W1_BASE / serial / "w1_slave"
+        try:
+            raw = path.read_text()
+        except Exception:
+            return None, True
+        lines = raw.strip().splitlines()
+        if len(lines) < 2 or not lines[0].strip().endswith("YES"):
+            return None, True   # CRC invalide
+        idx = lines[1].find("t=")
+        if idx == -1:
+            return None, True
+        try:
+            celsius = int(lines[1][idx + 2:]) / 1000.0
+        except ValueError:
+            return None, True
+        if celsius <= -55.0 or celsius >= 125.0:
+            return None, True   # hors plage DS18B20 → lecture aberrante
+        return celsius, False
+
+    def _poll_loop(self):
+        while self._running:
+            t0 = time.monotonic()
+            try:
+                configured = {c.get("serial"): c for c in self.ds_configs if c.get("serial")}
+                seen = set()
+                for serial, cfg in configured.items():
+                    aid = cfg.get("id", serial)
+                    celsius, fault = self._read_serial(serial)
+                    self._store(aid, celsius, fault, cfg.get("name", aid), serial)
+                    seen.add(serial)
+                # Sondes non configurées explicitement (pas de "serial") →
+                # assignées par ordre de découverte sur le bus
+                unconf_ids = [c.get("id") for c in self.ds_configs if c.get("id") and not c.get("serial")]
+                auto_serials = [s for s in self._discover_serials() if s not in seen]
+                for aid, serial in zip(unconf_ids, auto_serials):
+                    celsius, fault = self._read_serial(serial)
+                    self._store(aid, celsius, fault, aid, serial)
+            except Exception as e:
+                log.warning(f"DS18B20 poll: {e}")
+            elapsed = time.monotonic() - t0
+            time.sleep(max(0.5, self.POLL_S - elapsed))
+
+    def _store(self, aid, celsius, fault, name, serial):
+        with self._lock:
+            if aid in self._celsius_override:
+                self._cache[aid] = {"celsius": round(self._celsius_override[aid], 2),
+                                     "name": name, "serial": serial, "fault": False, "sim": True}
+            else:
+                self._cache[aid] = {"celsius": round(celsius, 2) if celsius is not None else None,
+                                     "name": name, "serial": serial, "fault": fault, "sim": False}
+
+    def read_all(self):
+        """Retourne le cache immédiatement (non-bloquant) — alimenté par le thread."""
+        if not ON_RPI or not self._available:
+            result = {}
+            for cfg in self.ds_configs:
+                aid = cfg.get("id")
+                if not aid:
+                    continue
+                if aid in self._celsius_override:
+                    c, sim = self._celsius_override[aid], True
+                else:
+                    c, sim = self._sim.get(aid, 20.0), True
+                result[aid] = {"celsius": round(c, 2), "name": cfg.get("name", aid),
+                                "serial": cfg.get("serial", ""), "fault": False, "sim": sim}
+            return result
+        with self._lock:
+            return {k: dict(v) for k, v in self._cache.items()}
+
+    def set_sim(self, aid, celsius):
+        self._sim[aid] = float(celsius)
+
+    def set_celsius_override(self, aid, celsius):
+        self._celsius_override[aid] = float(celsius)
+
+    def stop(self):
+        self._running = False
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 class HistoryDB:
     RETENTION     = 30   # jours — table 'history' (sondes ADS1115, inchangé)
     RETENTION_VAR = 365  # jours — table 'history_var' (RF/AV/mémoire génériques)
@@ -356,7 +499,7 @@ class HistoryDB:
 
 # ════════════════════════════════════════════════════════════════════════════════
 class PLCEngine:
-    def __init__(self, config, ads, db):
+    def __init__(self, config, ads, db, ds18b20=None):
         self.config       = config
         self.scan_time_ms = config.get("scan_time_ms", 100)
         self._running     = False
@@ -365,6 +508,9 @@ class PLCEngine:
         self._last_scan   = 0.0
         self.ads          = ads
         self.db           = db
+        self.ds18b20      = ds18b20
+        self._last_ds     = 0.0    # dernier merge cache DS18B20 → self.analog
+        self._last_ds_db  = 0.0    # dernière historisation DS18B20
 
         self.gpio = {}
         for ps, pcfg in config.get("gpio", {}).items():
@@ -633,9 +779,11 @@ class PLCEngine:
 
     def set_analog_celsius(self, ref: str, celsius: float):
         """Simulation / forçage : injecter directement une valeur °C dans une sonde analogique."""
-        # Stocker dans ADS override pour survivre aux rescans
+        # Stocker dans ADS/DS18B20 override pour survivre aux rescans
         if hasattr(self, 'ads') and self.ads:
             self.ads._celsius_override[ref] = float(celsius)
+        if getattr(self, 'ds18b20', None):
+            self.ds18b20.set_celsius_override(ref, float(celsius))
         with self._lock:
             if ref in self.analog:
                 self.analog[ref]["celsius"] = round(float(celsius), 2)
@@ -1877,6 +2025,12 @@ class PLCEngine:
             dst = block.get("reg_out", "RF0")
             if dst: self.write_register(dst, val)
 
+        elif btype == "ds_in":
+            ref = block.get("analog_ref", "DS0")
+            val = self.analog.get(ref, {}).get("celsius", 0.0) or 0.0
+            dst = block.get("reg_out", "RF0")
+            if dst: self.write_register(dst, val)
+
     # ── CArithm ────────────────────────────────────────────────────────────
 
         elif btype == "boolean":
@@ -2174,6 +2328,15 @@ class PLCEngine:
                     if t0 - self._last_db >= 10.0:
                         self.db.insert(readings); self._last_db = t0
 
+                # ── DS18B20 (1-Wire) : le manager lit en tâche de fond,
+                #    ici on ne fait que récupérer son cache (non-bloquant) ──
+                if self.ds18b20 and t0 - self._last_ds >= 2.0:
+                    ds_readings = self.ds18b20.read_all()
+                    with self._lock: self.analog.update(ds_readings)
+                    self._last_ds = t0
+                    if t0 - self._last_ds_db >= 10.0:
+                        self.db.insert(ds_readings); self._last_ds_db = t0
+
                 # ── Historisation générique RF/AV/mémoire (widgets "Courbe historisée") ──
                 if t0 - self._last_synoptic_scan >= 60.0:
                     self._refresh_history_refs()
@@ -2188,7 +2351,7 @@ class PLCEngine:
                 with self._lock: prog = list(self.program)
                 # Tri priorité d'exécution : sources → calculs → sorties
                 _PRIO = {
-                    'sensor':0,'pt_in':0,'ana_in':0,'av':0,'dv':0,'backup':0,'stoav':0,
+                    'sensor':0,'pt_in':0,'ana_in':0,'ds_in':0,'av':0,'dv':0,'backup':0,'stoav':0,
                     'and':1,'or':1,'not':1,'xor':1,'inv':1,'nand':1,'nor':1,
                     'add':2,'sub':2,'mul':2,'div':2,'abs':2,'sqrt':2,
                     'min':2,'max':2,'mod':2,'pow':2,'clamp':2,'scale':2,
@@ -3609,11 +3772,12 @@ def main():
     port = args.port or config.get("web_port", 5000)
 
     ads         = ADS1115Manager(config)
+    ds18b20     = DS18B20Manager(config)
     db          = HistoryDB(DB_FILE)
     recipes     = RecipeManager(BASE_DIR)
     backup      = BackupManager(BASE_DIR)
     calibration = CalibrationManager(BASE_DIR)
-    engine      = PLCEngine(config, ads, db)
+    engine      = PLCEngine(config, ads, db, ds18b20=ds18b20)
     engine.init_gpio()
 
     prog_path = Path(args.load) if args.load else PROGRAM_FILE

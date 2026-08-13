@@ -729,7 +729,7 @@ class BlockEditor(QWidget):
             if t == "INPUT":  return int(p.get("pin", 22))
             if t == "MEM":    return p.get("bit", "M0")
             if t == "CONST":  return p.get("value", 0)
-            if t in ("PT_IN","ANA_IN","SENSOR"): return p.get("reg_out", "RF0")
+            if t in ("PT_IN","ANA_IN","DS_IN","SENSOR"): return p.get("reg_out", "RF0")
             if t == "MQTT": return p.get("reg_out", "RF0")
             if t == "BACKUP": return p.get("varname", "backup0")
             if t == "AV":     return p.get("reg_out") or p.get("varname", "av0")  # FIX: reg_out = RF register écrit par l'AV
@@ -1055,7 +1055,7 @@ class BlockEditor(QWidget):
 
         # ── Tri topologique : gauche→droite, puis priorité type (sources avant calculs) ──
         _COMPILE_PRIO = {
-            'SENSOR':0,'PT_IN':0,'ANA_IN':0,'AV':0,'DV':0,'BACKUP':0,'STOAV':0,
+            'SENSOR':0,'PT_IN':0,'ANA_IN':0,'DS_IN':0,'AV':0,'DV':0,'BACKUP':0,'STOAV':0,
             'MQTT':0,
             # PAGE_IN/PAGE_OUT supprimés — canvas infini (fils directs)
             'ADD':2,'SUB':2,'MUL':2,'DIV':2,'ABS':2,'SQRT':2,
@@ -1640,6 +1640,14 @@ class BlockEditor(QWidget):
                 blk["type"]       = "ana_in"
                 blk["analog_ref"] = p.get("analog_ref", "ANA0")
                 blk["reg_out"]    = p.get("reg_out", "RF1")
+                prog.append(blk)
+
+            elif bt == "DS_IN":
+                blk["type"]       = "ds_in"
+                blk["analog_ref"] = p.get("analog_ref", "DS0")
+                blk["rom_id"]     = p.get("rom_id", "")
+                blk["resolution"] = p.get("resolution", 12)
+                blk["reg_out"]    = p.get("reg_out", "RF2")
                 prog.append(blk)
 
             elif bt == "SENSOR":

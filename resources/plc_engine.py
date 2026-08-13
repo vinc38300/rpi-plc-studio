@@ -77,6 +77,27 @@ class PLCEngine:
             for i in range(12)
         }
 
+        # ── Sondes numériques 1-Wire DS18B20 (bus unique, typiquement GPIO4
+        #    + résistance pull-up 4.7kΩ). Contrairement aux sondes PT100/NTC
+        #    via ADS1115, la DS18B20 renvoie directement une température
+        #    numérique (pas de pont diviseur ni de calcul résistance→°C).
+        #    "serial" = ID ROM 1-Wire 64-bit (ex: "28-000008a1b2c3"), laissé
+        #    vide en simulation Studio ; assigné côté rpi_server soit par
+        #    correspondance explicite (config.json → analog.ds18b20), soit
+        #    par ordre de découverte sur le bus si non renseigné.
+        self.analog.update({
+            f"DS{i}": {
+                "name":      f"Sonde DS18B20 #{i+1}",
+                "type":      "ds18b20",
+                "serial":    "",       # ID ROM 1-Wire, ex: 28-000008a1b2c3
+                "celsius":   20.0,
+                "unit":      "°C",
+                "sim_value": -1.0,     # -1 = override direct °C (via set_analog_celsius)
+                "fault":     False,    # True si CRC invalide / sonde absente (rpi_server)
+            }
+            for i in range(8)
+        })
+
         # Registres flottants RF0–RF15 (analogues des bits mémoires pour les float)
         self.registers: dict = {f"RF{i}": 0.0 for i in range(256)}  # FIX: RF0..RF255
 
@@ -574,6 +595,18 @@ class PLCEngine:
             if reg_out:
                 self.write_register(reg_out, value)
             return f"ANA_IN {key}={value:.4f}"
+
+        # ── Lecture sonde numérique 1-Wire DS18B20 ───────────────────
+        if btype == "ds_in":
+            key   = block.get("analog_ref", "DS0")
+            # FIX : read_analog() gère le fallback celsius/value robuste
+            # (contrairement à pt_in/ana_in ci-dessus qui ne lisent que
+            # "value", absent du dict analog → toujours 0.0 en pratique)
+            value = self.read_analog(key)
+            reg_out = block.get("reg_out")
+            if reg_out:
+                self.write_register(reg_out, value)
+            return f"DS_IN {key}={value:.2f}°C"
 
         # ── Comparaison flottante (seuil) ───────────────────────────
         if btype == "compare_f":
@@ -2128,7 +2161,7 @@ class PLCEngine:
                 # Tri par priorité d'exécution (cohérence avec rpi_server/server.py)
                 # sources → calculs → blocs métier → sorties → page_out
                 _EXEC_PRIO = {
-                    'sensor':0,'pt_in':0,'ana_in':0,'av':0,'dv':0,'backup':0,'stoav':0,
+                    'sensor':0,'pt_in':0,'ana_in':0,'ds_in':0,'av':0,'dv':0,'backup':0,'stoav':0,
                     'and':1,'or':1,'not':1,'xor':1,'inv':1,'nand':1,'nor':1,
                     'add':2,'sub':2,'mul':2,'div':2,'abs':2,'sqrt':2,
                     'min':2,'max':2,'mod':2,'pow':2,'clamp':2,'scale':2,

@@ -108,7 +108,15 @@
       }
     ],
     "ntc_beta": 3950,
-    "ntc_r0": 10000
+    "ntc_r0": 10000,
+    "ds18b20": [
+      {
+        "id": "DS0",
+        "name": "Sonde extérieure",
+        "serial": "",
+        "_comment": "serial = ID ROM 1-Wire, ex '28-000008a1b2c3' (voir 'ls /sys/bus/w1/devices'). Laisser vide pour assignation automatique par ordre de découverte sur le bus."
+      }
+    ]
   },
   "gpio": {
     "5": {

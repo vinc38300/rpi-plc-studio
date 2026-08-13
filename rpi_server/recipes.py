@@ -3,7 +3,7 @@
 recipes.py — Gestionnaire de recettes / profils de consignes
 Licence MIT
 
-Une recette = un nom + une description + des valeurs RF et M à appliquer.
+Une recette = un nom + une description + des valeurs RF, M et DV à appliquer.
 Stockées dans recipes.json dans le dossier rpi_server/.
 
 Format recipes.json :
@@ -12,9 +12,15 @@ Format recipes.json :
     "description": "Consignes basses saison chaude",
     "created": "2025-01-01T00:00:00",
     "setpoints": {"RF0": 18.0, "RF1": 80.0, "RF2": 5.0},
-    "memory":    {"M10": false}
+    "memory":    {"M10": false},
+    "dv":        {"consigne abaissée/normale": false}
   }
 }
+
+Le champ "dv" cible des variables DV nommées (engine.force_dv) plutôt que RF/M — nécessaire pour tout
+bloc DV dont la sortie est réécrite à chaque cycle PLC à partir de sa propre valeur interne : un simple
+engine.registers[ref]=... ou engine.memory[ref]=... y serait écrasé au cycle suivant, alors que
+force_dv() est explicitement conçu pour résister au cycle PLC.
 """
 
 import json, logging
@@ -63,7 +69,7 @@ class RecipeManager:
         return dict(self._data)
 
     def save_recipe(self, name: str, description: str,
-                    setpoints: dict, memory: dict = None) -> bool:
+                    setpoints: dict, memory: dict = None, dv: dict = None) -> bool:
         """Enregistre ou met à jour une recette."""
         if not name.strip():
             return False
@@ -72,6 +78,7 @@ class RecipeManager:
             "created":     datetime.now().isoformat(timespec="seconds"),
             "setpoints":   {k: float(v) for k, v in setpoints.items()},
             "memory":      memory or {},
+            "dv":          dv or {},
         }
         self._save()
         log.info(f"Recette sauvegardée : '{name}'")
@@ -86,7 +93,7 @@ class RecipeManager:
         return False
 
     def apply(self, name: str, engine) -> bool:
-        """Applique une recette sur le moteur PLC (écrit RF et M)."""
+        """Applique une recette sur le moteur PLC (écrit RF, M et variables DV)."""
         recipe = self._data.get(name)
         if not recipe:
             return False
@@ -96,6 +103,8 @@ class RecipeManager:
         for ref, val in recipe.get("memory", {}).items():
             if ref.startswith("M"):
                 engine.memory[ref] = bool(val)
+        for varname, val in recipe.get("dv", {}).items():
+            engine.force_dv(varname, bool(val))
         log.info(f"Recette appliquée : '{name}'")
         return True
 
@@ -103,4 +112,5 @@ class RecipeManager:
         """Crée une recette à partir de l'état courant du moteur."""
         regs = {k: v for k, v in engine.registers.items()}
         mems = {k: v for k, v in engine.memory.items() if v}  # que les bits à 1
-        return self.save_recipe(name, description, regs, mems)
+        dvs = {k: v for k, v in engine.dv_vars.items()}
+        return self.save_recipe(name, description, regs, mems, dvs)

@@ -1,0 +1,12 @@
+--- a/rpi_server/server.py
++++ b/rpi_server/server.py
+@@ -2989,7 +2989,7 @@
+     @app.route("/api/recipes/save", methods=["POST"])
+     def api_recipes_save():
+         d = request.json
+         ok = recipes.save_recipe(
+             d.get("name",""), d.get("description",""),
+-            d.get("setpoints",{}), d.get("memory",{})
++            d.get("setpoints",{}), d.get("memory",{}), d.get("dv",{})
+         ) if recipes else False
+         return jsonify({"ok": ok})
