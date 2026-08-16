@@ -278,6 +278,16 @@ class ADS1115Manager:
     def set_sim(self, aid, voltage):
         self._sim[aid] = float(voltage)
 
+    def reload_config(self, ads_configs, r_ref_ohm=None, vcc=None):
+        """Recharge à chaud les noms/types de canaux (+ R_ref/VCC) — pas de redémarrage
+        du bus I2C nécessaire, les prochaines lectures utilisent la nouvelle config."""
+        with self._lock:
+            self.ads_configs = ads_configs or []
+            if r_ref_ohm is not None:
+                self.r_ref = float(r_ref_ohm)
+            if vcc is not None:
+                self.vcc = float(vcc)
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 class DS18B20Manager:
@@ -331,6 +341,23 @@ class DS18B20Manager:
         self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="ds18b20-poll")
         self._thread.start()
         log.info("DS18B20 : thread de lecture 1-Wire démarré")
+
+    def reload_config(self, ds_configs: list):
+        """Recharge à chaud la liste des sondes déclarées (config.json → analog.ds18b20),
+        sans redémarrer le thread de lecture 1-Wire. Ajoute un cache immédiat pour les
+        nouvelles sondes et retire du cache celles qui ne sont plus déclarées."""
+        with self._lock:
+            self.ds_configs = ds_configs or []
+            current_ids = {cfg.get("id") for cfg in self.ds_configs if cfg.get("id")}
+            for aid in list(self._cache.keys()):
+                if aid not in current_ids:
+                    del self._cache[aid]
+            for cfg in self.ds_configs:
+                aid = cfg.get("id")
+                if aid and aid not in self._cache:
+                    self._cache[aid] = {"celsius": 20.0, "name": cfg.get("name", aid),
+                                         "serial": cfg.get("serial", ""), "fault": False,
+                                         "sim": not ON_RPI}
 
     def _discover_serials(self):
         """Liste les sondes 28-xxxx présentes sur le bus, triées (ordre stable)."""
@@ -837,6 +864,28 @@ class PLCEngine:
                         self.write_bool_out(out, value)
         except Exception as e:
             log.debug(f"write_dv direct GPIO: {e}")
+
+    def force_dv(self, varname: str, value: bool):
+        """Force une variable DV nommée — résiste au cycle PLC (miroir de
+        core/plc_engine.py, nécessaire pour recipes.py / RecipeManager.apply)."""
+        varname = varname.lower()
+        self._dv_force[varname] = bool(value)
+        with self._lock:
+            self.dv_vars[varname] = bool(value)
+        self._save_dv_vars()
+        # Écriture directe GPIO — même logique que write_dv()
+        try:
+            for block in getattr(self, 'program', []):
+                if block.get('type') == 'dv' and block.get('varname', '').lower() == varname:
+                    out = block.get('output')
+                    if out is not None:
+                        self.write_bool_out(out, bool(value))
+        except Exception as e:
+            log.debug(f"force_dv direct GPIO: {e}")
+
+    def unforce_dv(self, varname: str):
+        """Libère le forçage d'une DV nommée — le cycle PLC reprend la main."""
+        self._dv_force.pop(varname.lower(), None)
 
     def _av_vars_path(self):
         import os
@@ -2819,6 +2868,37 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
 
     @app.route("/api/analog/latest")
     def api_latest(): return jsonify(db.get_latest())
+
+    @app.route("/api/analog/config", methods=["POST"])
+    def api_analog_config_set():
+        """Applique une nouvelle config sondes (ADS1115 + DS18B20) — persistée dans
+        config.json et appliquée à chaud, sans redéploiement ni redémarrage du service."""
+        analog_new = (request.json or {}).get("analog", {})
+        if not analog_new:
+            return jsonify({"ok": False, "error": "config 'analog' manquante"}), 400
+        try:
+            # 1. Persister dans config.json
+            existing = json.loads(CONFIG_FILE.read_text()) if CONFIG_FILE.exists() else {}
+            existing["analog"] = analog_new
+            CONFIG_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
+
+            # 2. Appliquer à chaud
+            engine.config["analog"] = analog_new
+            engine.ads.reload_config(analog_new.get("ads", []),
+                                      r_ref_ohm=analog_new.get("r_ref_ohm"),
+                                      vcc=analog_new.get("vcc"))
+            n_ds = 0
+            if engine.ds18b20:
+                ds_cfgs = analog_new.get("ds18b20", [])
+                engine.ds18b20.reload_config(ds_cfgs)
+                n_ds = len(ds_cfgs)
+
+            n_ch = sum(len(a.get("channels", [])) for a in analog_new.get("ads", []))
+            log.info(f"[ANALOG] Config sondes appliquée à chaud : {n_ch} canaux ADS, {n_ds} DS18B20")
+            return jsonify({"ok": True, "channels": n_ch, "ds18b20": n_ds})
+        except Exception as e:
+            log.warning(f"api_analog_config_set: {e}")
+            return jsonify({"ok": False, "error": str(e)}), 500
 
     @app.route("/api/analog/sim", methods=["POST"])
     def api_sim():

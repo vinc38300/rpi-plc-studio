@@ -494,7 +494,10 @@ class RPiDeployer:
 
             # Appliquer analog depuis extra_config
             if extra_config and extra_config.get("analog"):
+                ds18b20_existing3 = rpi_cfg3.get("analog", {}).get("ds18b20")
                 rpi_cfg3["analog"] = extra_config["analog"]
+                if ds18b20_existing3 and "ds18b20" not in rpi_cfg3["analog"]:
+                    rpi_cfg3["analog"]["ds18b20"] = ds18b20_existing3   # préserve les DS18B20, non gérées par Studio
                 n_ch3 = sum(len(a.get("channels", [])) for a in extra_config["analog"].get("ads", []))
                 self.log_cb(f"[ANALOG] Config sondes : {n_ch3} canaux")
 
@@ -664,7 +667,10 @@ class RPiDeployer:
 
             # 3b. Appliquer analog depuis extra_config
             if extra_config and extra_config.get("analog"):
+                ds18b20_existing = rpi_cfg.get("analog", {}).get("ds18b20")
                 rpi_cfg["analog"] = extra_config["analog"]
+                if ds18b20_existing and "ds18b20" not in rpi_cfg["analog"]:
+                    rpi_cfg["analog"]["ds18b20"] = ds18b20_existing   # préserve les DS18B20, non gérées par Studio
                 n_ch = sum(len(a.get("channels", [])) for a in extra_config["analog"].get("ads", []))
                 self.log_cb(f"[ANALOG] Config sondes : {n_ch} canaux")
 

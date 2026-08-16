@@ -112,67 +112,21 @@
     "ds18b20": [
       {
         "id": "DS0",
+        "name": "Sonde  interieure",
+        "serial": "28-020391774159"
+      },
+      {
+        "id": "DS1",
         "name": "Sonde extérieure",
-        "serial": "",
-        "_comment": "serial = ID ROM 1-Wire, ex '28-000008a1b2c3' (voir 'ls /sys/bus/w1/devices'). Laisser vide pour assignation automatique par ordre de découverte sur le bus."
+        "serial": "28-0218402681ff"
       }
     ]
   },
   "gpio": {
-    "5": {
-      "name": "K1",
+    "17": {
+      "name": "GPIO17",
       "mode": "output",
       "active_low": true
-    },
-    "6": {
-      "name": "K2",
-      "mode": "output",
-      "active_low": true
-    },
-    "13": {
-      "name": "K4",
-      "mode": "output",
-      "active_low": true
-    },
-    "9": {
-      "name": "K5",
-      "mode": "output",
-      "active_low": true
-    },
-    "19": {
-      "name": "K6",
-      "mode": "output",
-      "active_low": true
-    },
-    "10": {
-      "name": "K7",
-      "mode": "output",
-      "active_low": true
-    },
-    "26": {
-      "name": "K8",
-      "mode": "output",
-      "active_low": true
-    },
-    "22": {
-      "name": "K9",
-      "mode": "output",
-      "active_low": true
-    },
-    "21": {
-      "name": "K10",
-      "mode": "output",
-      "active_low": true
-    },
-    "14": {
-      "name": "E1",
-      "mode": "input",
-      "pull": "up"
-    },
-    "23": {
-      "name": "E2",
-      "mode": "input",
-      "pull": "up"
     }
   },
   "mqtt": {

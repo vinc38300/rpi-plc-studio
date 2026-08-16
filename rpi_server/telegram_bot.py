@@ -43,8 +43,11 @@ HELP_TEXT = """
 /consigne ambiance 20 — Modifier une consigne
 
 📋 *Recettes*
-/recette — Lister les recettes
+/recette — Lister les recettes (avec boutons ▶)
 /recette NomRecette — Appliquer une recette
+
+💡 /recette et /relais affichent des boutons tactiles —
+pas besoin de retaper le nom à la main.
 
 ℹ️ /menu ou /aide — Afficher cette aide
 """.strip()
@@ -93,6 +96,7 @@ class TelegramBot:
         self._prev_running      = None
         self._last_report_date  = None
         self._last_error: str   = None   # ← initialisé ici (évite AttributeError)
+        self._recipe_index: dict = {}    # {"0": "Chauffage_Normal", ...} — pour callback_data des boutons
 
     # ── API Telegram ──────────────────────────────────────────────────────────
 
@@ -109,22 +113,28 @@ class TelegramBot:
             log.warning(f"Telegram {method} exception: {e}")
             return {}
 
-    def send(self, text: str, chat_id: str = None, parse_mode="Markdown"):
+    def send(self, text: str, chat_id: str = None, parse_mode="Markdown",
+             reply_markup: dict = None):
         if not self.enabled or not self.token:
             return
         targets = [chat_id] if chat_id else self.chat_ids
         for cid in targets:
             try:
-                r = self._req("sendMessage", chat_id=cid, text=text,
-                              parse_mode=parse_mode,
+                kwargs = dict(chat_id=cid, text=text, parse_mode=parse_mode,
                               disable_web_page_preview=True)
+                if reply_markup is not None:
+                    kwargs["reply_markup"] = reply_markup
+                r = self._req("sendMessage", **kwargs)
                 if not r.get("ok"):
                     err = r.get("description", "")
                     if "parse" in err.lower() or "entity" in err.lower():
                         plain = (text.replace("*", "").replace("`", "")
                                      .replace(r"\_", "_").replace("\\", ""))
-                        self._req("sendMessage", chat_id=cid, text=plain,
-                                  disable_web_page_preview=True)
+                        plain_kwargs = dict(chat_id=cid, text=plain,
+                                            disable_web_page_preview=True)
+                        if reply_markup is not None:
+                            plain_kwargs["reply_markup"] = reply_markup
+                        self._req("sendMessage", **plain_kwargs)
             except Exception as e:
                 log.debug(f"send error: {e}")
 
@@ -149,7 +159,7 @@ class TelegramBot:
         """
         try:
             r = self._req("getUpdates", offset=-1, timeout=0,
-                          allowed_updates=["message"], _warn=False)
+                          allowed_updates=["message", "callback_query"], _warn=False)
             updates = r.get("result", [])
             if updates:
                 last_uid = updates[-1].get("update_id", 0)
@@ -168,7 +178,7 @@ class TelegramBot:
                 break
             with self._polling_lock:
                 r = self._req("getUpdates", offset=self._offset,
-                              timeout=t, allowed_updates=["message"],
+                              timeout=t, allowed_updates=["message", "callback_query"],
                               _warn=False)
             if not r.get("ok"):
                 code = r.get("error_code", 0)
@@ -191,7 +201,7 @@ class TelegramBot:
         try:
             with self._polling_lock:
                 r = self._req("getUpdates", offset=self._offset,
-                              timeout=0, allowed_updates=["message"], _warn=False)
+                              timeout=0, allowed_updates=["message", "callback_query"], _warn=False)
             return r.get("result", [])
         except Exception:
             return []
@@ -465,6 +475,60 @@ class TelegramBot:
             except Exception:
                 pass
 
+    def _handle_callback(self, cq: dict):
+        """Traite un clic sur un bouton inline (callback_query)."""
+        cq_id   = cq.get("id")
+        data    = cq.get("data", "") or ""
+        chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
+
+        if not chat_id or not cq_id:
+            return
+
+        if self.chat_ids and chat_id not in self.chat_ids:
+            self._req("answerCallbackQuery", callback_query_id=cq_id,
+                      text="⛔ Accès non autorisé", show_alert=True)
+            return
+
+        log.info(f"Telegram callback: {data} (chat {chat_id})")
+        try:
+            if data.startswith("recette:"):
+                idx  = data.split(":", 1)[1]
+                name = self._recipe_index.get(idx)
+                if not name:
+                    self._req("answerCallbackQuery", callback_query_id=cq_id,
+                              text="❓ Expiré — relance /recette", show_alert=True)
+                    return
+                result = self.recipes.apply(name, self.engine)
+                if result:
+                    self._req("answerCallbackQuery", callback_query_id=cq_id,
+                              text=f"✅ {name} appliquée")
+                    self.send(f"✅ Recette {_safe_name(name)} appliquée.", chat_id)
+                else:
+                    self._req("answerCallbackQuery", callback_query_id=cq_id,
+                              text="❌ Échec de l'application", show_alert=True)
+
+            elif data.startswith("relay:"):
+                _, pin_str, action = data.split(":", 2)
+                state = action == "on"
+                gpio  = self.engine.snapshot().get("gpio", {})
+                cfg   = gpio.get(pin_str, {})
+                name  = cfg.get("name", f"GPIO{pin_str}")
+                self._cmd_relay_ctrl(chat_id, name.upper(), state)
+                self._req("answerCallbackQuery", callback_query_id=cq_id,
+                          text=f"{name} {'ON' if state else 'OFF'}")
+                self._cmd_relais(chat_id)  # renvoie la liste à jour avec boutons
+
+            else:
+                self._req("answerCallbackQuery", callback_query_id=cq_id,
+                          text="❓ Action inconnue")
+        except Exception as e:
+            log.error(f"_handle_callback {data}: {e}", exc_info=True)
+            try:
+                self._req("answerCallbackQuery", callback_query_id=cq_id,
+                          text=f"⚠️ Erreur : {e}", show_alert=True)
+            except Exception:
+                pass
+
     def _cmd_notifs(self, chat_id, args):
         """Affiche ou modifie l'état des notifications."""
         if not args:
@@ -624,13 +688,20 @@ class TelegramBot:
             if not outputs:
                 self.send("⚡ Aucune sortie GPIO configurée.", chat_id)
                 return
-            lines = ["⚡ *État des relais :*\n"]
+            lines    = ["⚡ *État des relais :*\n"]
+            keyboard_rows = []
             for pin in sorted(outputs, key=lambda x: int(x) if str(x).isdigit() else 0):
                 cfg  = outputs[pin]
-                icon = "🟢 *ON*" if cfg.get("value") else "⚫ off"
+                on   = bool(cfg.get("value"))
+                icon = "🟢 *ON*" if on else "⚫ off"
                 name = cfg.get("name", "GPIO" + str(pin))
                 lines.append(f"{icon} — {_safe_name(name)}")
-            self.send("\n".join(lines), chat_id)
+                keyboard_rows.append([
+                    {"text": f"🟢 {name} ON",  "callback_data": f"relay:{pin}:on"},
+                    {"text": f"⚫ {name} OFF", "callback_data": f"relay:{pin}:off"},
+                ])
+            keyboard = {"inline_keyboard": keyboard_rows}
+            self.send("\n".join(lines), chat_id, reply_markup=keyboard)
         except Exception as e:
             self.send(f"⚠️ Erreur relais : `{e}`", chat_id)
 
@@ -795,18 +866,24 @@ class TelegramBot:
                 if not names:
                     self.send("📋 Aucune recette.", chat_id)
                 else:
+                    self._recipe_index = {str(i): n for i, n in enumerate(names)}
                     txt = "📋 *Recettes disponibles :*\n\n"
                     for n in names:
                         r   = self.recipes.get(n)
-                        txt += f"• *{_md_escape(n)}* — {_md_escape(r.get('description',''))}\n"
-                    self.send(txt, chat_id)
+                        txt += f"• {_safe_name(n)} — {_md_escape(r.get('description',''))}\n"
+                    txt += "\n_Touche un bouton pour l'appliquer :_"
+                    keyboard = {"inline_keyboard": [
+                        [{"text": f"▶ {n}", "callback_data": f"recette:{i}"}]
+                        for i, n in enumerate(names)
+                    ]}
+                    self.send(txt, chat_id, reply_markup=keyboard)
             else:
                 name   = " ".join(args)
                 result = self.recipes.apply(name, self.engine)
                 if result:
-                    self.send(f"✅ Recette *{_md_escape(name)}* appliquée.", chat_id)
+                    self.send(f"✅ Recette {_safe_name(name)} appliquée.", chat_id)
                 else:
-                    self.send(f"❌ Recette *{_md_escape(name)}* introuvable.", chat_id)
+                    self.send(f"❌ Recette {_safe_name(name)} introuvable.", chat_id)
         except Exception as e:
             self.send(f"⚠️ Erreur recette : `{e}`", chat_id)
 
@@ -889,6 +966,11 @@ class TelegramBot:
                                 self._handle(upd["message"])
                             except Exception as e:
                                 log.error(f"_handle: {e}", exc_info=True)
+                        elif "callback_query" in upd:
+                            try:
+                                self._handle_callback(upd["callback_query"])
+                            except Exception as e:
+                                log.error(f"_handle_callback: {e}", exc_info=True)
                 else:
                     empty_count += 1
                     if empty_count % 24 == 0:

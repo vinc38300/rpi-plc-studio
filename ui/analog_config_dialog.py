@@ -99,6 +99,62 @@ class SondeRow(QFrame):
         }
 
 
+class DS18B20Row(QFrame):
+    """Ligne de configuration pour une sonde DS18B20 (bus 1-Wire) : id, nom, numéro de série."""
+
+    def __init__(self, cfg: dict, on_remove, parent=None):
+        super().__init__(parent)
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setStyleSheet(
+            "QFrame { background:#161b22; border:1px solid #30363d;"
+            " border-radius:6px; margin:2px; }"
+        )
+        self._on_remove = on_remove
+        self._build(cfg)
+
+    def _build(self, cfg: dict):
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(10)
+
+        self.id_edit = QLineEdit(cfg.get("id", "DS0"))
+        self.id_edit.setPlaceholderText("DS0")
+        self.id_edit.setStyleSheet(STYLE_INPUT)
+        self.id_edit.setFixedWidth(50)
+        lay.addWidget(self.id_edit)
+
+        self.name_edit = QLineEdit(cfg.get("name", ""))
+        self.name_edit.setPlaceholderText("Nom (ex: Sonde interieure)")
+        self.name_edit.setStyleSheet(STYLE_INPUT)
+        self.name_edit.setFixedWidth(200)
+        lay.addWidget(self.name_edit)
+
+        self.serial_edit = QLineEdit(cfg.get("serial", ""))
+        self.serial_edit.setPlaceholderText("28-xxxxxxxxxxxx (vide = auto)")
+        self.serial_edit.setStyleSheet(STYLE_INPUT)
+        self.serial_edit.setFixedWidth(220)
+        lay.addWidget(self.serial_edit)
+
+        lay.addStretch()
+
+        del_btn = QPushButton("✕")
+        del_btn.setFixedWidth(28)
+        del_btn.setStyleSheet(
+            "QPushButton { background:#2d1214; color:#f85149; border:1px solid #6e2226;"
+            " border-radius:4px; }"
+            " QPushButton:hover { background:#6e2226; color:#fff; }"
+        )
+        del_btn.clicked.connect(lambda: self._on_remove(self))
+        lay.addWidget(del_btn)
+
+    def get_config(self) -> dict:
+        return {
+            "id":     self.id_edit.text().strip() or "DS0",
+            "name":   self.name_edit.text().strip() or self.id_edit.text().strip(),
+            "serial": self.serial_edit.text().strip(),
+        }
+
+
 class AnalogConfigDialog(QDialog):
     """Dialogue de configuration des 12 sondes analogiques."""
 
@@ -106,8 +162,8 @@ class AnalogConfigDialog(QDialog):
 
     def __init__(self, analog_config: dict, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Configuration Sondes Analogiques — ADS1115")
-        self.setMinimumSize(700, 560)
+        self.setWindowTitle("Configuration Sondes Analogiques — ADS1115 + DS18B20")
+        self.setMinimumSize(700, 680)
         self.setStyleSheet("""
             QDialog    { background:#0d1117; color:#e6edf3; }
             QLabel     { color:#e6edf3; }
@@ -120,6 +176,7 @@ class AnalogConfigDialog(QDialog):
         """)
         self._analog_config = analog_config
         self._rows: list[SondeRow] = []
+        self._ds_rows: list[DS18B20Row] = []
         self._build_ui()
         self._load_config(analog_config)
 
@@ -183,6 +240,36 @@ class AnalogConfigDialog(QDialog):
         scroll.setWidget(self.rows_widget)
         lay.addWidget(scroll, 1)
 
+        # ── Sondes numériques DS18B20 (bus 1-Wire) ───────────────────────────
+        ds_box = QGroupBox("🌡️ Sondes numériques DS18B20 (bus 1-Wire, GPIO4)")
+        ds_lay = QVBoxLayout(ds_box)
+        ds_info = QLabel(
+            "Plusieurs sondes DS18B20 peuvent partager le même bus 1-Wire (GPIO4).\n"
+            "Numéro de série vide = assignation automatique par ordre de découverte sur le bus "
+            "(pratique pour démarrer, préférer le serial explicite en usage durable — voir "
+            "ls /sys/bus/w1/devices/ sur le Pi)."
+        )
+        ds_info.setStyleSheet("color:#8b949e; font-size:11px; padding:2px 0;")
+        ds_info.setWordWrap(True)
+        ds_lay.addWidget(ds_info)
+
+        self.ds_rows_widget = QWidget()
+        self.ds_rows_lay = QVBoxLayout(self.ds_rows_widget)
+        self.ds_rows_lay.setContentsMargins(0, 0, 0, 0)
+        self.ds_rows_lay.setSpacing(4)
+        ds_lay.addWidget(self.ds_rows_widget)
+
+        add_ds_btn = QPushButton("+ Ajouter une sonde DS18B20")
+        add_ds_btn.setStyleSheet("""
+            QPushButton { background:#132d1a; color:#3fb950; border:1px solid #238636;
+                          border-radius:5px; padding:4px 12px; }
+            QPushButton:hover { background:#1a3d22; }
+        """)
+        add_ds_btn.clicked.connect(lambda: self._add_ds_row())
+        ds_lay.addWidget(add_ds_btn, alignment=Qt.AlignLeft)
+
+        lay.addWidget(ds_box)
+
         # ── Légende types ────────────────────────────────────────────────────
         legend = QLabel(
             "NTC 10kΩ : thermistance standard (B=3950 ou 3977)   "
@@ -216,6 +303,12 @@ class AnalogConfigDialog(QDialog):
             row.deleteLater()
         self._rows.clear()
 
+        # Vider les lignes DS18B20 existantes
+        for row in self._ds_rows:
+            row.setParent(None)
+            row.deleteLater()
+        self._ds_rows.clear()
+
         ads_list = analog_config.get("ads", [])
 
         for ads_idx, ads_info in enumerate(ADS_INFO):
@@ -241,6 +334,22 @@ class AnalogConfigDialog(QDialog):
                 self._rows.append(row)
                 self.rows_lay.addWidget(row)
 
+        for ds_cfg in analog_config.get("ds18b20", []):
+            self._add_ds_row(ds_cfg)
+
+    # ── Sondes DS18B20 : ajout / suppression dynamique ──────────────────────
+    def _add_ds_row(self, cfg: dict = None):
+        cfg = cfg or {"id": f"DS{len(self._ds_rows)}", "name": "", "serial": ""}
+        row = DS18B20Row(cfg, self._remove_ds_row)
+        self._ds_rows.append(row)
+        self.ds_rows_lay.addWidget(row)
+
+    def _remove_ds_row(self, row: "DS18B20Row"):
+        if row in self._ds_rows:
+            self._ds_rows.remove(row)
+        row.setParent(None)
+        row.deleteLater()
+
     # ── Validation ───────────────────────────────────────────────────────────
     def _on_accept(self):
         """Construit le nouveau dict analog et émet config_changed."""
@@ -264,6 +373,7 @@ class AnalogConfigDialog(QDialog):
         new_config["r_ref_ohm"] = r_ref
         new_config["vcc"]       = vcc
         new_config["ads"]       = new_ads
+        new_config["ds18b20"]   = [row.get_config() for row in self._ds_rows]
 
         self._analog_config = new_config
         self.config_changed.emit(new_config)
