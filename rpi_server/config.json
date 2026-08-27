@@ -109,22 +109,36 @@
     ],
     "ntc_beta": 3950,
     "ntc_r0": 10000,
-    "ds18b20": [
-      {
-        "id": "DS0",
-        "name": "Sonde  interieure",
-        "serial": "28-020391774159"
-      },
-      {
-        "id": "DS1",
-        "name": "Sonde extérieure",
-        "serial": "28-0218402681ff"
-      }
-    ]
+    "ds18b20": []
   },
   "gpio": {
+    "4": {
+      "name": "Circulateur CR1",
+      "mode": "output",
+      "active_low": true
+    },
+    "5": {
+      "name": "Circulateur CP1",
+      "mode": "output",
+      "active_low": true
+    },
+    "6": {
+      "name": "TA1",
+      "mode": "input",
+      "pull": "up"
+    },
+    "7": {
+      "name": "GPIO7",
+      "mode": "output",
+      "active_low": true
+    },
+    "8": {
+      "name": "TS1",
+      "mode": "input",
+      "pull": "up"
+    },
     "17": {
-      "name": "GPIO17",
+      "name": "CT 20/21",
       "mode": "output",
       "active_low": true
     }
