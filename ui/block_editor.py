@@ -5,6 +5,7 @@ Utilise QWebEngineView + canvas HTML5 pour le dessin interactif.
 
 import os
 import json
+import re
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt5.QtCore    import Qt, pyqtSignal, QUrl, QObject, pyqtSlot
 from PyQt5.QtGui     import QFont
@@ -749,6 +750,20 @@ class BlockEditor(QWidget):
                 return p.get("oa1_ref") or p.get("reg_out")
             return None
 
+        def analog_src_ref(src_b, src_port=None):
+            """Comme signal_ref, mais tient compte du port source pour les blocs
+            multi-sorties (CARITHM/PYBLOCK) : utilisé pour résoudre un port PT
+            (preset câblé) vers le bon registre RF (oa{N}/od{N}), quel que soit
+            le numéro de sortie utilisé — signal_ref() seul renverrait toujours
+            oa1_ref par défaut."""
+            if not src_b: return None
+            t = src_b["type"]; p = src_b.get("params", {})
+            if t in ("PYBLOCK", "CARITHM") and src_port:
+                sp = src_port.lower()
+                ref = p.get(f"{sp}_ref")
+                if ref: return ref
+            return signal_ref(src_b)
+
         def bool_ref(src_b):
             """Retourne la référence booléenne d'un bloc source simple."""
             if not src_b: return None
@@ -862,8 +877,13 @@ class BlockEditor(QWidget):
 
             return None
 
-        def build_cond(src_b):
-            """Construit une condition booléenne récursive à partir d'un bloc."""
+        def build_cond(src_b, src_port=None):
+            """Construit une condition booléenne récursive à partir d'un bloc.
+
+            src_port : nom du port SOURCE câblé (ex: 'OD1', 'OA1'), utilisé
+            uniquement pour désambiguïser les blocs multi-sorties (CARITHM/PYBLOCK).
+            Optionnel pour compatibilité avec les appels existants (IN1/IN2 logique…).
+            """
             if not src_b: return None
             t = src_b["type"]; p = src_b.get("params", {})
             if t == "INPUT":
@@ -944,10 +964,24 @@ class BlockEditor(QWidget):
             # SR_R / SR_S → lire le bit
             if t in ("SR_R", "SR_S"):
                 return {"type": "input", "ref": p.get("bit", "M0")}
-            # CARITHM / PYBLOCK : sortie od{N} → laisser le chemin OUTPUT le gérer
-            # directement via _od_ref (voir compilation OUTPUT ci-dessous)
-            # build_cond ne peut pas connaître le port source → retourner None
+            # CARITHM / PYBLOCK : n'importe quelle sortie (od{N} booléenne OU
+            # oa{N} analogique) peut alimenter une condition — le registre RF
+            # écrit par le bloc est directement testable (>0 = vrai) via read_signal.
+            # FIX CRITIQUE : auparavant cette branche retournait toujours None,
+            # ce qui faisait retomber eval_cond() sur sa valeur par défaut (True)
+            # côté moteur → un TON/TOF/TP/WAIT câblé sur un PyBlock/CArithm se
+            # déclenchait en permanence, même sans commande active du bloc source.
             if t in ("CARITHM", "PYBLOCK"):
+                if src_port:
+                    sp = src_port.lower()
+                    ref = p.get(f"{sp}_ref")
+                    if ref:
+                        return {"type": "input", "ref": ref}
+                # Port source inconnu (appelant historique) : retomber sur la
+                # première sortie plausible plutôt que de perdre le fil.
+                ref = p.get("od1_ref") or p.get("oa1_ref") or p.get("reg_out")
+                if ref:
+                    return {"type": "input", "ref": ref}
                 return None
             return None
 
@@ -1032,6 +1066,13 @@ class BlockEditor(QWidget):
                     if t in ("BACKUP","AV","STOAV"): return pp.get("reg_out") or pp.get("varname","RF0")
                     if t == "MEM":    return pp.get("bit","M0")
                     if t == "OUTPUT": return int(pp.get("pin",17))
+                    # ── CARITHM / PYBLOCK : destination analogique (ex: ET → A2) ──
+                    if t in ("CARITHM", "PYBLOCK"):
+                        dst_port = w["dst"]["port"]
+                        aM = re.match(r"^[aA](\d+)$", dst_port)
+                        if aM:
+                            ref = pp.get(f"a{aM.group(1)}_ref")
+                            if ref: return ref
                     # ── Traversée CONN pair (sens avant) ─────────────────
                     if t in ("CONN", "CONN_TX", "CONN_RX"):
                         if dst_bid in _visited:
@@ -1153,39 +1194,61 @@ class BlockEditor(QWidget):
                 prog.append(blk)
 
             # ── Temporisations ───────────────────────────────────────────
+            # FIX : IN accepte désormais TOUTES les sources (y compris
+            # PYBLOCK/CARITHM, od* ou oa*) grâce à build_cond(isb, isp).
+            # PT (preset câblé) et ET (temps écoulé) sont maintenant résolus
+            # via wire_src()/resolve_reg_out() vers pt_ref/et_ref — ces ports
+            # avaient leur propre bug de collision de registre côté canvas
+            # (voir fbd_canvas.js _dstParamKey/_srcParamKey) et n'étaient de
+            # toute façon jamais lus/écrits ici.
             elif bt == "TON":
-                isb, _ = wire_src(bid, "IN")
-                cond = build_cond(isb) or p.get("condition")
+                isb, isp = wire_src(bid, "IN")
+                cond = build_cond(isb, isp) or p.get("condition")
                 blk["type"] = "timer"
                 blk["preset_ms"] = p.get("preset_ms", 1000)
                 if cond: blk["condition"] = cond
+                ptsb, ptsp = wire_src(bid, "PT")
+                pt_ref = analog_src_ref(ptsb, ptsp)
+                if pt_ref: blk["pt_ref"] = pt_ref
+                et_ref = resolve_reg_out(bid, "ET")
+                if et_ref: blk["et_ref"] = et_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
                 prog.append(blk)
 
             elif bt == "TOF":
-                isb, _ = wire_src(bid, "IN")
-                cond = build_cond(isb)
+                isb, isp = wire_src(bid, "IN")
+                cond = build_cond(isb, isp)
                 blk["type"] = "tof"
                 blk["preset_ms"] = p.get("preset_ms", 1000)
                 if cond: blk["condition"] = cond
+                ptsb, ptsp = wire_src(bid, "PT")
+                pt_ref = analog_src_ref(ptsb, ptsp)
+                if pt_ref: blk["pt_ref"] = pt_ref
+                et_ref = resolve_reg_out(bid, "ET")
+                if et_ref: blk["et_ref"] = et_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
                 prog.append(blk)
 
             elif bt == "TP":
-                isb, _ = wire_src(bid, "IN")
-                cond = build_cond(isb)
+                isb, isp = wire_src(bid, "IN")
+                cond = build_cond(isb, isp)
                 blk["type"] = "tp"
                 blk["preset_ms"] = p.get("preset_ms", 1000)
                 if cond: blk["condition"] = cond
+                ptsb, ptsp = wire_src(bid, "PT")
+                pt_ref = analog_src_ref(ptsb, ptsp)
+                if pt_ref: blk["pt_ref"] = pt_ref
+                et_ref = resolve_reg_out(bid, "ET")
+                if et_ref: blk["et_ref"] = et_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
                 prog.append(blk)
 
             elif bt == "WAIT":
-                isb, _ = wire_src(bid, "IN")
-                cond = build_cond(isb) or p.get("condition")
+                isb, isp = wire_src(bid, "IN")
+                cond = build_cond(isb, isp) or p.get("condition")
                 blk["type"] = "wait"
                 blk["delay_s"] = p.get("delay_s", 5)
                 if cond: blk["condition"] = cond
@@ -1194,8 +1257,8 @@ class BlockEditor(QWidget):
                 prog.append(blk)
 
             elif bt == "WAITH":
-                isb, _ = wire_src(bid, "IN")
-                cond = build_cond(isb) or p.get("condition")
+                isb, isp = wire_src(bid, "IN")
+                cond = build_cond(isb, isp) or p.get("condition")
                 blk["type"] = "waith"
                 blk["delay_s"] = p.get("delay_s", 5)
                 if cond: blk["condition"] = cond
@@ -1204,8 +1267,8 @@ class BlockEditor(QWidget):
                 prog.append(blk)
 
             elif bt == "PULSE":
-                isb, _ = wire_src(bid, "IN")
-                cond = build_cond(isb) or p.get("condition")
+                isb, isp = wire_src(bid, "IN")
+                cond = build_cond(isb, isp) or p.get("condition")
                 blk["type"] = "pulse"
                 blk["duration_s"] = p.get("duration_s", 3)
                 if cond: blk["condition"] = cond
@@ -1215,46 +1278,61 @@ class BlockEditor(QWidget):
 
             # ── Compteurs ────────────────────────────────────────────────
             elif bt == "CTU":
-                cusb, _ = wire_src(bid, "CU")
-                rsb,  _ = wire_src(bid, "R")
+                cusb, cusp = wire_src(bid, "CU")
+                rsb,  rsp  = wire_src(bid, "R")
+                ptsb, ptsp = wire_src(bid, "PV")
                 blk["type"]   = "counter"
                 blk["preset"] = p.get("preset", 10)
-                cond = build_cond(cusb)
-                rst  = build_cond(rsb)
+                cond = build_cond(cusb, cusp)
+                rst  = build_cond(rsb, rsp)
                 if cond: blk["condition"]       = cond
                 if rst:  blk["reset_condition"] = rst
+                pv_ref = analog_src_ref(ptsb, ptsp)
+                if pv_ref: blk["pv_ref"] = pv_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                cv_ref = resolve_reg_out(bid, "CV")
+                if cv_ref: blk["cv_ref"] = cv_ref
                 prog.append(blk)
 
             elif bt == "CTD":
-                cdsb, _ = wire_src(bid, "CD")
-                ldsb, _ = wire_src(bid, "LD")
+                cdsb, cdsp = wire_src(bid, "CD")
+                ldsb, ldsp = wire_src(bid, "LD")
+                ptsb, ptsp = wire_src(bid, "PV")
                 blk["type"]   = "ctd"
                 blk["preset"] = p.get("preset", 10)
-                cd = build_cond(cdsb)
-                ld = build_cond(ldsb)
+                cd = build_cond(cdsb, cdsp)
+                ld = build_cond(ldsb, ldsp)
                 if cd: blk["cd_cond"] = cd
                 if ld: blk["ld_cond"] = ld
+                pv_ref = analog_src_ref(ptsb, ptsp)
+                if pv_ref: blk["pv_ref"] = pv_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                cv_ref = resolve_reg_out(bid, "CV")
+                if cv_ref: blk["cv_ref"] = cv_ref
                 prog.append(blk)
 
             elif bt == "CTUD":
-                cusb, _ = wire_src(bid, "CU")
-                cdsb, _ = wire_src(bid, "CD")
-                rsb,  _ = wire_src(bid, "R")
-                ldsb, _ = wire_src(bid, "LD")
+                cusb, cusp = wire_src(bid, "CU")
+                cdsb, cdsp = wire_src(bid, "CD")
+                rsb,  rsp  = wire_src(bid, "R")
+                ldsb, ldsp = wire_src(bid, "LD")
+                ptsb, ptsp = wire_src(bid, "PV")
                 blk["type"]   = "ctud"
                 blk["preset"] = p.get("preset", 10)
-                cu = build_cond(cusb); cd = build_cond(cdsb)
-                rst = build_cond(rsb); ld = build_cond(ldsb)
+                cu = build_cond(cusb, cusp); cd = build_cond(cdsb, cdsp)
+                rst = build_cond(rsb, rsp);  ld = build_cond(ldsb, ldsp)
                 if cu:  blk["cu_cond"]          = cu
                 if cd:  blk["cd_cond"]          = cd
                 if rst: blk["reset_condition"]  = rst
                 if ld:  blk["ld_cond"]          = ld
+                pv_ref = analog_src_ref(ptsb, ptsp)
+                if pv_ref: blk["pv_ref"] = pv_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                cv_ref = resolve_reg_out(bid, "CV")
+                if cv_ref: blk["cv_ref"] = cv_ref
                 prog.append(blk)
 
             # ── Comparaison ──────────────────────────────────────────────

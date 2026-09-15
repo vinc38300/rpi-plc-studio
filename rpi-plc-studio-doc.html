@@ -292,6 +292,7 @@ footer {
 
   <div class="nav-section">Déploiement RPi</div>
   <a href="#deploy">Déploiement SSH</a>
+  <a href="#tailscale-headscale">Tailscale / Headscale</a>
   <a href="#server">Serveur autonome</a>
   <a href="#setup-autonomy">setup_autonomy.sh</a>
   <a href="#gpio-library">Bibliothèque GPIO (gpiod)</a>
@@ -1670,6 +1671,85 @@ scp mon_programme.json pi@IP-RPi:~/rpi_server/programme.json
 <span class="comment"># Redémarrer le service</span>
 ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
 
+<h3 id="tailscale-headscale">🔒 Tailscale / Headscale — Accès distant automatique</h3>
+<p>
+  Depuis l'onglet <strong>Avancé</strong> de la fenêtre de déploiement, le bloc
+  <strong>🔒 Tailscale / Headscale</strong> permet de connecter automatiquement le RPi à un
+  tailnet Headscale auto-hébergé à chaque déploiement — plus besoin de rediriger de port sur la box
+  ni de dépendre d'un outil tiers (RustDesk, etc.) pour y accéder à distance.
+</p>
+
+<div class="note"><div class="ci">ℹ</div><p>
+  Headscale est une implémentation open source et auto-hébergeable du serveur de contrôle
+  Tailscale (control-plane), compatible avec le client officiel Tailscale. Sa mise en place
+  côté serveur (YunoHost, Docker…) est indépendante de Studio et n'est pas couverte ici.
+</p></div>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Deux clés, deux usages</h4>
+<table>
+  <tr><th></th><th>Clé API (<code>apikeys</code>)</th><th>Clé de pré-auth (<code>preauthkeys</code>)</th></tr>
+  <tr>
+    <td><strong>Rôle</strong></td>
+    <td>Piloter Headscale via son API (créer des utilisateurs, des clés, lister les machines…)</td>
+    <td>Enregistrer un seul appareil sur le tailnet</td>
+  </tr>
+  <tr>
+    <td><strong>Qui l'utilise</strong></td>
+    <td>Studio, Headplane, tout script d'automatisation</td>
+    <td><code>tailscale up --authkey=…</code>, exécuté sur l'appareil à enregistrer</td>
+  </tr>
+  <tr>
+    <td><strong>Saisie dans Studio</strong></td>
+    <td>Une seule fois, dans le champ <code>Clé API Headscale</code></td>
+    <td>Jamais — générée et utilisée automatiquement par Studio à chaque déploiement</td>
+  </tr>
+</table>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Configuration, étape par étape</h4>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Générer une clé API Headscale</strong> Sur le serveur hébergeant Headscale : <code>sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys create"</code> (ou l'équivalent non-YunoHost : <code>headscale apikeys create</code>). La clé n'est affichée qu'une seule fois — la copier immédiatement.</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Ouvrir le bloc dans Studio</strong> Fenêtre de déploiement → onglet <strong>Avancé</strong> → <strong>🔒 Tailscale / Headscale</strong>.</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Renseigner les 4 champs</strong> Cocher la case d'activation, puis renseigner l'URL Headscale, l'utilisateur Headscale et coller la clé API (bouton 👁 pour vérifier la saisie).</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Déployer normalement</strong> La connexion au tailnet se fait automatiquement après le déploiement du programme PLC — voir le détail ci-dessous.</div></div>
+</div>
+
+<table>
+  <tr><th>Champ</th><th>Valeur</th></tr>
+  <tr><td><code>URL Headscale</code></td><td>Ex. <code>https://headscale.mondomaine.fr</code></td></tr>
+  <tr><td><code>Utilisateur Headscale</code></td><td>Utilisateur créé côté serveur via <code>headscale users create</code></td></tr>
+  <tr><td><code>Clé API Headscale</code></td><td>Clé générée à l'étape 1 — mémorisée dans le projet, à ne renseigner qu'une fois</td></tr>
+</table>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Ce qui se passe automatiquement au déploiement</h4>
+<ol style="margin:0 0 16px;padding-left:22px;">
+  <li>Résolution de l'utilisateur Headscale en ID numérique via l'API</li>
+  <li>Génération d'une clé de pré-authentification fraîche (24h, réutilisable)</li>
+  <li>Connexion SSH au RPi, vérification si Tailscale est déjà installé</li>
+  <li>Installation du client Tailscale si nécessaire (<code>curl install.sh</code>)</li>
+  <li><code>tailscale up --login-server=… --authkey=…</code> exécuté sur le RPi</li>
+  <li>Affichage de l'IP Tailscale obtenue dans le journal de déploiement (préfixe <code>[TS]</code>)</li>
+</ol>
+
+<pre><code><span class="comment"># Extrait du journal de déploiement en cas de succès</span>
+[TS] ✅ RPi joignable en permanence sur : 100.64.12.3 (port 5000)</code></pre>
+
+<p>Une fois connecté, la synoptic reste joignable depuis n'importe où, sans redirection de port :</p>
+<pre><code>http://100.64.12.3:5000/synoptic</code></pre>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Gérer les clés API côté serveur</h4>
+<pre><code><span class="comment"># Lister les clés existantes</span>
+sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys list"
+
+<span class="comment"># Révoquer une clé perdue ou compromise (voir la colonne Prefix de la commande list)</span>
+sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys expire --prefix &lt;PREFIX&gt;"</code></pre>
+
+<div class="warning">
+  <strong>⚠ Sécurité :</strong> une clé API donne un contrôle large sur Headscale (utilisateurs, clés,
+  machines). La traiter comme un mot de passe root — éviter de committer un projet
+  <code>.plcproj</code> la contenant dans un dépôt git, et préférer une expiration de 90 jours
+  plutôt qu'une validité illimitée.
+</div>
+
 <h3 id="server">Serveur autonome — server.py</h3>
 <p>Le serveur tourne sur le RPi et réunit deux fonctions : le <strong>moteur PLC</strong> et l'<strong>interface web</strong>.</p>
 
@@ -2213,6 +2293,21 @@ RUNTIMCNT → STARTS=RF10, TOTAL=RF11, RUNTIME=RF12</code></pre>
     <td>Fils perdus après un dégroupement (<kbd>Ctrl+Maj+G</kbd>)</td>
     <td>Ancienne version de <code>fbd_canvas.html</code> sans reconnexion des fils externes</td>
     <td>Mettre à jour <code>ui/fbd_canvas.html</code>. Utiliser <kbd>Ctrl+Z</kbd> pour annuler le dégroupement raté, puis redégrouper avec la version corrigée.</td>
+  </tr>
+  <tr>
+    <td>Étape Tailscale en erreur 401 / clé API refusée</td>
+    <td>Clé API invalide, mal copiée ou expirée</td>
+    <td>Régénérer une clé avec <code>headscale apikeys create</code> et la remplacer dans <a href="#tailscale-headscale">le bloc Tailscale / Headscale</a> de Studio.</td>
+  </tr>
+  <tr>
+    <td>« Utilisateur Headscale introuvable » au déploiement</td>
+    <td>Le nom saisi dans Studio ne correspond à aucun utilisateur Headscale</td>
+    <td>Vérifier la liste côté serveur : <code>headscale users list</code>. Corriger le champ <code>Utilisateur Headscale</code> dans Studio.</td>
+  </tr>
+  <tr>
+    <td>Le RPi n'apparaît pas dans Headplane après déploiement</td>
+    <td>Service Headscale arrêté, ou RPi sans accès réseau sortant vers l'URL Headscale</td>
+    <td>Vérifier <code>sudo systemctl status headscale</code> côté serveur, et <code>sudo tailscale status</code> sur le RPi. Le journal de déploiement (préfixe <code>[TS]</code>) indique la cause précise.</td>
   </tr>
 </table>
 

@@ -6,20 +6,23 @@
   "auto_start": true,
   "security": {
     "enabled": false,
-    "https": false,
     "username": "admin",
-    "password": "plc1234",
-    "_comment": "Mettre enabled:true pour activer le login. https:true pour TLS auto-signé."
+    "password": "plc1234"
   },
   "telegram": {
-    "enabled": false,
-    "token": "",
-    "chat_ids": [],
-    "alarm_high": 85.0,
-    "alarm_low": 3.0,
-    "report_hour": 8,
+    "enabled": true,
+    "chat_ids": [
+      "8851072293"
+    ],
+    "alarm_high": 90.0,
+    "alarm_low": 2.0,
+    "alarm_cooldown_s": 600,
+    "notify_relays": true,
+    "relay_cooldown_s": 30,
+    "notify_plc": true,
     "report_enabled": true,
-    "_comment": "Créer un bot via @BotFather sur Telegram pour obtenir le token."
+    "report_hour": 8,
+    "token": "AAE9TNFdhaTJIJ3O_muNDGEge-JEJJ9QXhs"
   },
   "analog": {
     "enabled": true,

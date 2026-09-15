@@ -1038,9 +1038,10 @@ class PLCEngine:
             if out: self.write_signal(out, t["done"])
 
         elif btype == "counter":
-            preset = block.get("preset", 10)
-            cond   = self.eval_cond(block.get("condition"))
-            rst    = self.eval_cond(block.get("reset_condition")) if block.get("reset_condition") else False
+            preset = float(self.read_analog(block.get("pv_ref"))) if block.get("pv_ref") else float(block.get("preset", 10))
+            # FIX : default_if_none=False (même correctif que core/plc_engine.py)
+            cond   = self.eval_cond(block.get("cu_cond") or block.get("cu") or block.get("condition"), default_if_none=False)
+            rst    = self.eval_cond(block.get("reset_condition"), default_if_none=False) if block.get("reset_condition") else False
             if bid not in self.counters:
                 self.counters[bid] = {"preset": preset, "acc": 0, "done": False, "_prev": False}
             c = self.counters[bid]
@@ -1048,6 +1049,8 @@ class PLCEngine:
             elif cond and not c["_prev"]: c["acc"] += 1; c["done"] = c["acc"] >= preset
             c["_prev"] = cond
             if out: self.write_signal(out, c["done"])
+            cv_ref = block.get("cv_ref")
+            if cv_ref: self.write_register(cv_ref, float(c["acc"]))
 
         elif btype == "scale":
             src = self.read_analog(block.get("input","ANA0"))
@@ -1132,10 +1135,19 @@ class PLCEngine:
 
         # ── Blocs temporisation avancés ──────────────────────────────────
         elif btype in ("ton", "tof", "tp"):
-            preset = float(block.get("preset_ms", 1000))
-            cond   = self.eval_cond(block.get("condition") or block.get("in"))
+            # FIX PT : preset dynamique câblé (pt_ref) prioritaire sur preset_ms figé
+            preset = float(self.read_analog(block.get("pt_ref"))) if block.get("pt_ref") else float(block.get("preset_ms", 1000))
+            # FIX : default_if_none=False — IN non câblé/non résolu = inactif,
+            # jamais "toujours actif" par défaut (cf. core/plc_engine.py — même correctif).
+            cond   = self.eval_cond(block.get("condition") or block.get("in"), default_if_none=False)
             if bid not in self.timers:
-                self.timers[bid] = {"acc": 0.0, "done": False, "q": False, "_prev": False}
+                # FIX DÉMARRAGE (TOF uniquement) : acc démarre à "preset" (pas 0)
+                # → done reste False au premier cycle même si IN=0. Sinon, la
+                # branche else ci-dessous (acc<preset) évalue done=True dès le
+                # 1er scan après chargement, quel que soit l'état réel de IN —
+                # même correctif que core/plc_engine.py.
+                init_acc = preset if btype == "tof" else 0.0
+                self.timers[bid] = {"acc": init_acc, "done": False, "q": False, "active": False, "_prev": False}
             t = self.timers[bid]
             if btype == "ton":
                 if cond: t["acc"] = min(t["acc"] + dt_ms, preset); t["done"] = t["acc"] >= preset
@@ -1158,11 +1170,18 @@ class PLCEngine:
                     t["acc"] += dt_ms
                     if t["acc"] >= preset: t["active"] = False
                 t["_prev"] = cond
-            if out: self.write_signal(out, t.get("active", False))
+            # FIX CRITIQUE : la sortie Q lisait toujours t["active"], une clé
+            # jamais renseignée par les branches TON/TOF (elles écrivent t["done"]).
+            # Résultat : Q restait bloquée à False en permanence pour TON/TOF
+            # sur le serveur déployé, quel que soit l'état réel du timer.
+            q_val = t["done"] if btype in ("ton", "tof") else t.get("active", False)
+            if out: self.write_signal(out, q_val)
+            et_ref = block.get("et_ref")
+            if et_ref: self.write_register(et_ref, float(t["acc"]))
 
         elif btype == "wait":
             delay_ms = float(block.get("delay_s", 5)) * 1000.0
-            cond = self.eval_cond(block.get("condition") or block.get("in"))
+            cond = self.eval_cond(block.get("condition") or block.get("in"), default_if_none=False)
             if bid not in self.timers:
                 self.timers[bid] = {"acc": 0.0, "done": False}
             t = self.timers[bid]
@@ -1172,7 +1191,7 @@ class PLCEngine:
 
         elif btype == "waith":
             delay_ms = float(block.get("delay_s", 5)) * 1000.0
-            cond = self.eval_cond(block.get("condition") or block.get("in"))
+            cond = self.eval_cond(block.get("condition") or block.get("in"), default_if_none=False)
             if bid not in self.timers:
                 self.timers[bid] = {"acc": 0.0, "sts": False}
             t = self.timers[bid]
@@ -1184,7 +1203,7 @@ class PLCEngine:
 
         elif btype == "pulse":
             dur_ms = float(block.get("duration_s", 3)) * 1000.0
-            cond   = self.eval_cond(block.get("condition") or block.get("in"))
+            cond   = self.eval_cond(block.get("condition") or block.get("in"), default_if_none=False)
             if bid not in self.timers:
                 self.timers[bid] = {"acc": 0.0, "active": False, "_prev": False}
             t = self.timers[bid]
@@ -1195,23 +1214,31 @@ class PLCEngine:
             t["_prev"] = cond
             if out: self.write_signal(out, t["active"])
 
-        # ── Compteurs avancés ─────────────────────────────────────────────
+        # ── Compteurs avancés (CTD / CTUD — CTU seul est traité plus haut,
+        # type compilé "counter") ─────────────────────────────────────────
+        # FIX CRITIQUE : ce bloc lisait block.get("cu")/("cd")/("ld") alors que
+        # le compilateur (ui/block_editor.py) produit cu_cond/cd_cond/ld_cond.
+        # Résultat : ld valait toujours eval_cond(None)=True par défaut → un
+        # CTD/CTUD déployé rechargeait sa valeur à chaque cycle et ne comptait
+        # jamais réellement.
         elif btype in ("ctu", "ctd", "ctud"):
             if bid not in self.counters:
                 self.counters[bid] = {"acc": 0, "done": False, "_cu": False, "_cd": False}
             c      = self.counters[bid]
-            preset = int(block.get("preset", 10))
-            cu     = self.eval_cond(block.get("cu") or block.get("condition"))
-            cd     = self.eval_cond(block.get("cd")) if btype == "ctud" else False
-            rst    = self.eval_cond(block.get("r") or block.get("reset_condition"))                      if (block.get("r") or block.get("reset_condition")) else False
-            ld     = self.eval_cond(block.get("ld")) if block.get("ld") else False
+            preset = float(self.read_analog(block.get("pv_ref"))) if block.get("pv_ref") else float(block.get("preset", 10))
+            cu     = self.eval_cond(block.get("cu_cond") or block.get("cu") or block.get("condition"), default_if_none=False)
+            cd     = self.eval_cond(block.get("cd_cond") or block.get("cd"), default_if_none=False) if btype in ("ctd", "ctud") else False
+            rst    = self.eval_cond(block.get("reset_condition") or block.get("r"), default_if_none=False)
+            ld     = self.eval_cond(block.get("ld_cond") or block.get("ld"), default_if_none=False)
             if rst:                         c["acc"] = 0; c["done"] = False
             elif ld:                        c["acc"] = preset
             elif cu and not c["_cu"]:       c["acc"] = min(c["acc"] + 1, preset + 1)
             elif cd and not c["_cd"]:       c["acc"] = max(c["acc"] - 1, 0)
-            c["done"] = c["acc"] >= preset
+            c["done"] = c["acc"] >= preset if btype != "ctd" else c["acc"] <= 0
             c["_cu"] = cu; c["_cd"] = cd
             if out: self.write_signal(out, c["done"])
+            cv_ref = block.get("cv_ref")
+            if cv_ref: self.write_register(cv_ref, float(c["acc"]))
 
         # ── Blocs analogiques ─────────────────────────────────────────────
         elif btype == "sensor":
@@ -2621,11 +2648,13 @@ def flatten_blocks(blocks_or_program) -> list:
     # Attribut source du bloc selon le port de sortie câblé
     def _src_attr(btype, port):
         port = port.upper()
-        if port in ("VAL", "OUT", "SIG"):   return "reg_out"
-        if port == "HOUR":                  return "reg_hour"
-        if port == "WDAY":                  return "reg_wday"
-        if port.startswith("OA"):           return f"oa{port[2:]}_ref"
-        if port.startswith("OD"):           return f"od{port[2:]}_ref"
+        if port in ("VAL", "OUT", "SIG", "Q", "STS", "DONE"): return "reg_out"
+        if port == "ET":                     return "et_ref"   # cf. block_editor.py / fbd_canvas.js
+        if port == "CV":                     return "cv_ref"
+        if port == "HOUR":                   return "reg_hour"
+        if port == "WDAY":                   return "reg_wday"
+        if port.startswith("OA"):            return f"oa{port[2:]}_ref"
+        if port.startswith("OD"):            return f"od{port[2:]}_ref"
         return "reg_out"
 
     # Attribut destination du bloc selon le port d'entrée câblé
@@ -2634,6 +2663,9 @@ def flatten_blocks(blocks_or_program) -> list:
         if port == "IN1":                   return "reg_a"
         if port == "IN2":                   return "reg_b"
         if port == "IN" and btype == "conn":  return "reg_in"
+        if port == "IN":                    return "reg_a"    # IN simple (TOF/TON/TP/WAIT/WAITH/PULSE)
+        if port == "PT":                    return "pt_ref"   # preset câblé — clé dédiée (cf. IN ci-dessus)
+        if port == "PV":                    return "pv_ref"   # preset câblé compteurs CTU/CTD/CTUD
         if port == "VAL":
             if btype in ("backup",):        return "val_ref"
             if btype == "output":           return "val_ref"

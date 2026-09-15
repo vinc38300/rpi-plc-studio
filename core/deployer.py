@@ -872,6 +872,71 @@ class RPiDeployer:
         self.run("pkill -f 'python3.*server.py' 2>/dev/null || true")
         self.log_cb("[SVC] Serveur PLC distant arrêté")
 
+    # ── Tailscale / Headscale ────────────────────────────────────────────────
+    def install_tailscale(self, login_server: str, authkey: str, timeout: int = 180) -> "DeployResult":
+        """
+        Installe le client Tailscale sur le RPi (s'il n'y est pas déjà) et le
+        connecte au tailnet Headscale via `login_server` avec la clé de
+        pré-authentification `authkey`. Retourne un DeployResult dont le
+        message contient l'IP Tailscale obtenue en cas de succès.
+        """
+        if not self.is_connected():
+            r = self.connect()
+            if not r.success:
+                return r
+
+        self.log_cb("[TS] Vérification du client Tailscale…")
+        code, _out, _ = self.run("which tailscale", timeout=10)
+        if code != 0:
+            self.log_cb("[TS] Installation du client Tailscale (curl install.sh)…")
+            code, out, err = self.run(
+                "curl -fsSL https://tailscale.com/install.sh | sh 2>&1", timeout=timeout
+            )
+            for line in (out + err).splitlines():
+                if line.strip():
+                    self.log_cb(f"  {line}")
+            if code != 0:
+                return DeployResult(False, "Échec de l'installation de Tailscale")
+            self.log_cb("[TS] Tailscale installé")
+        else:
+            self.log_cb("[TS] Tailscale déjà présent sur le RPi")
+
+        self.log_cb(f"[TS] Connexion au tailnet ({login_server})…")
+
+        # ── Contournement d'un bug connu de tailscaled ──────────────────────
+        # Avec un control-server personnalisé (Headscale), le mécanisme de
+        # bootstrap DNS interne de tailscaled ignore le résolveur système et
+        # échoue systématiquement ("no DNS fallback candidates remain"), car
+        # il ne connaît que les domaines *.tailscale.com. On résout le nom
+        # depuis le PC (dont le DNS fonctionne, on vient de l'utiliser pour
+        # l'API Headscale) et on force l'entrée dans /etc/hosts du RPi.
+        import socket
+        from urllib.parse import urlparse
+        host = urlparse(login_server).hostname
+        if host:
+            try:
+                ip = socket.gethostbyname(host)
+                self.log_cb(f"[TS] Résolution {host} → {ip} (contournement bug DNS tailscaled)")
+                # On retire une éventuelle entrée périmée (IP qui aurait changé) avant d'ajouter la bonne
+                self.run(f"sudo sed -i '/[[:space:]]{host}$/d' /etc/hosts", timeout=10)
+                self.run(f"echo '{ip} {host}' | sudo tee -a /etc/hosts >/dev/null", timeout=10)
+            except socket.gaierror as e:
+                self.log_cb(f"[TS] ⚠ Résolution DNS locale impossible pour {host} ({e}) — poursuite sans contournement")
+
+        cmd = (
+            f"sudo tailscale up --login-server={login_server} "
+            f"--authkey={authkey} --accept-dns=false"
+        )
+        code, out, err = self.run(cmd, timeout=30)
+        if code != 0:
+            detail = (out + err).strip()
+            return DeployResult(False, f"Échec de la connexion au tailnet : {detail}")
+
+        _, ip_out, _ = self.run("tailscale ip -4", timeout=10)
+        ts_ip = ip_out.strip().splitlines()[0] if ip_out.strip() else "?"
+        self.log_cb(f"[TS] Connecté — IP Tailscale : {ts_ip}")
+        return DeployResult(True, ts_ip)
+
     # ── Monitoring en temps réel (tail -f sur le log) ────────────────────────
     def start_monitoring(self, log_cb: Callable[[str], None]):
         if self._monitoring:

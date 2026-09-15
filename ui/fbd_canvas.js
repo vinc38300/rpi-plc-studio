@@ -48,6 +48,10 @@ function _initRFCounter(diagram){
  */
 function _srcParamKey(btype, port){
   const p = port.toLowerCase();
+  // FIX : ET (temporisations TON/TOF/TP) doit avoir sa PROPRE clé — sinon elle
+  // retombe sur 'reg_out' (déjà utilisé par Q) et le second fil câblé écrase
+  // le premier dans params[], rendant l'un des deux ports inopérant.
+  if(p==='et')                                          return 'et_ref';
   if(['val','out','sig','sts','q'].includes(p))        return 'reg_out';
   if(p==='hour')                                       return 'reg_hour';
   if(p==='wday' || p==='mday')                         return 'reg_wday';
@@ -57,6 +61,8 @@ function _srcParamKey(btype, port){
   if(p==='starts')   return 'reg_starts';
   if(p==='total')    return 'reg_total';
   if(p==='runtime')  return 'reg_runtime';
+  // CTU/CTD/CTUD : valeur courante du compteur
+  if(p==='cv')       return 'cv_ref';
   // Valeur générique
   return 'reg_out';
 }
@@ -71,6 +77,10 @@ function _dstParamKey(btype, port){
   const p = port.toLowerCase();
   const bt = (btype||'').toLowerCase();
   if(p==='in' && (bt==='conn'||bt==='conn_tx'||bt==='conn_rx')) return 'reg_in';
+  // FIX : PT (preset câblé des temporisations TON/TOF/TP) doit avoir sa PROPRE
+  // clé — sinon elle retombe sur 'reg_a' (déjà utilisé par IN) et le second fil
+  // câblé écrase le premier dans params[], rendant l'un des deux ports inopérant.
+  if(p==='pt')                                      return 'pt_ref';
   if(p==='in1' || p==='in')                         return 'reg_a';
   if(p==='in2')                                     return 'reg_b';
   if(p==='sig' && bt==='page_out')                  return 'reg_in';

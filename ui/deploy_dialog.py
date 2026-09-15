@@ -397,6 +397,50 @@ class DeployDialog(QDialog):
 
         adv_lay.addWidget(email_group)
 
+        # Tailscale / Headscale
+        hs_group = QGroupBox("🔒 Tailscale / Headscale — accès distant au RPi")
+        hs_lay   = QVBoxLayout(hs_group)
+        hs_form  = QFormLayout()
+        hs_form.setLabelAlignment(Qt.AlignRight)
+
+        hs_cfg = self.rpi_config.get("headscale", {})
+        self.hs_enabled_cb = QCheckBox("Installer Tailscale et rejoindre le tailnet après le déploiement")
+        self.hs_enabled_cb.setChecked(hs_cfg.get("enabled", False))
+        hs_form.addRow(self.hs_enabled_cb)
+
+        self.hs_url_edit = QLineEdit(hs_cfg.get("url", "https://headscale.vincentlux.fr"))
+        hs_form.addRow("URL Headscale :", self.hs_url_edit)
+
+        self.hs_user_edit = QLineEdit(hs_cfg.get("user", "vinc"))
+        hs_form.addRow("Utilisateur Headscale :", self.hs_user_edit)
+
+        # Clé API avec bouton afficher/masquer, même pattern que le token Telegram
+        self.hs_apikey_edit = QLineEdit(hs_cfg.get("api_key", ""))
+        self.hs_apikey_edit.setEchoMode(QLineEdit.Password)
+        self.hs_apikey_edit.setPlaceholderText("généré via : headscale apikeys create")
+        self.hs_show_btn = QPushButton("👁")
+        self.hs_show_btn.setFixedWidth(30)
+        self.hs_show_btn.setCheckable(True)
+        self.hs_show_btn.toggled.connect(
+            lambda on: self.hs_apikey_edit.setEchoMode(
+                QLineEdit.Normal if on else QLineEdit.Password))
+        hs_key_row = QHBoxLayout()
+        hs_key_row.addWidget(self.hs_apikey_edit)
+        hs_key_row.addWidget(self.hs_show_btn)
+        hs_form.addRow("Clé API Headscale :", hs_key_row)
+
+        hs_lay.addLayout(hs_form)
+        hs_help = QLabel(
+            "<small>Une clé de pré-authentification est générée automatiquement à chaque "
+            "déploiement via l'API Headscale (24h, réutilisable) — pas besoin de la copier "
+            "manuellement. Le RPi doit avoir un accès réseau sortant vers l'URL Headscale.</small>"
+        )
+        hs_help.setWordWrap(True)
+        hs_help.setStyleSheet("color:#8b949e; padding:4px;")
+        hs_lay.addWidget(hs_help)
+
+        adv_lay.addWidget(hs_group)
+
         save_adv_btn = QPushButton("💾 Générer config.json et déployer")
         save_adv_btn.clicked.connect(self._deploy_with_config)
         adv_lay.addWidget(save_adv_btn)
@@ -459,9 +503,22 @@ class DeployDialog(QDialog):
                 "username": self.sec_user_edit.text().strip(),
                 "password": self.sec_pass_edit.text(),
             },
-            "telegram": self._get_telegram_config(),
-            "email":    self._get_email_config(),
+            "telegram":  self._get_telegram_config(),
+            "email":     self._get_email_config(),
+            "headscale": self._get_headscale_config(),
         }
+
+    def _get_headscale_config(self) -> dict:
+        """Retourne la config Tailscale/Headscale — omet la clé API si vide pour préserver l'existante."""
+        cfg = {
+            "enabled": self.hs_enabled_cb.isChecked(),
+            "url":     self.hs_url_edit.text().strip(),
+            "user":    self.hs_user_edit.text().strip(),
+        }
+        api_key = self.hs_apikey_edit.text().strip()
+        if api_key:
+            cfg["api_key"] = api_key
+        return cfg
 
     def _get_telegram_config(self) -> dict:
         """Retourne la config Telegram — omet le token s'il est vide pour préserver l'existant."""
@@ -542,6 +599,33 @@ class DeployDialog(QDialog):
                 self._sig.message.emit(f"\n🌐 SCADA disponible : {self._rpi_url}/scada")
                 self._sig.message.emit(f"🖥 Synoptique : {self._rpi_url}/synoptic")
                 self._sig.message.emit(f"📱 PWA installable sur mobile")
+
+                # Tailscale / Headscale — rejoindre le tailnet si activé
+                hs_cfg = cfg.get("headscale", {})
+                if hs_cfg.get("enabled"):
+                    api_key = hs_cfg.get("api_key") or self.rpi_config.get("headscale", {}).get("api_key", "")
+                    if not api_key:
+                        self._sig.message.emit("[TS] ⚠ Clé API Headscale manquante — étape ignorée")
+                    else:
+                        try:
+                            self._sig.message.emit("\n[TS] Génération d'une clé de pré-authentification…")
+                            from core.headscale_api import create_preauth_key, HeadscaleAPIError
+                            authkey = create_preauth_key(
+                                hs_cfg["url"], api_key, hs_cfg["user"],
+                                expiration_hours=24, reusable=True,
+                            )
+                            r_ts = d.install_tailscale(hs_cfg["url"], authkey)
+                            if r_ts.success:
+                                self._sig.message.emit(
+                                    f"[TS] ✅ RPi joignable en permanence sur : {r_ts.message} "
+                                    f"(port {cfg2['web_port']})"
+                                )
+                            else:
+                                self._sig.message.emit(f"[TS] ❌ {r_ts.message}")
+                        except HeadscaleAPIError as e:
+                            self._sig.message.emit(f"[TS] ❌ Erreur API Headscale : {e}")
+                        except Exception as e:
+                            self._sig.message.emit(f"[TS] ❌ Erreur inattendue : {e}")
             self._sig.done.emit(r.success, r.message)
 
         threading.Thread(target=_run, daemon=True).start()

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tuto : headscale apikeys avec RPi-PLC Studio</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a21;
+    --panel-border: #262c37;
+    --text: #dfe6ee;
+    --muted: #8b96a5;
+    --accent: #5eb1ff;
+    --accent-soft: #1c2e40;
+    --green: #4fd18b;
+    --amber: #f0b846;
+    --red: #ff7373;
+    --code-bg: #0b0d11;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65;
+  }
+  .wrap {
+    max-width: 840px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  header.hero {
+    margin-bottom: 48px;
+  }
+  header.hero .kicker {
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 32px;
+    margin: 8px 0 12px;
+    line-height: 1.25;
+  }
+  header.hero p.lead {
+    color: var(--muted);
+    font-size: 17px;
+    max-width: 640px;
+  }
+  h2 {
+    font-size: 22px;
+    margin: 56px 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 {
+    font-size: 17px;
+    margin: 28px 0 10px;
+    color: var(--text);
+  }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+  code {
+    font-family: var(--mono);
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: #ffd479;
+    border: 1px solid var(--panel-border);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 0 0 18px;
+    position: relative;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #d7e2ee;
+    font-size: 14px;
+    white-space: pre;
+  }
+  pre .comment { color: var(--muted); }
+  .callout {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 0 0 20px;
+    border: 1px solid var(--panel-border);
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .callout .icon { font-size: 18px; line-height: 1.4; }
+  .callout.tip   { background: rgba(94,177,255,0.07); border-color: rgba(94,177,255,0.25); }
+  .callout.warn  { background: rgba(240,184,70,0.07); border-color: rgba(240,184,70,0.3); }
+  .callout.danger{ background: rgba(255,115,115,0.07); border-color: rgba(255,115,115,0.3); }
+  .callout.ok    { background: rgba(79,209,139,0.07); border-color: rgba(79,209,139,0.3); }
+  .callout strong { color: var(--text); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 20px;
+    font-size: 14.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 0 0 20px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  ul, ol { padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 6px; }
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  .toc h2 { margin: 0 0 12px; border: none; padding: 0; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  .toc a { color: var(--text); text-decoration: none; font-size: 14.5px; }
+  .toc a:hover { color: var(--accent); }
+  .kbd {
+    font-family: var(--mono);
+    background: #20242c;
+    border: 1px solid #333a45;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 7px;
+    font-size: 0.85em;
+  }
+  .field-table code { color: var(--accent); }
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--panel-border);
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+  .diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 0 0 20px;
+    font-size: 14px;
+  }
+  .diagram .box {
+    background: var(--code-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    text-align: center;
+  }
+  .diagram .arrow { color: var(--muted); font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">RPi-PLC Studio · Headscale</div>
+    <h1>Utiliser <code style="font-size:0.85em;">headscale apikeys</code> avec RPi-PLC Studio</h1>
+    <p class="lead">
+      Guide complet pour générer, configurer et gérer la clé API Headscale
+      qui permet à Studio de connecter automatiquement le Raspberry Pi à
+      ton tailnet à chaque déploiement.
+    </p>
+  </header>
+
+  <div class="toc">
+    <h2>Sommaire</h2>
+    <ol>
+      <li><a href="#concepts">Deux clés, deux usages</a></li>
+      <li><a href="#prerequis">Prérequis</a></li>
+      <li><a href="#generer">Générer la clé API</a></li>
+      <li><a href="#configurer">Configurer Studio</a></li>
+      <li><a href="#deploiement">Ce qu'il se passe au déploiement</a></li>
+      <li><a href="#gestion">Lister / révoquer une clé</a></li>
+      <li><a href="#verifier">Vérifier la connexion du RPi</a></li>
+      <li><a href="#securite">Sécurité &amp; bonnes pratiques</a></li>
+      <li><a href="#depannage">Dépannage</a></li>
+    </ol>
+  </div>
+
+  <h2 id="concepts"><span class="num">1</span>Deux clés, deux usages</h2>
+  <p>
+    Headscale utilise deux types de clés qu'il ne faut pas confondre —
+    c'est la confusion la plus fréquente en démarrant :
+  </p>
+  <table class="field-table">
+    <tr>
+      <th></th>
+      <th>Clé API (<code>apikeys</code>)</th>
+      <th>Clé de pré-auth (<code>preauthkeys</code>)</th>
+    </tr>
+    <tr>
+      <td><strong>Rôle</strong></td>
+      <td>Piloter Headscale lui-même (créer des utilisateurs, des clés, lister les machines…)</td>
+      <td>Enregistrer <em>un seul appareil</em> sur le tailnet</td>
+    </tr>
+    <tr>
+      <td><strong>Qui l'utilise</strong></td>
+      <td>Headplane, RPi-PLC Studio, tout script d'automatisation</td>
+      <td><code>tailscale up --authkey=…</code>, exécuté sur l'appareil à enregistrer</td>
+    </tr>
+    <tr>
+      <td><strong>Durée de vie</strong></td>
+      <td>90 jours par défaut, réutilisable pour toutes les opérations</td>
+      <td>Généralement à usage unique, courte expiration</td>
+    </tr>
+  </table>
+  <div class="callout tip">
+    <div class="icon">💡</div>
+    <div>
+      <strong>Ce que fait Studio :</strong> tu ne donnes à Studio que la <em>clé API</em> (une seule fois).
+      À chaque déploiement, Studio l'utilise pour générer lui-même une <em>clé de pré-auth</em> fraîche
+      et connecter le RPi — tu n'as plus jamais besoin de manipuler de clé de pré-auth à la main.
+    </div>
+  </div>
+
+  <div class="diagram">
+    <div class="box">RPi-PLC<br>Studio</div>
+    <div class="arrow">— clé API →</div>
+    <div class="box">API Headscale<br><small style="color:var(--muted)">/api/v1/preauthkey</small></div>
+    <div class="arrow">— clé de pré-auth →</div>
+    <div class="box">Raspberry Pi<br><small style="color:var(--muted)">tailscale up</small></div>
+  </div>
+
+  <h2 id="prerequis"><span class="num">2</span>Prérequis</h2>
+  <ul>
+    <li>Headscale installé et <strong>en cours d'exécution</strong> sur ton YunoHost (<code>systemctl status headscale</code> → <code>active (running)</code>)</li>
+    <li>Un certificat Let's Encrypt valide sur le domaine Headscale et sur celui de Dex (pas de certificat auto-signé)</li>
+    <li>Un utilisateur Headscale déjà créé (ex. <code>vinc</code>) via <code>headscale users create vinc</code></li>
+    <li>RPi-PLC Studio en version <strong>3.5-10 ou supérieure</strong> (intègre le bloc "🔒 Tailscale / Headscale")</li>
+  </ul>
+
+  <h2 id="generer"><span class="num">3</span>Générer la clé API</h2>
+  <p>Sur ton serveur YunoHost, en SSH :</p>
+  <pre><code><span class="comment"># Méthode recommandée — YunoHost gère le chemin et le contexte pour toi</span>
+sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys create"</code></pre>
+
+  <p>La commande affiche la clé <strong>une seule fois</strong>, quelque chose comme :</p>
+  <pre><code>Attention : la clé n'est affichée qu'une seule fois, copiez-la !
+a1b2c3d4e5.k9x7m2p4q8r1s5t3u6v0w2y4z8A1B3C5D7E9F1G3H5I7J9K1L3M</code></pre>
+
+  <div class="callout warn">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>Copie-la immédiatement</strong> dans un gestionnaire de mots de passe ou colle-la
+      directement dans Studio (étape suivante). Headscale ne permet pas de la réafficher —
+      si tu la perds, il faudra en créer une nouvelle et révoquer l'ancienne.
+    </div>
+  </div>
+
+  <h3>Alternative si la commande ci-dessus échoue</h3>
+  <p>Si <code>yunohost app shell</code> ne fonctionne pas dans ton contexte, la commande directe équivalente est :</p>
+  <pre><code>cd /var/www/headscale
+sudo ./headscale -c ./config.yaml apikeys create</code></pre>
+
+  <h3>Personnaliser la durée de validité</h3>
+  <p>Par défaut la clé expire au bout de 90 jours. Pour une autre durée :</p>
+  <pre><code>sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys create --expiration 365d"</code></pre>
+
+  <h2 id="configurer"><span class="num">4</span>Configurer Studio</h2>
+  <p>Dans RPi-PLC Studio :</p>
+  <ol>
+    <li>Ouvre le dialogue de déploiement de ton projet</li>
+    <li>Va dans l'onglet <strong>Avancé</strong></li>
+    <li>Déroule le bloc <strong>🔒 Tailscale / Headscale — accès distant au RPi</strong></li>
+  </ol>
+
+  <div class="panel">
+    <table class="field-table">
+      <tr><th>Champ</th><th>Valeur</th></tr>
+      <tr>
+        <td>☑ Installer Tailscale et rejoindre le tailnet</td>
+        <td>Coche cette case pour activer l'intégration</td>
+      </tr>
+      <tr>
+        <td><code>URL Headscale</code></td>
+        <td>Ex. <code>https://headscale.vincentlux.fr</code></td>
+      </tr>
+      <tr>
+        <td><code>Utilisateur Headscale</code></td>
+        <td>Ex. <code>vinc</code> — celui créé avec <code>headscale users create</code></td>
+      </tr>
+      <tr>
+        <td><code>Clé API Headscale</code></td>
+        <td>Colle la clé générée à l'étape précédente (bouton 👁 pour vérifier la saisie)</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="callout tip">
+    <div class="icon">💾</div>
+    <div>
+      Une fois saisie, la clé est mémorisée dans la config du projet — inutile de la
+      recopier aux prochains déploiements, sauf si tu la laisses vide volontairement
+      (Studio réutilise alors la dernière clé enregistrée).
+    </div>
+  </div>
+
+  <h2 id="deploiement"><span class="num">5</span>Ce qu'il se passe au déploiement</h2>
+  <p>Quand tu cliques sur <strong>Déployer</strong> avec l'option activée, Studio exécute automatiquement, après le déploiement du programme PLC :</p>
+  <ol>
+    <li>Résolution de ton nom d'utilisateur Headscale en ID numérique via l'API</li>
+    <li>Génération d'une clé de pré-authentification fraîche (24h, réutilisable)</li>
+    <li>Connexion SSH au RPi, vérification si Tailscale est déjà installé</li>
+    <li>Installation du client Tailscale si nécessaire (<code>curl install.sh</code>)</li>
+    <li>Exécution de <code>tailscale up --login-server=… --authkey=…</code> sur le RPi</li>
+    <li>Récupération et affichage de l'IP Tailscale obtenue dans le journal de déploiement</li>
+  </ol>
+  <p>Tu verras dans les logs de Studio une ligne du type :</p>
+  <pre><code>[TS] ✅ RPi joignable en permanence sur : 100.64.12.3 (port 5000)</code></pre>
+
+  <h2 id="gestion"><span class="num">6</span>Lister / révoquer une clé</h2>
+  <h3>Lister les clés existantes</h3>
+  <pre><code>sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys list"</code></pre>
+  <p>La colonne <code>Prefix</code> identifie chaque clé (c'est la partie visible même après création, contrairement au reste de la clé).</p>
+
+  <h3>Révoquer une clé (perdue, compromise, ou remplacée)</h3>
+  <pre><code>sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys expire --prefix &lt;PREFIX&gt;"</code></pre>
+  <div class="callout warn">
+    <div class="icon">⚠️</div>
+    <div>
+      Une fois expirée, la clé arrête immédiatement de fonctionner partout où elle est utilisée
+      (Studio, Headplane, scripts…). Génère et remplace-la avant de révoquer l'ancienne si tu
+      ne veux pas d'interruption.
+    </div>
+  </div>
+
+  <h2 id="verifier"><span class="num">7</span>Vérifier la connexion du RPi</h2>
+  <ul>
+    <li><strong>Depuis Headplane</strong> : onglet <em>Machines</em> — le RPi doit apparaître avec son hostname et une IP <code>100.x.x.x</code></li>
+    <li><strong>Depuis le RPi en SSH</strong> :
+      <pre><code>tailscale status
+tailscale ip -4</code></pre>
+    </li>
+    <li><strong>Accès à la synoptic à distance</strong>, où que tu sois :
+      <pre><code>http://&lt;IP_TAILSCALE_DU_RPI&gt;:5000/synoptic</code></pre>
+    </li>
+  </ul>
+
+  <h2 id="securite"><span class="num">8</span>Sécurité &amp; bonnes pratiques</h2>
+  <ul>
+    <li>Génère une clé <strong>dédiée à Studio</strong>, différente de celle utilisée par Headplane — plus facile à révoquer isolément en cas de besoin</li>
+    <li>Si ton projet <code>.plcproj</code> est versionné avec git, <strong>ne commite jamais</strong> ce fichier une fois la clé API renseignée, ou ajoute-le à <code>.gitignore</code></li>
+    <li>Préfère une expiration raisonnable (90 jours) plutôt qu'une validité illimitée, et renouvelle-la périodiquement</li>
+    <li>Une clé API donne un contrôle large sur Headscale (création d'utilisateurs, de clés, etc.) — traite-la comme un mot de passe root, pas comme un simple jeton de lecture</li>
+  </ul>
+
+  <h2 id="depannage"><span class="num">9</span>Dépannage</h2>
+
+  <h3>« Error: connecting to headscale: connecting to ./headscale.sock: context deadline exceeded »</h3>
+  <p>Le service Headscale ne tourne pas. Vérifie :</p>
+  <pre><code>sudo systemctl status headscale
+sudo tail -30 /var/log/headscale/headscale.log</code></pre>
+  <p>Causes fréquentes : certificat auto-signé sur le domaine Dex (voir <code>yunohost domain cert status</code>), ou service jamais redémarré après une modification de config.</p>
+
+  <h3>Erreur HTTP 401 / « Unauthorized » côté Studio</h3>
+  <div class="callout danger">
+    <div class="icon">❌</div>
+    <div>La clé API est invalide, mal copiée (espace en trop), ou a expiré. Génère-en une nouvelle avec <code>apikeys create</code> et remplace-la dans Studio.</div>
+  </div>
+
+  <h3>« Utilisateur Headscale introuvable »</h3>
+  <p>Le nom saisi dans Studio ne correspond à aucun utilisateur Headscale. Vérifie la liste :</p>
+  <pre><code>sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale users list"</code></pre>
+
+  <h3>Le RPi n'apparaît pas dans Headplane après déploiement</h3>
+  <ul>
+    <li>Vérifie que le RPi a bien un accès réseau sortant vers l'URL Headscale (pas de pare-feu local bloquant)</li>
+    <li>Consulte les logs de déploiement dans Studio — la ligne <code>[TS]</code> indique la cause précise si l'étape a échoué</li>
+    <li>Sur le RPi : <code>sudo tailscale status</code> pour voir l'état de la connexion côté client</li>
+  </ul>
+
+  <footer>
+    RPi-PLC Studio · Intégration Tailscale/Headscale — v3.5-10
+  </footer>
+
+</div>
+</body>
+</html>
