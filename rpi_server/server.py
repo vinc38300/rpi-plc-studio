@@ -1016,14 +1016,106 @@ class PLCEngine:
             if not hasattr(self, 'dv_vars'): self.dv_vars = {}
             with self._lock: self.dv_vars[ref.lower()] = bool(value)
 
+    # ── Normalisation des clés câblées par le compilateur de fils ────────────
+    # Le compilateur de fils (ui/fbd_canvas.js et flatten_blocks ci-dessous)
+    # écrit le registre d'un fil dans une clé "générique" : reg_a pour toute
+    # entrée simple (IN, CU, CD, LD, HIG, LOW, SP...), reg_b pour IN2.
+    # Or chaque branche d'exec_block lit une clé "métier" (condition, reg_in,
+    # cu_cond, high...). Sans passerelle, le fil est compilé mais JAMAIS lu :
+    # le bloc voit une entrée absente et reste figé (bug TOF → Q toujours 0,
+    # bug FILT1 → lit RF0=0 au lieu de la sonde, etc.).
+    # Cette table comble le trou SANS toucher aux projets existants : on ne
+    # remplit une clé métier que si elle est absente ou restée au défaut.
+    _WIRED_ALIASES = {
+        # type(s)                      clé métier        sources possibles
+        ("ton","tof","tp","timer",
+         "wait","waith","pulse"):     [("condition",   ("in","reg_a"))],
+        ("ctu","counter"):            [("cu_cond",     ("cu","reg_a")),
+                                       ("reset_condition", ("r","res_cond"))],
+        ("ctd",):                     [("cd_cond",     ("cd","reg_a")),
+                                       ("ld_cond",     ("ld","reg_b"))],
+        ("ctud",):                    [("cu_cond",     ("cu","reg_a")),
+                                       ("cd_cond",     ("cd","reg_b")),
+                                       ("reset_condition", ("r","res_cond")),
+                                       ("ld_cond",     ("ld",))],
+        ("coil","set","reset"):       [("condition",   ("en","s","r","in",
+                                                        "set_cond","res_cond","reg_a"))],
+        ("sr","sr_r","sr_s","rs"):    [("set_cond",    ("s","s_cond")),
+                                       ("res_cond",    ("r","r_cond","reset_condition"))],
+        ("filt1","avg","integ","deriv","deadb","abs","sqrt",
+         "clamp","clamp_a","limit","hyst"):
+                                      [("reg_in",      ("reg_a","input","in"))],
+        ("scale",):                   [("input",       ("reg_in","reg_a","in"))],
+        ("ramp",):                    [("reg_sp",      ("reg_a","sp","reg_in"))],
+        # COMPH/COMPL : le seuil câblé reste dans reg_a/reg_b et est lu
+        # explicitement par la branche d'exécution (il ne peut pas remplacer
+        # le champ "high"/"low" qui est un nombre, pas un registre).
+        ("comph","compl"):            [("ref",         ("reg_in","in"))],
+    }
+
+    def _normalize_wired_keys(self, block, btype):
+        """Recopie les registres câblés (reg_a/reg_b/...) vers la clé lue par
+        la branche d'exécution du bloc. Idempotent, sans effet si déjà correct."""
+        for types, rules in self._WIRED_ALIASES.items():
+            if btype not in types:
+                continue
+            for target, sources in rules:
+                cur = block.get(target)
+                # Valeur déjà câblée par le compilateur (RF>=100) → on ne touche à rien
+                if isinstance(cur, str) and cur.startswith("RF"):
+                    try:
+                        if int(cur[2:]) >= 100:
+                            continue
+                    except ValueError:
+                        continue
+                elif cur not in (None, "", "RF0"):
+                    # Valeur métier explicite (dict de condition, registre manuel
+                    # RF1..RF99) → prioritaire, on ne l'écrase pas. Le défaut
+                    # "RF0" est au contraire considéré comme "non renseigné".
+                    continue
+                for src in sources:
+                    v = block.get(src)
+                    if v is None or v == "" or v == cur:
+                        continue
+                    if isinstance(v, str) and v.startswith("RF"):
+                        try:
+                            if int(v[2:]) < 100:
+                                continue   # registre manuel/défaut, pas un fil
+                        except ValueError:
+                            continue
+                    block[target] = v
+                    break
+            break
+
+    def _write_q(self, block, value):
+        """Propage une sortie booléenne (Q / STS / DONE) vers le registre RF
+        assigné par le compilateur de fils, pour que les blocs en aval la lisent."""
+        reg = block.get("reg_out")
+        if reg and isinstance(reg, str):
+            if reg.startswith("RF"):
+                self.write_register(reg, 1.0 if value else 0.0)
+            elif reg.startswith("M"):
+                self.write_signal(reg, bool(value))
+
     def exec_block(self, block, dt_ms):
         btype = (block.get("type") or "").lower(); bid = block.get("id","?"); out = block.get("output")
+        self._normalize_wired_keys(block, btype)
 
         if btype in ("coil","set","reset"):
-            cond = self.eval_cond(block.get("condition"))
-            if btype == "coil":            self.write_bool_out(out, cond)
-            elif btype == "set"   and cond: self.write_bool_out(out, True)
-            elif btype == "reset" and cond: self.write_bool_out(out, False)
+            cond = self.eval_cond(block.get("condition"), default_if_none=False)
+            # État mémorisé de la bobine (SET/RESET sont à mémoire)
+            if bid not in self.memory: self.memory[bid] = False
+            if btype == "coil":
+                self.memory[bid] = cond
+                self.write_bool_out(out, cond)
+            elif btype == "set"   and cond:
+                self.memory[bid] = True
+                self.write_bool_out(out, True)
+            elif btype == "reset" and cond:
+                self.memory[bid] = False
+                self.write_bool_out(out, False)
+            # FIX : propager Q vers le registre du fil (sortie Q du bloc COIL/SET/RESET)
+            self._write_q(block, self.memory.get(bid, False))
 
         elif btype == "timer":
             preset = block.get("preset_ms", 1000)
@@ -1036,6 +1128,7 @@ class PLCEngine:
             else:
                 t["running"] = False; t["acc"] = 0.0; t["done"] = False
             if out: self.write_signal(out, t["done"])
+            self._write_q(block, t["done"])
 
         elif btype == "counter":
             preset = float(self.read_analog(block.get("pv_ref"))) if block.get("pv_ref") else float(block.get("preset", 10))
@@ -1049,6 +1142,7 @@ class PLCEngine:
             elif cond and not c["_prev"]: c["acc"] += 1; c["done"] = c["acc"] >= preset
             c["_prev"] = cond
             if out: self.write_signal(out, c["done"])
+            self._write_q(block, c["done"])
             cv_ref = block.get("cv_ref")
             if cv_ref: self.write_register(cv_ref, float(c["acc"]))
 
@@ -1114,6 +1208,7 @@ class PLCEngine:
             if r:    self.memory[bit] = False
             elif s:  self.memory[bit] = True
             if out: self.write_signal(out, self.memory.get(bit, False))
+            self._write_q(block, self.memory.get(bit, False))
 
         elif btype == "sr_s":
             # SR_S : Set prioritaire (S > R)
@@ -1124,6 +1219,7 @@ class PLCEngine:
             if s:    self.memory[bit] = True   # Set prioritaire
             elif r:  self.memory[bit] = False
             if out: self.write_signal(out, self.memory.get(bit, False))
+            self._write_q(block, self.memory.get(bit, False))
 
         elif btype == "rs":
             s   = self.eval_cond(block.get("set_cond"))
@@ -1132,6 +1228,7 @@ class PLCEngine:
             if s:    self.memory[bit] = True
             elif r:  self.memory[bit] = False
             if out: self.write_signal(out, self.memory.get(bit, False))
+            self._write_q(block, self.memory.get(bit, False))
 
         # ── Blocs temporisation avancés ──────────────────────────────────
         elif btype in ("ton", "tof", "tp"):
@@ -1176,6 +1273,10 @@ class PLCEngine:
             # sur le serveur déployé, quel que soit l'état réel du timer.
             q_val = t["done"] if btype in ("ton", "tof") else t.get("active", False)
             if out: self.write_signal(out, q_val)
+            # FIX CRITIQUE : propager Q vers le registre du fil (reg_out).
+            # Sans cela, tout bloc câblé en aval (AND/OR/OUTPUT…) lit un
+            # registre qui n'est jamais écrit → reste à 0 en permanence.
+            self._write_q(block, q_val)
             et_ref = block.get("et_ref")
             if et_ref: self.write_register(et_ref, float(t["acc"]))
 
@@ -1188,6 +1289,7 @@ class PLCEngine:
             if cond: t["acc"] = min(t["acc"] + dt_ms, delay_ms); t["done"] = t["acc"] >= delay_ms
             else:    t["acc"] = 0.0; t["done"] = False
             if out: self.write_signal(out, t["done"])
+            self._write_q(block, t["done"])
 
         elif btype == "waith":
             delay_ms = float(block.get("delay_s", 5)) * 1000.0
@@ -1200,6 +1302,7 @@ class PLCEngine:
                 t["acc"] = min(t["acc"] + dt_ms, delay_ms)
                 if t["acc"] >= delay_ms: t["sts"] = False
             if out: self.write_signal(out, t["sts"])
+            self._write_q(block, t["sts"])
 
         elif btype == "pulse":
             dur_ms = float(block.get("duration_s", 3)) * 1000.0
@@ -1213,6 +1316,7 @@ class PLCEngine:
                 if t["acc"] >= dur_ms: t["active"] = False
             t["_prev"] = cond
             if out: self.write_signal(out, t["active"])
+            self._write_q(block, t["active"])
 
         # ── Compteurs avancés (CTD / CTUD — CTU seul est traité plus haut,
         # type compilé "counter") ─────────────────────────────────────────
@@ -1237,6 +1341,7 @@ class PLCEngine:
             c["done"] = c["acc"] >= preset if btype != "ctd" else c["acc"] <= 0
             c["_cu"] = cu; c["_cd"] = cd
             if out: self.write_signal(out, c["done"])
+            self._write_q(block, c["done"])
             cv_ref = block.get("cv_ref")
             if cv_ref: self.write_register(cv_ref, float(c["acc"]))
 
@@ -1278,19 +1383,62 @@ class PLCEngine:
             dst     = block.get("reg_out", out)
             if dst: self.write_register(dst, val)
 
+        elif btype == "mem":
+            # FIX : le type MEM (bit mémoire) n'était pas implémenté côté serveur.
+            # Port W (entrée, câblé dans reg_a) → bit ; port R (sortie) → reg_out.
+            bit = block.get("bit", "M0")
+            src = block.get("reg_a") or block.get("reg_in") or block.get("input")
+            if isinstance(src, str) and src.startswith("RF"):
+                with self._lock:
+                    self.memory[bit] = self.registers.get(src, 0.0) >= 0.5
+            val_m = self.memory.get(bit, False)
+            self._write_q(block, val_m)
+            if out: self.write_signal(out, val_m)
+
         elif btype == "comph":
-            val = self.registers.get(block.get("ref","RF0"), 0.0)
-            thr = float(block.get("high", 80.0))
+            # Seuil HAUT avec hystérésis : monte quand val >= high, redescend sous (high - hyst)
+            val  = self.read_analog(block.get("ref", "RF0"))
+            # FIX : seuil câblé sur le port HIG (registre RF du compilateur de
+            # fils) prioritaire sur la valeur figée du champ "high".
+            _hr  = block.get("high_ref")
+            high = float(self.read_analog(_hr)) if (isinstance(_hr, str) and _hr.startswith("RF")) \
+                   else float(block.get("high", 80.0))
+            hyst = float(block.get("hyst", 0.5))
+            if bid not in self.timers: self.timers[bid] = {"state": False}
+            st = self.timers[bid]
+            if not st["state"]:
+                if val >= high: st["state"] = True
+            else:
+                if val < (high - hyst): st["state"] = False
+            result = st["state"]
             reg = block.get("reg_out", "M0")
             if reg.startswith("M"):
-                with self._lock: self.memory[reg] = val >= thr
+                with self._lock: self.memory[reg] = result
+            elif reg.startswith("RF"):
+                self.write_register(reg, 1.0 if result else 0.0)
+            if out: self.write_signal(out, result)
 
         elif btype == "compl":
-            val = self.registers.get(block.get("ref","RF0"), 0.0)
-            thr = float(block.get("low", 10.0))
+            # Seuil BAS avec hystérésis : monte quand val <= low, redescend au-dessus de (low + hyst)
+            val  = self.read_analog(block.get("ref", "RF0"))
+            # FIX : seuil câblé sur le port LOW prioritaire sur la valeur figée.
+            _lr  = block.get("low_ref")
+            low  = float(self.read_analog(_lr)) if (isinstance(_lr, str) and _lr.startswith("RF")) \
+                   else float(block.get("low", 10.0))
+            hyst = float(block.get("hyst", 0.5))
+            if bid not in self.timers: self.timers[bid] = {"state": False}
+            st = self.timers[bid]
+            if not st["state"]:
+                if val <= low: st["state"] = True
+            else:
+                if val > (low + hyst): st["state"] = False
+            result = st["state"]
             reg = block.get("reg_out", "M1")
             if reg.startswith("M"):
-                with self._lock: self.memory[reg] = val <= thr
+                with self._lock: self.memory[reg] = result
+            elif reg.startswith("RF"):
+                self.write_register(reg, 1.0 if result else 0.0)
+            if out: self.write_signal(out, result)
 
         elif btype in ("gt", "ge", "lt", "le", "eq", "ne", "compare"):
             def _rv(r):
@@ -2657,12 +2805,40 @@ def flatten_blocks(blocks_or_program) -> list:
         if port.startswith("OD"):            return f"od{port[2:]}_ref"
         return "reg_out"
 
+    # Blocs analogiques à entrée unique : la branche d'exécution lit "reg_in"
+    # (et non "reg_a"). Sans cette table, un fil câblé sur IN était rangé dans
+    # reg_a et le bloc continuait de lire RF0 (=0) → filtre/moyenne/… figés à 0.
+    _ANALOG_IN1 = ("filt1", "avg", "integ", "deriv", "deadb", "abs", "sqrt",
+                   "clamp", "clamp_a", "limit", "hyst")
+    _COUNTERS   = ("ctu", "ctd", "ctud", "counter")
+
     # Attribut destination du bloc selon le port d'entrée câblé
     def _dst_attr(btype, port):
         port = port.upper(); btype = btype.lower()
         if port == "IN1":                   return "reg_a"
         if port == "IN2":                   return "reg_b"
         if port == "IN" and btype == "conn":  return "reg_in"
+        if port == "IN" and btype in _ANALOG_IN1: return "reg_in"
+        if port == "IN" and btype in ("comph", "compl"): return "ref"
+        if port == "IN" and btype == "scale":     return "input"
+        if port == "SP" and btype == "ramp":      return "reg_sp"
+        # Seuils câblés des comparateurs à hystérésis : clé dédiée, sinon le
+        # fil écrasait reg_a (l'entrée IN) et le bloc comparait la valeur à
+        # elle-même → sortie bloquée à 1.
+        if port == "HIG":                   return "high_ref"
+        if port == "LOW":                   return "low_ref"
+        # Compteurs : chaque entrée a sa clé métier (le serveur lit
+        # cu_cond / cd_cond / ld_cond / reset_condition).
+        if port == "CU" and btype in _COUNTERS:  return "cu_cond"
+        if port == "CD" and btype in _COUNTERS:  return "cd_cond"
+        if port == "LD" and btype in _COUNTERS:  return "ld_cond"
+        if port == "R"  and btype in _COUNTERS:  return "reset_condition"
+        if port in ("SET", "S") and btype in ("sr", "sr_r", "sr_s", "rs", "set"):
+            return "set_cond"
+        if port in ("RES", "R") and btype in ("sr", "sr_r", "sr_s", "rs"):
+            return "res_cond"
+        if port == "RES" and btype == "integ":   return "reset_cond"
+        if port == "EN":                    return "condition"
         if port == "IN":                    return "reg_a"    # IN simple (TOF/TON/TP/WAIT/WAITH/PULSE)
         if port == "PT":                    return "pt_ref"   # preset câblé — clé dédiée (cf. IN ci-dessus)
         if port == "PV":                    return "pv_ref"   # preset câblé compteurs CTU/CTD/CTUD

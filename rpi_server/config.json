@@ -115,35 +115,40 @@
     "ds18b20": []
   },
   "gpio": {
-    "4": {
-      "name": "Circulateur CR1",
+    "11": {
+      "name": "K3",
+      "mode": "output",
+      "active_low": true
+    },
+    "9": {
+      "name": "K5",
       "mode": "output",
       "active_low": true
     },
     "5": {
-      "name": "Circulateur CP1",
+      "name": "Circulateur CR1",
       "mode": "output",
       "active_low": true
     },
     "6": {
+      "name": "Circulateur CP1",
+      "mode": "output",
+      "active_low": true
+    },
+    "13": {
+      "name": "CT 20/21",
+      "mode": "output",
+      "active_low": true
+    },
+    "24": {
       "name": "TA1",
       "mode": "input",
       "pull": "up"
     },
-    "7": {
-      "name": "GPIO7",
-      "mode": "output",
-      "active_low": true
-    },
-    "8": {
+    "23": {
       "name": "TS1",
       "mode": "input",
       "pull": "up"
-    },
-    "17": {
-      "name": "CT 20/21",
-      "mode": "output",
-      "active_low": true
     }
   },
   "mqtt": {

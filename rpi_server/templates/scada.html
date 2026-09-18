@@ -896,16 +896,44 @@ function renderSynoptique(s, analog, gpio, regs, mem){
   el('syn-alarms').textContent = alarmActive;
   el('syn-alarms').className = 'stat-val '+(alarmActive?'err':'ok');
 
-  // Sondes top 4 dans synoptique
+  // Sondes top 4 dans synoptique — build once, update en place ensuite.
+  // AVANT : grid.innerHTML='' + rebuild complet à CHAQUE plc_update (100ms par défaut),
+  // donc les cartes étaient détruites/recréées ~10x/s → clic perdu au hasard si le
+  // rebuild tombait entre mousedown et mouseup. Même pattern que syn-relais-grid.
   const grid = el('syn-temps-grid');
   if(grid){
-    grid.innerHTML='';
-    anaList.slice(0,8).forEach(([id,v])=>{
-      const t = v.celsius;
-      const card = mkTempMini(id, v.name||id, t);
-      card.onclick = ()=>{ selectedSonde=id; document.getElementById('syn-chart-label').textContent=v.name||id; };
-      grid.appendChild(card);
-    });
+    const top8 = anaList.slice(0,8);
+    const sig = top8.map(([id])=>id).join(',');
+    if(grid.dataset.sig !== sig){
+      grid.innerHTML='';
+      grid.dataset.sig = sig;
+      top8.forEach(([id,v])=>{
+        const t = v.celsius;
+        const card = mkTempMini(id, v.name||id, t);
+        card.onclick = ()=>{
+          selectedSonde = id;
+          document.getElementById('syn-chart-label').textContent = v.name||id;
+          grid.querySelectorAll('.temp-card').forEach(c=>c.classList.remove('selected'));
+          card.classList.add('selected');
+        };
+        if(id === selectedSonde) card.classList.add('selected');
+        grid.appendChild(card);
+      });
+    } else {
+      top8.forEach(([id,v])=>{
+        const t = v.celsius;
+        const th = getThresholds(id);
+        const pct = t!=null&&!isNaN(t) ? Math.min(100,Math.max(0,(t+50)/250*100)) : 0;
+        const cls = t==null||isNaN(t)?'nc':t>th.high?'hot':t>50?'warm':t<th.low?'cold':'ok';
+        const barColor = t>th.high?'var(--red)':t>50?'var(--amber)':'var(--cyan)';
+        const tv = document.getElementById(`mtv-${id}`);
+        if(tv){ tv.textContent = t!=null&&!isNaN(t)?t.toFixed(1)+'°C':'N/C'; tv.className = `temp-val ${cls}`; }
+        const tb = document.getElementById(`mtb-${id}`);
+        if(tb){ tb.style.width = pct+'%'; tb.style.background = barColor; }
+        const card = document.getElementById(`mini-tc-${id}`);
+        if(card) card.className = 'temp-card'+(t!=null&&t>th.high?' alarm':'')+(id===selectedSonde?' selected':'');
+      });
+    }
   }
 
   // Relais — rebuild si la config GPIO a changé (pins ou noms)

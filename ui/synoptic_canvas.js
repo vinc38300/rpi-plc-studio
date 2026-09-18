@@ -955,7 +955,25 @@ function mkW(type,x,y,extra={}){return{id:'W'+(idCounter++),type,x,y,...JSON.par
 
 // Ne pas détruire les widgets HTML si un input/select est actif
 // (évite la perte de focus pendant la saisie clavier)
+//
+// BUG "clic aléatoire" sur les widgets (temp_card, setpoint, sp_card, boutons...) :
+// renderAll() est ré-appelé à chaque plc_update (~10x/s, scan_time_ms=100 par défaut)
+// et faisait _hd2.innerHTML='' + reconstruction complète des overlays HTML cliquables
+// (hov()). Si ce rebuild tombait entre le mousedown et le mouseup de l'utilisateur,
+// le bouton cliqué disparaissait sous le curseur/doigt et le clic était perdu.
+// On mémorise donc si un geste de clic est en cours sur #widgets-html/#popup-widgets-html
+// et on bloque le rebuild destructif pendant ce court instant (même branche que
+// _hasActiveInput, déjà utilisée pour ne pas couper la saisie clavier).
+let _pointerDownInWidgets = false;
+function _isWidgetsTarget(t){ return !!(t && t.closest && t.closest('#widgets-html, #popup-widgets-html')); }
+document.addEventListener('mousedown', e=>{ if(_isWidgetsTarget(e.target)) _pointerDownInWidgets=true; }, true);
+document.addEventListener('touchstart', e=>{ if(_isWidgetsTarget(e.target)) _pointerDownInWidgets=true; }, true);
+['mouseup','touchend','touchcancel'].forEach(evt=>{
+  document.addEventListener(evt, ()=>{ _pointerDownInWidgets=false; }, true);
+});
+
 function _hasActiveInput(){
+  if(_pointerDownInWidgets) return true;
   const a = document.activeElement;
   if(!a) return false;
   const tag = a.tagName;

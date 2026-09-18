@@ -1115,9 +1115,38 @@ class BlockEditor(QWidget):
             bid = b["id"]; bt = b["type"]; p = b.get("params", {})
 
             # Blocs purement graphiques — pas de code moteur
-            if bt in ("INPUT","OUTPUT","CONST","MEM",
+            if bt in ("INPUT","CONST","MEM",
                       "CONN","CONN_TX","CONN_RX",
                       "CARTOUCHE","PAGE_IN","PAGE_OUT"):  # blocs visuels / héritage
+                continue
+
+            # ── OUTPUT ───────────────────────────────────────────────────
+            # FIX CRITIQUE : OUTPUT était sauté comme "purement graphique",
+            # comme INPUT/CONST/CONN. Mais contrairement à ceux-ci, une sortie
+            # OUTPUT dont le port VAL est câblé reçoit un val_ref (registre RF)
+            # auto-assigné par le canvas (fbd_canvas.js _dstParamKey) DÈS QUE
+            # la source est autre chose qu'un GPIO/M-bit direct — notamment
+            # dès que la source est un AND/OR/TOF/TON/… Ce registre était donc
+            # rempli par le bloc source (write_register) mais jamais relu ni
+            # jamais appliqué à la broche physique : le relais ne recevait
+            # JAMAIS l'ordre, quel que soit l'état interne calculé en amont.
+            # On compile donc un vrai bloc "output", identique à celui produit
+            # par flatten_blocks() côté serveur, qui applique val_ref → GPIO
+            # à chaque cycle (rpi_server/server.py, branche btype=="output").
+            if bt == "OUTPUT":
+                pin = p.get("pin")
+                if pin is None:
+                    continue
+                val_ref = p.get("val_ref")
+                if val_ref is None:
+                    # Port VAL non câblé sur un registre : chercher la source
+                    # directe du fil (GPIO/M-bit) pour un passage direct.
+                    isb, isp = wire_src(bid, "VAL")
+                    val_ref = signal_ref(isb) or bool_ref(isb) if isb else None
+                if val_ref is None:
+                    continue   # OUTPUT non câblé — rien à exécuter
+                prog.append({"id": bid, "type": "output",
+                            "pin": int(pin), "val_ref": val_ref})
                 continue
 
             # ── Initialisation commune pour tous les blocs actifs ───────
@@ -1180,6 +1209,8 @@ class BlockEditor(QWidget):
                 if cond: blk["condition"] = cond
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             # ── MOVE ────────────────────────────────────────────────────
@@ -1191,6 +1222,8 @@ class BlockEditor(QWidget):
                 if cond: blk["condition"] = cond
                 out = resolve_bool_out(bid, "OUT")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             # ── Temporisations ───────────────────────────────────────────
@@ -1214,6 +1247,8 @@ class BlockEditor(QWidget):
                 if et_ref: blk["et_ref"] = et_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "TOF":
@@ -1229,6 +1264,8 @@ class BlockEditor(QWidget):
                 if et_ref: blk["et_ref"] = et_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "TP":
@@ -1244,6 +1281,8 @@ class BlockEditor(QWidget):
                 if et_ref: blk["et_ref"] = et_ref
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "WAIT":
@@ -1254,6 +1293,8 @@ class BlockEditor(QWidget):
                 if cond: blk["condition"] = cond
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "WAITH":
@@ -1264,6 +1305,8 @@ class BlockEditor(QWidget):
                 if cond: blk["condition"] = cond
                 out = resolve_bool_out(bid, "STS")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "PULSE":
@@ -1274,6 +1317,8 @@ class BlockEditor(QWidget):
                 if cond: blk["condition"] = cond
                 out = resolve_bool_out(bid, "Q")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             # ── Compteurs ────────────────────────────────────────────────
@@ -1349,6 +1394,8 @@ class BlockEditor(QWidget):
                 else: blk["val_b"] = 0
                 out = resolve_bool_out(bid, "OUT")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "COMPARE_F":
@@ -1359,6 +1406,8 @@ class BlockEditor(QWidget):
                 blk["op"]        = p.get("op", "gt")
                 out = resolve_bool_out(bid, "GT")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             # ── Bascules SR ──────────────────────────────────────────────
@@ -1369,13 +1418,17 @@ class BlockEditor(QWidget):
                 rsb, _ = wire_src(bid, rp)
                 sc = build_cond(ssb); rc = build_cond(rsb)
                 out = resolve_bool_out(bid, "Q1")
+                _rf_fb = p.get("reg_out")
+                _rf_fb = _rf_fb if isinstance(_rf_fb, str) and _rf_fb.startswith("RF") else None
                 if sc:
                     sb = {"type":"set",   "id":f"{bid}_S","condition":sc}
                     if out is not None: sb["output"] = out
+                    if _rf_fb: sb["reg_out"] = _rf_fb
                     prog.append(sb)
                 if rc:
                     rb = {"type":"reset", "id":f"{bid}_R","condition":rc}
                     if out is not None: rb["output"] = out
+                    if _rf_fb: rb["reg_out"] = _rf_fb
                     prog.append(rb)
 
             elif bt in ("SR_R", "SR_S"):
@@ -1388,6 +1441,8 @@ class BlockEditor(QWidget):
                 if rc: blk["res_cond"] = rc
                 out = resolve_bool_out(bid, "STS")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             # ── Variables / Persistance ───────────────────────────────────
@@ -1412,6 +1467,8 @@ class BlockEditor(QWidget):
                 if ref_out is not None: blk["val_out"] = ref_out
                 bool_out = resolve_bool_out(bid, "VAL")
                 if bool_out is not None: blk["output"] = bool_out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "AV":
@@ -1422,7 +1479,7 @@ class BlockEditor(QWidget):
                 if val_out: blk["val_out"] = val_out
                 bool_out = resolve_bool_out(bid, "OUT")
                 if bool_out is not None: blk["output"] = bool_out
-                prog.append(blk)
+                prog.append(blk)   # AV expose déjà val_out (reg_out géré ci-dessus)
 
             elif bt == "DV":
                 blk["type"]    = "dv"
@@ -1771,6 +1828,8 @@ class BlockEditor(QWidget):
                 blk["hi"]      = p.get("hi", 100.0)
                 out = resolve_bool_out(bid, "CLIP")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "SEL":
@@ -1797,23 +1856,39 @@ class BlockEditor(QWidget):
                 prog.append(blk)
 
             elif bt == "COMPH":
+                # FIX CRITIQUE : blk["ref"] prenait le param canvas brut, qui
+                # ne vaut rien quand l'entrée IN passe par une paire CONN (le
+                # CONN est un bloc "purement graphique" jamais compilé — voir
+                # plus haut — donc son reg_out n'est jamais réécrit). wire_src()
+                # traverse les paires CONN pour retrouver la VRAIE source ;
+                # analog_src_ref() en extrait le registre réellement écrit
+                # (ex: le reg_out d'un ADD/SENSOR en amont).
+                _isb, _isp = wire_src(bid, "IN")
+                _ref_src   = analog_src_ref(_isb, _isp)
                 blk["type"]    = "comph"
-                blk["ref"]     = p.get("ref","RF0")
+                blk["ref"]     = _ref_src or p.get("ref","RF0")
                 blk["high"]    = p.get("high", 80.0)
                 blk["hyst"]    = p.get("hyst", 0.5)
                 blk["reg_out"] = p.get("reg_out","M0")
                 out = resolve_bool_out(bid, "HL")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "COMPL":
+                # FIX CRITIQUE : même correctif que COMPH ci-dessus.
+                _isb, _isp = wire_src(bid, "IN")
+                _ref_src   = analog_src_ref(_isb, _isp)
                 blk["type"]    = "compl"
-                blk["ref"]     = p.get("ref","RF0")
+                blk["ref"]     = _ref_src or p.get("ref","RF0")
                 blk["low"]     = p.get("low", 10.0)
                 blk["hyst"]    = p.get("hyst", 0.5)
                 blk["reg_out"] = p.get("reg_out","M1")
                 out = resolve_bool_out(bid, "LL")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "FILT1":
@@ -1845,6 +1920,8 @@ class BlockEditor(QWidget):
                 if rc: blk["reset_cond"] = rc
                 out = resolve_bool_out(bid, "MAX")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "DERIV":
@@ -1863,6 +1940,8 @@ class BlockEditor(QWidget):
                 blk["dead"]    = p.get("dead", 1.0)
                 out = resolve_bool_out(bid, "DEAD")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "RAMP":
@@ -1873,6 +1952,8 @@ class BlockEditor(QWidget):
                 blk["rate"]    = p.get("rate", 1.0)
                 out = resolve_bool_out(bid, "DONE")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "HYST":
@@ -1883,6 +1964,8 @@ class BlockEditor(QWidget):
                 blk["band"]   = p.get("band", 2.0)
                 out = resolve_bool_out(bid, "OUT")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             elif bt == "SCALE":
@@ -1907,6 +1990,8 @@ class BlockEditor(QWidget):
                 blk["reg_out"] = p.get("reg_out","RF3")
                 out = resolve_bool_out(bid, "OUT")
                 if out is not None: blk["output"] = out
+                _rf_fb = p.get("reg_out")
+                if isinstance(_rf_fb, str) and _rf_fb.startswith("RF"): blk["reg_out"] = _rf_fb
                 prog.append(blk)
 
             # ── CArithm ───────────────────────────────────────────────────

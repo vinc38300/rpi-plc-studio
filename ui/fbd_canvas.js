@@ -63,6 +63,14 @@ function _srcParamKey(btype, port){
   if(p==='runtime')  return 'reg_runtime';
   // CTU/CTD/CTUD : valeur courante du compteur
   if(p==='cv')       return 'cv_ref';
+  // FIX : secondes sorties des blocs analogiques. Elles retombaient sur
+  // 'reg_out' (déjà pris par la sortie principale) et, pire, 'dead'/'max'
+  // écrasaient un paramètre numérique du bloc → plantage à l'exécution.
+  if(p==='clip')     return 'clip_ref';
+  if(p==='dead')     return 'dead_ref';
+  if(p==='max')      return 'max_ref';
+  if(p==='done')     return 'done_ref';
+  if(p==='fault')    return 'fault_ref';
   // Valeur générique
   return 'reg_out';
 }
@@ -73,10 +81,33 @@ function _srcParamKey(btype, port){
  *       port='A3'  → 'a3_ref'
  *       port='d2'  → 'd2_ref'
  */
+const _ANALOG_IN1 = ['filt1','avg','integ','deriv','deadb','abs','sqrt',
+                     'clamp','clamp_a','limit','hyst'];
+const _COUNTER_T  = ['ctu','ctd','ctud','counter'];
+const _SR_T       = ['sr','sr_r','sr_s','rs'];
+
 function _dstParamKey(btype, port){
   const p = port.toLowerCase();
   const bt = (btype||'').toLowerCase();
   if(p==='in' && (bt==='conn'||bt==='conn_tx'||bt==='conn_rx')) return 'reg_in';
+  // FIX : blocs analogiques à entrée unique — le moteur lit 'reg_in', pas
+  // 'reg_a'. Sans cette ligne le fil était compilé mais jamais lu et le bloc
+  // continuait de filtrer RF0 (=0).
+  if(p==='in' && _ANALOG_IN1.includes(bt))   return 'reg_in';
+  if(p==='in' && (bt==='comph'||bt==='compl')) return 'ref';
+  if(p==='in' && bt==='scale')               return 'input';
+  if(p==='sp' && bt==='ramp')                return 'reg_sp';
+  // FIX : seuils câblés des comparateurs à hystérésis. Ils retombaient sur
+  // 'reg_a', c'est-à-dire la MEME clé que l'entrée IN : le second fil écrasait
+  // le premier et le bloc comparait la valeur à elle-même.
+  if(p==='hig')                              return 'high_ref';
+  if(p==='low')                              return 'low_ref';
+  // FIX : compteurs — CU, CD et LD retombaient tous les trois sur 'reg_a'.
+  if(p==='cu' && _COUNTER_T.includes(bt))    return 'cu_cond';
+  if(p==='cd' && _COUNTER_T.includes(bt))    return 'cd_cond';
+  if(p==='ld' && _COUNTER_T.includes(bt))    return 'ld_cond';
+  if(p==='r'  && _COUNTER_T.includes(bt))    return 'reset_condition';
+  if((p==='res'||p==='r') && _SR_T.includes(bt)) return 'res_cond';
   // FIX : PT (preset câblé des temporisations TON/TOF/TP) doit avoir sa PROPRE
   // clé — sinon elle retombe sur 'reg_a' (déjà utilisé par IN) et le second fil
   // câblé écrase le premier dans params[], rendant l'un des deux ports inopérant.
@@ -119,22 +150,12 @@ function _assignWireRF(p, sBid, sPort, dBid, dPort){
   let rf = sb.params[srcKey];
   if(!rf || typeof rf!=='string' || !rf.startsWith('RF') || parseInt(rf.slice(2))<100){
 
-    // ── Cas CONN* (port OUT) : propager le RF du partenaire TX → RX ───────
-    // Quand on relie CONN_RX.OUT→B (ou CONN.OUT→B), chercher le RF du
-    // partenaire (CONN_TX ou l'autre CONN de même num) déjà alimenté.
-    let rfFromPartner = null;
-    if(srcKey === 'reg_out' && (sb.type==='CONN'||sb.type==='CONN_RX')){
-      const myNum = String(sb.params.num || '');
-      const partner = p.blocks.find(x=>
-        x.id !== sb.id &&
-        (x.type==='CONN'||x.type==='CONN_TX') &&
-        String(x.params.num||'') === myNum &&
-        x.params.reg_in && x.params.reg_in.startsWith('RF') && parseInt(x.params.reg_in.slice(2))>=100
-      );
-      if(partner) rfFromPartner = partner.params.reg_in;
-    }
-
-    rf = rfFromPartner || _nextRF();
+    // FIX CRITIQUE : le récepteur CONN reçoit désormais son PROPRE registre.
+    // Avant, il réutilisait celui de l'émetteur de même numéro ; les deux
+    // blocs écrivaient donc dans le même RF et, selon l'ordre d'exécution du
+    // cycle, le récepteur écrasait la valeur produite en amont par 0. La
+    // valeur transite par le bus __conn_N, un registre partagé est inutile.
+    rf = _nextRF();
     if(srcKey) sb.params[srcKey] = rf;
   }
   if(dstKey) db.params[dstKey] = rf;
@@ -2104,10 +2125,23 @@ cvs.addEventListener('mousedown',e=>{
   }
   const ph=hitPort(w.x,w.y);
   if(ph){wireFrom={bid:ph.block.id,port:ph.port.name,portType:ph.type,wx:ph.port.x,wy:ph.port.y};drag='wire';return;}
-  // ── Fils : priorité AVANT les blocs (un fil fin est plus difficile à cliquer)
-  const wh=hitWire(w.x,w.y);
-  if(wh){selW=wh;selB=null;multiSel.clear();showWireProps(wh);render();return;}
+  // FIX CRITIQUE : les blocs passent maintenant AVANT les fils. L'ancien ordre
+  // (fil avant bloc, "un fil fin est plus difficile à cliquer") avait du sens
+  // en théorie, mais en pratique hitWire() teste TOUS les fils de la page avec
+  // une tolérance de 12px, sans se soucier de savoir si le point cliqué tombe
+  // DANS le rectangle d'un bloc. Sur un schéma dense (fils qui longent ou
+  // traversent des blocs, connecteurs CONN serrés les uns contre les autres),
+  // un clic en plein milieu d'un bloc "atterrissait" très souvent sur un fil
+  // qui passait juste à côté ou en dessous — le panneau de réglages du bloc
+  // n'apparaissait alors jamais, remplacé par les propriétés du fil. Un fil
+  // isolé, en zone vide du canvas (hors de tout bloc), reste cliquable comme
+  // avant : hitBlock() renvoie simplement null dans ce cas et on retombe sur
+  // hitWire() ci-dessous.
   const bh=hitBlock(w.x,w.y);
+  if(!bh){
+    const wh=hitWire(w.x,w.y);
+    if(wh){selW=wh;selB=null;multiSel.clear();showWireProps(wh);render();return;}
+  }
   if(bh){
     if(e.ctrlKey||e.metaKey){
       // Ctrl+clic : ajouter/retirer de la sélection multiple
@@ -2231,10 +2265,19 @@ cvs.addEventListener('dblclick',e=>{
   if(hit && hit.type==='GROUP'){ enterGroup(hit); return; }
   if(hit && hit.type==='CARITHM'){ openCarithmEditor(hit); return; }
   if(hit && hit.type==='PYBLOCK'){ openPyblockEditor(hit); return; }
-  const _metierTypes=['PLANCHER','CHAUDIERE','SOLAR','ZONE_CHAUF','ECS_BLOC',
-    'SENSOR','CONTACTOR','VALVE3V','RUNTIMCNT','TON','TOF','TP','WAIT','WAITH',
-    'PULSE','BACKUP','AV','DV','PID','COMPH','COMPL','SR_R','SR_S','BOOLEAN'];
-  if(hit && _metierTypes.includes(hit.type)){ openBlockEditor(hit); return; }
+  // FIX CRITIQUE : la fenêtre de réglages ne s'ouvrait, par double-clic, que
+  // pour une liste d'une vingtaine de types ("_metierTypes"). Tous les autres
+  // — CONN (souvent le type le plus nombreux d'un schéma), AND, OR, ADD,
+  // FILT1, MEM, INPUT, OUTPUT, CONST, INV, XOR, NAND, NOR, les comparateurs,
+  // les compteurs CTU/CTD/CTUD, COIL/SET/RESET, etc. — ne faisaient RIEN au
+  // double-clic : aucune fenêtre n'apparaissait jamais, quel que soit le
+  // nombre de tentatives. Le générateur de la fenêtre (_bemLoadParams) est en
+  // réalité générique : il réutilise tel quel le panneau de propriétés déjà
+  // affiché par showBlockProps(), qui gère lui-même tous les types de blocs.
+  // Rien ne justifiait de limiter le double-clic à une sous-liste. Seuls
+  // PAGE_IN/PAGE_OUT sont exclus ci-dessous : ce sont de simples renvois de
+  // page sans aucun réglage (showBlockProps() leur renvoie un panneau vide).
+  if(hit && hit.type!=='PAGE_IN' && hit.type!=='PAGE_OUT'){ openBlockEditor(hit); return; }
   if(!hit)showQMenu(e.clientX,e.clientY,w.x,w.y);
 });
 
@@ -2370,16 +2413,67 @@ cvs.addEventListener('wheel',e=>{
   drawGrid();render();
 },{passive:false});
 
+
+// ════════════════════════════════════════════════════════════
+// COPIE DE BLOCS — dé-duplication des références
+// ════════════════════════════════════════════════════════════
+// Un bloc collé doit être INDEPENDANT de son original. Sans ce traitement,
+// JSON.parse(JSON.stringify(bloc)) recopie aussi les registres RF assignés par
+// le compilateur de fils, le numéro de connecteur et le varname : la copie
+// écrit alors dans les MEMES registres/variables que l'original et les deux
+// blocs se marchent dessus à chaque cycle automate.
+//
+// Règle : on efface les registres de câblage (RF>=100) — la copie n'a aucun
+// fil, ils seront réassignés au premier fil tracé — et on rend uniques les
+// identifiants visibles par l'utilisateur (varname / name / num de connecteur).
+
+const _WIRE_RE = /^RF(\d+)$/;
+function _isWireRF(v){
+  if(typeof v!=='string') return false;
+  const m=v.match(_WIRE_RE);
+  return !!m && parseInt(m[1],10)>=100;
+}
+
+/** Nettoie les params d'un bloc collé. keepWires=true si les fils internes
+ *  de la sélection sont recréés juste après (collage de groupe). */
+function _sanitizePastedParams(type, params, keepWires){
+  const out={};
+  Object.entries(params||{}).forEach(([k,v])=>{
+    if(!keepWires && _isWireRF(v)) return;   // registre de câblage → à réassigner
+    out[k]=v;
+  });
+  // varname / name uniques sur toutes les pages
+  const used=_allUsedNames();
+  if(_UNIQUE_VARNAME.has(type) && out.varname) out.varname=_uniqueNew(out.varname,used);
+  if(_UNIQUE_NAME.has(type)    && out.name)    out.name   =_uniqueNew(out.name,used);
+  // numéro de connecteur libre (sinon la copie émet/reçoit sur le même bus)
+  if(type==='CONN'||type==='CONN_TX'||type==='CONN_RX'){
+    const n=_nextConnNum();
+    out.num=n;
+    if(!out.label || /^C\d+$/.test(out.label)) out.label=`C${n}`;
+  }
+  // registres manuels RF0..RF99 : remappés vers des numéros libres
+  return _remapBlockRFs(out);
+}
+
 // ── Presse-papier interne ─────────────────────────────────────────────────
 let _clipboard = null;
 
 let _clipboard_group = null;
+let _clipboard_wires = null;
 function copyBlock(){
   if(multiSel.size>1){
     _clipboard_group = [...multiSel].map(b=>JSON.parse(JSON.stringify(b)));
+    // Conserver les fils dont les DEUX extrémités sont dans la sélection :
+    // le câblage interne du sous-ensemble copié est ainsi reproduit.
+    const ids=new Set([...multiSel].map(b=>b.id));
+    _clipboard_wires = (pg().wires||[])
+      .filter(w=>ids.has(w.src.bid) && ids.has(w.dst.bid))
+      .map(w=>({src:{bid:w.src.bid,port:w.src.port},
+                dst:{bid:w.dst.bid,port:w.dst.port}}));
     _clipboard = null; return;
   }
-  _clipboard_group = null;
+  _clipboard_group = null; _clipboard_wires = null;
   if(!selB) return;
   _clipboard = JSON.parse(JSON.stringify(selB));
   // Feedback visuel
@@ -2397,9 +2491,21 @@ function pasteBlock(){
     });
     const newBlocks = [];
     _clipboard_group.forEach(bd=>{
-      const b={...JSON.parse(JSON.stringify(bd)), id:idMap[bd.id],
+      const src=JSON.parse(JSON.stringify(bd));
+      const b={...src, id:idMap[bd.id],
+               params:_sanitizePastedParams(src.type, src.params, false),
                x:bd.x+30, y:bd.y+30, ports_in:[], ports_out:[], active:false};
       b.h=computeH(b.type); updPorts(b); p.blocks.push(b); newBlocks.push(b);
+    });
+    // Recréer les fils INTERNES à la sélection copiée (les deux extrémités
+    // font partie de la copie) — ils réassignent des registres RF neufs.
+    (_clipboard_wires||[]).forEach(wd=>{
+      const sBid=idMap[wd.src.bid], dBid=idMap[wd.dst.bid];
+      if(!sBid||!dBid) return;
+      const w={id:`W${idCtr++}`, src:{bid:sBid,port:wd.src.port},
+                                 dst:{bid:dBid,port:wd.dst.port}};
+      p.wires.push(w);
+      _assignWireRF(p, sBid, wd.src.port, dBid, wd.dst.port);
     });
     multiSel = new Set(newBlocks);
     selB=null; notifyChange(); render(); return;
@@ -2408,7 +2514,9 @@ function pasteBlock(){
   pushUndo();
   const b = JSON.parse(JSON.stringify(_clipboard));
   b.id = `B${idCtr++}`;
+  b.params = _sanitizePastedParams(b.type, b.params, false);
   b.x += 20; b.y += 20;   // décalage pour que la copie soit visible
+  b.ports_in=[]; b.ports_out=[]; b.active=false;
   updPorts(b);
   pg().blocks.push(b);
   selB = b; selW = null;
@@ -4127,7 +4235,12 @@ function importBlocks(data){
 
   // Ajouter les blocs avec params renommés
   src.blocks.forEach(bd=>{
-    const params = {...defParams(bd.type), ...bd.params};
+    let params = {...defParams(bd.type), ...bd.params};
+    // FIX : purger les registres de câblage importés (RF>=100). Ils
+    // appartiennent au diagramme d'origine ; conservés tels quels, les blocs
+    // importés écrivent dans les registres de blocs déjà présents sur la page.
+    Object.keys(params).forEach(k=>{ if(_isWireRF(params[k])) delete params[k]; });
+    params = _remapBlockRFs(params);
     // Renommer varname si collision
     if(RENAME_VARNAME.has(bd.type) && params.varname){
       params.varname = uniqueName(params.varname);
@@ -4135,6 +4248,12 @@ function importBlocks(data){
     // Renommer name si collision
     if(RENAME_NAME.has(bd.type) && params.name){
       params.name = uniqueName(params.name);
+    }
+    // Numéro de connecteur libre
+    if(bd.type==='CONN'||bd.type==='CONN_TX'||bd.type==='CONN_RX'){
+      const cn=_nextConnNum();
+      params.num=cn;
+      if(!params.label || /^C\d+$/.test(params.label)) params.label=`C${cn}`;
     }
     const b={
       id: idMap[bd.id],
@@ -4168,6 +4287,9 @@ function importBlocks(data){
       dx: dp?dp.x:0, dy: dp?dp.y:0
     };
     p.wires.push(w);
+    // FIX : réassigner un registre neuf à chaque fil importé (les registres
+    // d'origine ont été purgés pour éviter les collisions avec la page).
+    _assignWireRF(p, srcBid, wd.src.port, dstBid, wd.dst.port);
   });
 
   fitView();
