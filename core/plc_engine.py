@@ -451,14 +451,19 @@ class PLCEngine:
             reg_out_c = block.get("reg_out")
             num_c     = block.get("num", block.get("params", {}).get("num"))
             if not hasattr(self, 'page_signals'): self.page_signals = {}
+            if not hasattr(self, 'page_signals_src'): self.page_signals_src = {}
+            _k = f"__conn_{num_c}"
             if reg_in_c and str(reg_in_c).startswith("RF"):
                 val_c = self.registers.get(reg_in_c, 0.0)
                 with self._lock:
-                    self.page_signals[f"__conn_{num_c}"] = val_c
+                    self.page_signals[_k] = val_c
+                    self.page_signals_src[_k] = reg_in_c
             elif reg_out_c and str(reg_out_c).startswith("RF"):
-                val_c = self.page_signals.get(f"__conn_{num_c}", 0.0)
-                with self._lock:
-                    self.registers[reg_out_c] = val_c
+                # Le récepteur partage le RF de la source : rien à recopier
+                # (recopier une valeur périmée/0 écraserait la source).
+                if _k in self.page_signals and self.page_signals_src.get(_k) != reg_out_c:
+                    with self._lock:
+                        self.registers[reg_out_c] = self.page_signals[_k]
             return
 
         # ── CONN_TX : émetteur — écrit dans le bus de signaux numéroté ──────────
@@ -466,10 +471,12 @@ class PLCEngine:
             reg_in_c = block.get("reg_in")
             num_c    = block.get("num", block.get("params", {}).get("num"))
             if not hasattr(self, 'page_signals'): self.page_signals = {}
+            if not hasattr(self, 'page_signals_src'): self.page_signals_src = {}
             if reg_in_c and str(reg_in_c).startswith("RF"):
                 val_c = self.registers.get(reg_in_c, 0.0)
                 with self._lock:
                     self.page_signals[f"__conn_{num_c}"] = val_c
+                    self.page_signals_src[f"__conn_{num_c}"] = reg_in_c
             return
 
         # ── CONN_RX : récepteur — lit depuis le bus de signaux numéroté ──────────
@@ -477,10 +484,12 @@ class PLCEngine:
             reg_out_c = block.get("reg_out")
             num_c     = block.get("num", block.get("params", {}).get("num"))
             if not hasattr(self, 'page_signals'): self.page_signals = {}
+            if not hasattr(self, 'page_signals_src'): self.page_signals_src = {}
+            _k = f"__conn_{num_c}"
             if reg_out_c and str(reg_out_c).startswith("RF"):
-                val_c = self.page_signals.get(f"__conn_{num_c}", 0.0)
-                with self._lock:
-                    self.registers[reg_out_c] = val_c
+                if _k in self.page_signals and self.page_signals_src.get(_k) != reg_out_c:
+                    with self._lock:
+                        self.registers[reg_out_c] = self.page_signals[_k]
             return
 
         if btype in ("coil", "set", "reset"):

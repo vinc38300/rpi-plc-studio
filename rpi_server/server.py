@@ -2365,34 +2365,42 @@ class PLCEngine:
             reg_in_c  = block.get("reg_in")
             reg_out_c = block.get("reg_out")
             num_c     = block.get("num", block.get("params", {}).get("num"))
+            if not hasattr(self, 'page_signals'): self.page_signals = {}
+            if not hasattr(self, 'page_signals_src'): self.page_signals_src = {}
+            _k = f"__conn_{num_c}"
             if reg_in_c and str(reg_in_c).startswith("RF"):
                 # Ce CONN reçoit un fil → stocker dans page_signals[num]
                 val_c = self.registers.get(reg_in_c, 0.0)
-                if not hasattr(self, 'page_signals'): self.page_signals = {}
                 with self._lock:
-                    self.page_signals[f"__conn_{num_c}"] = val_c
+                    self.page_signals[_k] = val_c
+                    self.page_signals_src[_k] = reg_in_c
             elif reg_out_c and str(reg_out_c).startswith("RF"):
                 # Ce CONN émet → lire depuis page_signals[num]
-                if not hasattr(self, 'page_signals'): self.page_signals = {}
-                val_c = self.page_signals.get(f"__conn_{num_c}", 0.0)
-                self.write_register(reg_out_c, val_c)
+                # (rien à recopier si le RF est celui de la source)
+                if _k in self.page_signals and self.page_signals_src.get(_k) != reg_out_c:
+                    self.write_register(reg_out_c, self.page_signals[_k])
 
         # ── CONN_TX ──────────────────────────────────────────────────────────
         elif btype == "conn_tx":
             reg_in_c = block.get("reg_in")
             num_c = block.get("num", block.get("params", {}).get("num"))
             if not hasattr(self, "page_signals"): self.page_signals = {}
+            if not hasattr(self, "page_signals_src"): self.page_signals_src = {}
             if reg_in_c and str(reg_in_c).startswith("RF") and num_c is not None:
                 with self._lock:
                     self.page_signals[f"__conn_{num_c}"] = self.registers.get(reg_in_c, 0.0)
+                    self.page_signals_src[f"__conn_{num_c}"] = reg_in_c
 
         # ── CONN_RX ──────────────────────────────────────────────────────────
         elif btype == "conn_rx":
             reg_out_c = block.get("reg_out")
             num_c = block.get("num", block.get("params", {}).get("num"))
             if not hasattr(self, "page_signals"): self.page_signals = {}
+            if not hasattr(self, "page_signals_src"): self.page_signals_src = {}
+            _k = f"__conn_{num_c}"
             if reg_out_c and str(reg_out_c).startswith("RF") and num_c is not None:
-                self.write_register(reg_out_c, self.page_signals.get(f"__conn_{num_c}", 0.0))
+                if _k in self.page_signals and self.page_signals_src.get(_k) != reg_out_c:
+                    self.write_register(reg_out_c, self.page_signals[_k])
 
     def _exec_carithm(self, block: dict, dt_ms: float):
         import re as _re

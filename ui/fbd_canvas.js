@@ -134,6 +134,62 @@ function _dstParamKey(btype, port){
 }
 
 /**
+ * CONN : remonte le fil entrant (ou celui du jumeau de même numéro) jusqu'au
+ * vrai bloc source, en traversant les chaînes de CONN. Retourne
+ * {blk, key, rf} avec le RF de sortie de la source, ou null si pas encore câblé.
+ */
+function _isConnBlk(b){ return !!b && (b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX'); }
+
+function _connUpstream(p, blk, port, visited){
+  if(!_isConnBlk(blk)) return null;
+  visited = visited || new Set();
+  if(visited.has(blk.id)) return null;
+  visited.add(blk.id);
+  let inW = p.wires.find(w=>w.dst.bid===blk.id && w.dst.port==='IN');
+  if(!inW){
+    // Jumeau (même numéro) qui reçoit un fil : c'est lui qui porte la source.
+    const num = String(blk.params.num||'');
+    const peer = p.blocks.find(x=>x.id!==blk.id && _isConnBlk(x) &&
+      String(x.params.num||'')===num &&
+      p.wires.some(w=>w.dst.bid===x.id && w.dst.port==='IN'));
+    if(peer){
+      visited.add(peer.id);
+      inW = p.wires.find(w=>w.dst.bid===peer.id && w.dst.port==='IN');
+    }
+  }
+  if(!inW) return null;
+  const src = p.blocks.find(b=>b.id===inW.src.bid);
+  if(!src) return null;
+  if(_isConnBlk(src)) return _connUpstream(p, src, inW.src.port, visited);
+  const key = _srcParamKey(src.type, inW.src.port);
+  const rf  = key ? src.params[key] : null;
+  if(rf && typeof rf==='string' && rf.startsWith('RF')) return {blk:src, key, rf};
+  return null;
+}
+
+/**
+ * Resynchronise tous les CONN d'une page : reg_out du CONN et paramètre de
+ * chaque bloc câblé sur sa sortie = RF de la source en amont, inchangé.
+ * Répare aussi les anciens projets où le récepteur avait son propre registre.
+ */
+function _syncConnRefs(p){
+  p.blocks.forEach(b=>{
+    if(!_isConnBlk(b) || b.type==='CONN_TX') return;
+    const outW = p.wires.filter(w=>w.src.bid===b.id && w.src.port==='OUT');
+    if(!outW.length) return;
+    const up = _connUpstream(p, b, 'OUT');
+    if(!up || !up.rf) return;
+    b.params.reg_out = up.rf;
+    outW.forEach(w=>{
+      const db = p.blocks.find(x=>x.id===w.dst.bid);
+      if(!db) return;
+      const dk = _dstParamKey(db.type, w.dst.port);
+      if(dk) db.params[dk] = up.rf;
+    });
+  });
+}
+
+/**
  * Assigne un registre RF à un fil src→dst dans les params des blocs.
  * Si le port source a déjà un RF auto-assigné (fan-out), le réutilise.
  * Retourne le RF assigné.
@@ -150,15 +206,22 @@ function _assignWireRF(p, sBid, sPort, dBid, dPort){
   let rf = sb.params[srcKey];
   if(!rf || typeof rf!=='string' || !rf.startsWith('RF') || parseInt(rf.slice(2))<100){
 
-    // FIX CRITIQUE : le récepteur CONN reçoit désormais son PROPRE registre.
-    // Avant, il réutilisait celui de l'émetteur de même numéro ; les deux
-    // blocs écrivaient donc dans le même RF et, selon l'ordre d'exécution du
-    // cycle, le récepteur écrasait la valeur produite en amont par 0. La
-    // valeur transite par le bus __conn_N, un registre partagé est inutile.
-    rf = _nextRF();
-    if(srcKey) sb.params[srcKey] = rf;
+    // CONN : le connecteur ne crée JAMAIS de registre propre. Sa sortie porte
+    // la référence du bloc source situé en amont (même RF, sans la changer),
+    // quel que soit le nombre de CONN traversés.
+    const _up = _connUpstream(p, sb, sPort);
+    if(_up && _up.rf){
+      rf = _up.rf;
+      if(srcKey) sb.params[srcKey] = rf;
+    } else {
+      // Pas encore de source en amont (fil IN pas encore tracé) : registre
+      // provisoire, remplacé par _syncConnRefs dès que la source est câblée.
+      rf = _nextRF();
+      if(srcKey) sb.params[srcKey] = rf;
+    }
   }
   if(dstKey) db.params[dstKey] = rf;
+  _syncConnRefs(p);
   return rf;
 }
 
@@ -180,6 +243,7 @@ function _releaseWireRF(p, w){
     x=>x!==w && x.src.bid===w.src.bid && x.src.port===w.src.port
   );
   if(!stillUsed && srcKey) delete sb.params[srcKey];
+  _syncConnRefs(p);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3809,6 +3873,7 @@ function loadDiagram(data){
       p.wires.push(w);
       const n=parseInt(wd.id.replace(/\D/g,''));if(n>=idCtr)idCtr=n+1;
     });
+    _syncConnRefs(p);   // CONN : référence de la source inchangée (répare les anciens projets)
     pages.push(p);
   });
   cur=Math.min(data.curPage||0,pages.length-1);
