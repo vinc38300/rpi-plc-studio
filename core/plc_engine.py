@@ -670,7 +670,9 @@ class PLCEngine:
             ref_b  = block.get("ref_b") or block.get("in2")
             val_b  = _rv(ref_b) if ref_b else float(block.get("val_b", 0))
             op     = block.get("op", "eq")
+            # "ne" est l'opérateur émis par l'éditeur (op_map) ; "neq" reste accepté
             ops    = {"eq": abs(val_a-val_b)<1e-9, "neq": abs(val_a-val_b)>=1e-9,
+                      "ne": abs(val_a-val_b)>=1e-9,
                       "gt": val_a>val_b, "lt": val_a<val_b,
                       "ge": val_a>=val_b, "le": val_a<=val_b}
             result = ops.get(op, False)

@@ -9,7 +9,7 @@ Carte E/S : 3× ADS1115 (0x48/0x49/0x4A), 12 sondes PT100 pont div. 10kΩ/3.3V
 Lancer : python3 server.py [--load programme.json] [--no-web] [--port 5000]
 """
 
-import json, os, sys, time, signal, sqlite3, threading, argparse, logging
+import json, os, sys, time, signal, sqlite3, threading, argparse, logging, math
 from pathlib import Path
 
 # ── TelegramBot — import séparé pour ne pas être masqué par d'autres erreurs ──
@@ -715,7 +715,7 @@ class PLCEngine:
                 return self.memory.get(ref, False)
             # FIX : registre RF utilisé comme booléen (PYBLOCK → write_register → eval_cond)
             if ref.startswith("RF"):
-                return self.registers.get(ref, 0.0) >= 0.5
+                return bool(self.registers.get(ref, 0.0))
             if not hasattr(self, 'dv_vars'): self.dv_vars = {}
             ref_lc = ref.lower()
             if ref_lc in self.dv_vars:
@@ -846,7 +846,15 @@ class PLCEngine:
         except Exception as e:
             log.debug(f"write_av direct: {e}")
 
-    def write_dv(self, varname: str, value: bool):
+    def write_dv(self, varname, value: bool):
+        # Comme core/plc_engine.py : les blocs métier peuvent viser un GPIO (int) ou un bit
+        # mémoire Mn ; seul un vrai nom de variable passe par dv_vars.
+        if varname is None or varname == "": return
+        if isinstance(varname, int) and not isinstance(varname, bool):
+            self.write_signal(varname, bool(value)); return
+        if not isinstance(varname, str): return
+        if len(varname) > 1 and varname[0] == "M" and varname[1:].isdigit():
+            self.write_signal(varname, bool(value)); return
         varname = varname.lower()
         """Écrit une variable DV nommée (depuis l'opérateur via synoptique).
         Clé normalisée en minuscules. Écrit aussi directement le GPIO câblé."""
@@ -1118,8 +1126,10 @@ class PLCEngine:
             self._write_q(block, self.memory.get(bid, False))
 
         elif btype == "timer":
-            preset = block.get("preset_ms", 1000)
-            cond   = self.eval_cond(block.get("condition"))
+            # Aligné sur core/plc_engine.py : preset dynamique câblé (pt_ref), IN non câblé
+            # = inactif (sinon le timer se déclenchait en permanence), temps écoulé (et_ref).
+            preset = float(self.read_analog(block.get("pt_ref"))) if block.get("pt_ref") else block.get("preset_ms", 1000)
+            cond   = self.eval_cond(block.get("condition") or block.get("in"), default_if_none=False)
             if bid not in self.timers:
                 self.timers[bid] = {"preset": preset, "acc": 0.0, "running": False, "done": False}
             t = self.timers[bid]
@@ -1129,6 +1139,8 @@ class PLCEngine:
                 t["running"] = False; t["acc"] = 0.0; t["done"] = False
             if out: self.write_signal(out, t["done"])
             self._write_q(block, t["done"])
+            et_ref = block.get("et_ref")
+            if et_ref: self.write_register(et_ref, float(t["acc"]))
 
         elif btype == "counter":
             preset = float(self.read_analog(block.get("pv_ref"))) if block.get("pv_ref") else float(block.get("preset", 10))
@@ -1147,28 +1159,57 @@ class PLCEngine:
             if cv_ref: self.write_register(cv_ref, float(c["acc"]))
 
         elif btype == "scale":
-            src = self.read_analog(block.get("input","ANA0"))
-            il, ih = float(block.get("in_lo",0)), float(block.get("in_hi",100))
-            ol, oh = float(block.get("out_lo",0)), float(block.get("out_hi",100))
-            span = ih - il
-            scaled = ol + (src - il) / span * (oh - ol) if abs(span) > 1e-9 else ol
-            if out: self.write_register(out, scaled)
+            # Aligné sur core/plc_engine.py : le compilateur du studio émet
+            # reg_ref / reg_out (pas input / output). Un fil (RF>=100) reste prioritaire.
+            _inp = block.get("input")
+            if isinstance(_inp, str) and _inp.startswith("RF") and _inp[2:].isdigit() and int(_inp[2:]) >= 100:
+                _src_ref = _inp
+            else:
+                _src_ref = block.get("reg_ref") or _inp or "RF0"
+            _dst = block.get("reg_out") or out or "RF1"
+            src = self.read_analog(_src_ref)
+            il, ih = float(block.get("in_lo", 0.0)), float(block.get("in_hi", 5.0))
+            ol, oh = float(block.get("out_lo", 0.0)), float(block.get("out_hi", 100.0))
+            if ih != il:
+                scaled = ol + (src - il) / (ih - il) * (oh - ol)
+                scaled = max(ol, min(oh, scaled))
+            else:
+                scaled = ol
+            self.write_register(_dst, scaled)
 
         elif btype == "pid":
-            pv = self.read_analog(block.get("pv","ANA0"))
-            sp = float(block.get("sp", 0.0))
-            if sp == 0.0 and block.get("sp_ref","").startswith("RF"):
-                sp = self.read_analog(block["sp_ref"])
-            if bid not in self.pids: self.pids[bid] = {"integral": 0.0, "prev_err": 0.0}
-            kp,ki,kd = float(block.get("kp",1)), float(block.get("ki",0)), float(block.get("kd",0))
-            omin,omax = float(block.get("out_min",0)), float(block.get("out_max",100))
+            # Aligné sur core/plc_engine.py : accepte les clés de l'éditeur (pv_ref / setpoint /
+            # reg_out) ET les anciennes clés serveur (pv / sp / output). Avant ce correctif, un PID
+            # compilé par le studio lisait ANA0, avait une consigne nulle et n'écrivait nulle part.
+            _sp_raw = block.get("setpoint") if block.get("setpoint") is not None else block.get("sp", 0.0)
+            sp = float(_sp_raw)
+            _sp_ref = block.get("sp_ref", "")
+            if sp == 0.0 and isinstance(_sp_ref, str) and _sp_ref.startswith("RF"):
+                sp = self.read_analog(_sp_ref)
+            pv = self.read_analog(block.get("pv_ref") or block.get("pv") or "RF0")
+            kp, ki, kd = float(block.get("kp", 1.0)), float(block.get("ki", 0.0)), float(block.get("kd", 0.0))
+            omin, omax = float(block.get("out_min", 0.0)), float(block.get("out_max", 100.0))
+            reg_out = block.get("reg_out", "RF1")
+            en = self.eval_cond(block.get("enable_condition")) if block.get("enable_condition") else True
+            if bid not in self.pids: self.pids[bid] = {"integral": 0.0, "prev_err": 0.0, "output": 0.0}
+            pid = self.pids[bid]
             dt = max(dt_ms / 1000.0, 0.001)
-            err = sp - pv; pid = self.pids[bid]
-            pid["integral"] = max(omin, min(omax, pid["integral"] + ki * err * dt))
-            deriv = kd * (err - pid["prev_err"]) / dt
-            pid["prev_err"] = err
-            result = max(omin, min(omax, kp*err + pid["integral"] + deriv))
-            if out: self.write_register(out, result)
+            if en:
+                err = sp - pv
+                pid["integral"] = max(omin, min(omax, pid["integral"] + ki * err * dt))
+                deriv = kd * (err - pid["prev_err"]) / dt
+                pid["output"]   = max(omin, min(omax, kp * err + pid["integral"] + deriv))
+                pid["prev_err"] = err
+            else:
+                pid["integral"] = 0.0
+                pid["output"]   = omin
+            self.write_register(reg_out, pid["output"])
+            if out:
+                # Sortie RF : valeur du PID ; sinon sortie booléenne « > 50 % de out_max »
+                if isinstance(out, str) and out.startswith("RF"):
+                    self.write_register(out, pid["output"])
+                else:
+                    self.write_signal(out, pid["output"] > (omax * 0.5))
 
         elif btype == "move":
             if self.eval_cond(block.get("condition")) and out:
@@ -1202,9 +1243,12 @@ class PLCEngine:
             if out: self.write_signal(out, res)
 
         elif btype in ("sr", "sr_r"):
-            s   = self.eval_cond(block.get("set_cond") or block.get("s_cond"))
-            r   = self.eval_cond(block.get("res_cond") or block.get("r_cond"))
+            # Ports optionnels : non câblé = inactif (aligné sur core/plc_engine.py).
+            # Avec le défaut « actif », R non câblé forçait la bascule à 0 en permanence.
+            s   = self.eval_cond(block.get("set_cond") or block.get("s_cond"), default_if_none=False)
+            r   = self.eval_cond(block.get("res_cond") or block.get("r_cond"), default_if_none=False)
             bit = block.get("bit", "M0")
+            if bit not in self.memory: self.memory[bit] = False
             if r:    self.memory[bit] = False
             elif s:  self.memory[bit] = True
             if out: self.write_signal(out, self.memory.get(bit, False))
@@ -1212,9 +1256,9 @@ class PLCEngine:
 
         elif btype == "sr_s":
             # SR_S : Set prioritaire (S > R)
-            s   = self.eval_cond(block.get("set_cond"), default_if_none=False)
-            r   = self.eval_cond(block.get("res_cond"), default_if_none=False)
-            bit = block.get("bit", "M1")
+            s   = self.eval_cond(block.get("set_cond") or block.get("s_cond"), default_if_none=False)
+            r   = self.eval_cond(block.get("res_cond") or block.get("r_cond"), default_if_none=False)
+            bit = block.get("bit", "M0")   # défaut M0, comme le studio
             if bit not in self.memory: self.memory[bit] = False
             if s:    self.memory[bit] = True   # Set prioritaire
             elif r:  self.memory[bit] = False
@@ -1222,9 +1266,11 @@ class PLCEngine:
             self._write_q(block, self.memory.get(bit, False))
 
         elif btype == "rs":
-            s   = self.eval_cond(block.get("set_cond"))
-            r   = self.eval_cond(block.get("res_cond"))
+            # Ports optionnels : non câblé = inactif (aligné sur core/plc_engine.py)
+            s   = self.eval_cond(block.get("set_cond"), default_if_none=False)
+            r   = self.eval_cond(block.get("res_cond"), default_if_none=False)
             bit = block.get("bit", "M0")
+            if bit not in self.memory: self.memory[bit] = False
             if s:    self.memory[bit] = True
             elif r:  self.memory[bit] = False
             if out: self.write_signal(out, self.memory.get(bit, False))
@@ -1326,18 +1372,26 @@ class PLCEngine:
         # CTD/CTUD déployé rechargeait sa valeur à chaque cycle et ne comptait
         # jamais réellement.
         elif btype in ("ctu", "ctd", "ctud"):
-            if bid not in self.counters:
-                self.counters[bid] = {"acc": 0, "done": False, "_cu": False, "_cd": False}
-            c      = self.counters[bid]
             preset = float(self.read_analog(block.get("pv_ref"))) if block.get("pv_ref") else float(block.get("preset", 10))
-            cu     = self.eval_cond(block.get("cu_cond") or block.get("cu") or block.get("condition"), default_if_none=False)
+            if bid not in self.counters:
+                # CTD : décompte à partir de la présélection (aligné sur core/plc_engine.py)
+                self.counters[bid] = {"acc": (preset if btype == "ctd" else 0), "done": False, "_cu": False, "_cd": False}
+            c      = self.counters[bid]
+            # Chaque entrée n'existe que sur ses types : CU (ctu/ctud), CD et LD (ctd/ctud).
+            # Sans cette restriction un CTD dont « condition » traînait dans le bloc comptait à
+            # la hausse (aligné sur core/plc_engine.py, où ctd ne lit que cd_cond / ld_cond).
+            cu     = self.eval_cond(block.get("cu_cond") or block.get("cu") or block.get("condition"), default_if_none=False) if btype in ("ctu", "ctud") else False
             cd     = self.eval_cond(block.get("cd_cond") or block.get("cd"), default_if_none=False) if btype in ("ctd", "ctud") else False
-            rst    = self.eval_cond(block.get("reset_condition") or block.get("r"), default_if_none=False)
-            ld     = self.eval_cond(block.get("ld_cond") or block.get("ld"), default_if_none=False)
+            # Le CTD de l'éditeur n'a pas d'entrée Reset (seulement CD / LD / PV)
+            rst    = self.eval_cond(block.get("reset_condition") or block.get("r"), default_if_none=False) if btype != "ctd" else False
+            ld     = self.eval_cond(block.get("ld_cond") or block.get("ld"), default_if_none=False) if btype in ("ctd", "ctud") else False
+            # Aligné sur core/plc_engine.py (CTUD) : CU et CD sont évalués indépendamment
+            # (un front simultané se compense) et le compteur n'est pas plafonné à preset+1.
             if rst:                         c["acc"] = 0; c["done"] = False
             elif ld:                        c["acc"] = preset
-            elif cu and not c["_cu"]:       c["acc"] = min(c["acc"] + 1, preset + 1)
-            elif cd and not c["_cd"]:       c["acc"] = max(c["acc"] - 1, 0)
+            else:
+                if cu and not c["_cu"]:     c["acc"] = c["acc"] + 1
+                if cd and not c["_cd"]:     c["acc"] = max(c["acc"] - 1, 0)
             c["done"] = c["acc"] >= preset if btype != "ctd" else c["acc"] <= 0
             c["_cu"] = cu; c["_cd"] = cd
             if out: self.write_signal(out, c["done"])
@@ -1367,20 +1421,29 @@ class PLCEngine:
                         return float(av[ref.lower()])
                 return self.registers.get(ref, 0.0) if ref else 0.0
             a   = _read_reg_or_av("reg_a", "RF0")
-            b_v = _read_reg_or_av("reg_b", "RF1")
+            b_v = _read_reg_or_av("reg_b", "RF0")   # défaut RF0, comme le studio
             if   btype == "add": res = a + b_v
             elif btype == "sub": res = a - b_v
             elif btype == "mul": res = a * b_v
             else:                res = a / b_v if abs(b_v) > 1e-12 else 0.0
-            dst = block.get("reg_out", out)
+            dst = block.get("reg_out", "RF2")       # défaut RF2, comme le studio
             if dst: self.write_register(dst, res)
 
         elif btype == "mux":
-            idx_ref = block.get("idx_ref", "M0")
-            idx     = int(self.memory.get(idx_ref, 0)) if isinstance(idx_ref,str) and idx_ref.startswith("M") else 0
-            in_keys = [block.get(f"in{i}", f"RF{i}") for i in range(4)]
-            val     = self.registers.get(in_keys[max(0,min(3,idx))], 0.0)
-            dst     = block.get("reg_out", out)
+            # Aligné sur core/plc_engine.py : index depuis un registre RF ou un bit M,
+            # n_in entrées (défaut 4), lecture via read_analog (RF, ANA, AV nommées).
+            idx_ref = block.get("idx_ref", "RF0")
+            if isinstance(idx_ref, str) and idx_ref.startswith("M"):
+                idx = int(self.memory.get(idx_ref, 0))
+            elif isinstance(idx_ref, str) and idx_ref.startswith("RF"):
+                idx = int(self.registers.get(idx_ref, 0))
+            else:
+                idx = 0
+            n_in    = int(block.get("n_in", 4))
+            idx     = max(0, min(n_in - 1, idx))
+            in_keys = [block.get(f"in{i}", f"RF{i}") for i in range(n_in)]
+            val     = self.read_analog(in_keys[idx])
+            dst     = block.get("reg_out", "RF4")
             if dst: self.write_register(dst, val)
 
         elif btype == "mem":
@@ -2013,18 +2076,23 @@ class PLCEngine:
             thr  = float(block.get("threshold", 80.0))
             op   = block.get("op", "gt")
             val  = self.read_analog(ref)
-            res  = {"gt":val>thr,"ge":val>=thr,"lt":val<thr,"eq":val==thr,"ne":val!=thr}.get(op, False)
+            hyst = float(block.get("hysteresis", 0.0))
+            # Aligné sur core/plc_engine.py : « le » géré, « eq » avec tolérance max(hyst, 0.1)
+            res  = {"gt":val>thr,"lt":val<thr,"ge":val>=thr,"le":val<=thr,
+                    "eq":abs(val-thr) < max(hyst, 0.1)}.get(op, False)
             if out: self.write_signal(out, res)
 
         elif btype == "avg":
             src = self.read_analog(block.get("reg_in", "RF0"))
-            n   = int(block.get("n", 10))
+            n   = max(1, int(block.get("n", 10)))
             bid = block.get("id", "avg")
-            if bid not in self.timers: self.timers[bid] = {"buf": [], "acc": 0.0}
+            # Fenêtre pré-remplie avec le 1er échantillon (aligné sur core/plc_engine.py)
+            if bid not in self.timers or len(self.timers[bid].get("buf", [])) != n:
+                self.timers[bid] = {"buf": [src] * n, "idx": 0, "acc": 0.0}
             s = self.timers[bid]
-            s["buf"].append(src)
-            if len(s["buf"]) > n: s["buf"].pop(0)
-            avg = sum(s["buf"]) / len(s["buf"])
+            s["buf"][s["idx"] % n] = src
+            s["idx"] += 1
+            avg = sum(s["buf"]) / n
             dst = block.get("reg_out", "RF1")
             if dst: self.write_register(dst, avg)
 
@@ -2048,11 +2116,14 @@ class PLCEngine:
             bid = block.get("id", "integ")
             if bid not in self.timers: self.timers[bid] = {"acc": 0.0}
             s = self.timers[bid]
-            rc = self.eval_cond(block.get("reset_cond"))
+            # RES non câblé (pas de reset_cond) = inactif. Avec le défaut « actif »,
+            # l'intégrateur restait bloqué à 0 (aligné sur core/plc_engine.py).
+            rc = self.eval_cond(block.get("reset_cond")) if block.get("reset_cond") else False
             if rc: s["acc"] = 0.0
             else:  s["acc"] = max(lo, min(hi, s["acc"] + src * ki * dt_ms / 1000.0))
             dst = block.get("reg_out", "RF1")
             if dst: self.write_register(dst, s["acc"])
+            if out: self.write_signal(out, s["acc"] >= hi)
 
         elif btype == "deriv":
             src = self.read_analog(block.get("reg_in", "RF0"))
@@ -2069,10 +2140,12 @@ class PLCEngine:
         elif btype == "deadb":
             src  = self.read_analog(block.get("reg_in", "RF0"))
             dead = float(block.get("dead", 1.0))
-            res  = 0.0 if abs(src) <= dead else src
+            # Aligné sur core/plc_engine.py : la zone morte est retranchée du résultat,
+            # et la sortie DEAD est vraie quand |IN| dépasse la zone morte.
+            res  = 0.0 if abs(src) <= dead else (src - math.copysign(dead, src))
             dst  = block.get("reg_out", "RF1")
             if dst: self.write_register(dst, res)
-            if out: self.write_signal(out, abs(src) <= dead)
+            if out: self.write_signal(out, abs(src) > dead)
 
         elif btype == "ramp":
             sp   = self.read_analog(block.get("reg_sp", "RF0"))
@@ -2087,7 +2160,7 @@ class PLCEngine:
             else:                           s["cur"] -= delta
             dst = block.get("reg_out", "RF1")
             if dst: self.write_register(dst, s["cur"])
-            if out: self.write_signal(out, s["cur"] == sp)
+            if out: self.write_signal(out, abs(s["cur"] - sp) < 0.01)
 
         elif btype == "hyst":
             src  = self.read_analog(block.get("reg_in", "RF0"))
@@ -2128,7 +2201,7 @@ class PLCEngine:
             a = self.read_analog(block.get("reg_a", "RF0"))
             b = self.read_analog(block.get("reg_b", "RF1"))
             dst = block.get("reg_out", "RF2")
-            if dst: self.write_register(dst, a % b if b != 0 else 0.0)
+            if dst: self.write_register(dst, math.fmod(a, b) if abs(b) > 1e-12 else 0.0)
 
         elif btype == "pow":
             a = self.read_analog(block.get("reg_a", "RF0"))
@@ -2147,7 +2220,7 @@ class PLCEngine:
             if out: self.write_signal(out, src < lo or src > hi)
 
         elif btype == "sel":
-            g   = self.eval_cond(block.get("sel_cond"))
+            g   = self.eval_cond(block.get("sel_cond"), default_if_none=False)   # G non câblé -> IN0 (comme le studio)
             in0 = self.read_analog(block.get("in0", "RF0"))
             in1 = self.read_analog(block.get("in1", "RF1"))
             dst = block.get("reg_out", "RF2")
@@ -2222,20 +2295,6 @@ class PLCEngine:
             if r:    self.memory[bit] = False  # Reset prioritaire
             elif s:  self.memory[bit] = True
             if out: self.write_signal(out, self.memory.get(bit, False))
-
-        elif btype == "ctd":
-            cd = self.eval_cond(block.get("cd_cond"))
-            ld = self.eval_cond(block.get("ld_cond"))
-            bid = block.get("id", "ctd")
-            if bid not in self.counters:
-                self.counters[bid] = {"cv": int(block.get("preset", 10)), "_prev_cd": False, "_prev_ld": False, "done": False}
-            c = self.counters[bid]
-            pv = int(block.get("preset", 10))
-            if ld and not c["_prev_ld"]: c["cv"] = pv
-            if cd and not c["_prev_cd"] and c["cv"] > 0: c["cv"] -= 1
-            c["done"] = c["cv"] <= 0
-            c["_prev_cd"] = cd; c["_prev_ld"] = ld
-            if out: self.write_signal(out, c["done"])
 
         elif btype == "ana_in":
             ref = block.get("analog_ref", "ANA0")
@@ -2640,9 +2699,22 @@ class PLCEngine:
                         prog = [next(_it) if _b['id'] in _p3s else _b for _b in prog]
                 except Exception:
                     pass
-                for block in prog: self.exec_block(block, dt_ms)
+                _blk_err = ""
+                for block in prog:
+                    try:
+                        self.exec_block(block, dt_ms)
+                    except Exception as _be:
+                        # Aligné sur core/plc_engine.py : l'erreur d'un bloc est isolée,
+                        # les blocs suivants du programme continuent de s'exécuter.
+                        _bid = block.get("id", "?"); _bt = block.get("type", "?")
+                        _blk_err = f"bloc {_bt}({_bid}): {_be}"
+                        self.error_count += 1
+                        _key = f"_block_err_{_bid}"
+                        if not getattr(self, _key, False):   # une seule trace par bloc (anti-spam)
+                            setattr(self, _key, True)
+                            log.exception(f"Erreur bloc {_bt}({_bid}) : {_be}")
 
-                self.cycle_count += 1; self.error = ""; self._last_scan = time.monotonic()
+                self.cycle_count += 1; self.error = _blk_err; self._last_scan = time.monotonic()
 
             except Exception as e:
                 self.error = str(e); self.error_count += 1

@@ -785,6 +785,15 @@ class BlockEditor(QWidget):
             pre_coils_list : liste dans laquelle les COIL implicites sont ajoutés
             (ils seront insérés AVANT le bloc courant dans prog).
             """
+            # ── DV câblé : lire son registre RF (reg_out), pas son nom ─────
+            # Le moteur écrit toujours la valeur courante du DV (défaut inclus)
+            # dans reg_out. Lire le NOM (« dv1 ») ne marche qu'après une action
+            # de l'opérateur : tant que dv_vars est vide, read_signal renvoie
+            # False même si le DV vaut TRUE par défaut.
+            if isb is not None and isb.get("type") == "DV":
+                _ro = isb.get("params", {}).get("reg_out")
+                if _ro and isinstance(_ro, str) and _ro.startswith("RF"):
+                    return _ro
             # ── Cas simples ────────────────────────────────────────────────
             ref = bool_ref(isb)
             if ref is not None:
@@ -1063,6 +1072,14 @@ class BlockEditor(QWidget):
                     if not db:
                         continue
                     t = db["type"]; pp = db.get("params", {})
+                    if t == "STOAV":
+                        # STOAV est un puits : il lit le RF câblé par le canvas (reg_a)
+                        # et l'écrit dans la variable nommée. Ne PAS renvoyer son
+                        # varname : la source écrirait alors dans un registre que le
+                        # STOAV ne lit jamais (valeur toujours à 0).
+                        _ra = pp.get("reg_a") or pp.get("reg_in")
+                        if _ra and isinstance(_ra, str) and _ra.startswith("RF"):
+                            return _ra
                     if t in ("BACKUP","AV","STOAV"): return pp.get("reg_out") or pp.get("varname","RF0")
                     if t == "MEM":    return pp.get("bit","M0")
                     if t == "OUTPUT": return int(pp.get("pin",17))
@@ -1502,16 +1519,16 @@ class BlockEditor(QWidget):
                 prog.append(blk)
 
             elif bt == "STOAV":
-                isb, _ = wire_src(bid, "IN")
-                ref = signal_ref(isb)
+                isb, _sp = wire_src(bid, "IN")
+                ref = analog_src_ref(isb, _sp)   # tient compte du port (OA2 ≠ OA1)
                 blk["type"]    = "stoav"
                 blk["varname"] = p.get("varname", "av0")
                 if ref is not None: blk["reg_in"] = ref
                 prog.append(blk)
 
             elif bt == "STOAP":
-                isb, _ = wire_src(bid, "IN")
-                ref = signal_ref(isb)
+                isb, _sp = wire_src(bid, "IN")
+                ref = analog_src_ref(isb, _sp)
                 blk["type"]    = "stoap"
                 blk["varname"] = p.get("varname", "timer0.TimerTime")
                 if ref is not None: blk["reg_in"] = ref

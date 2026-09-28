@@ -6,6 +6,7 @@ Dépendances : paramiko
 import os
 import json
 import time
+import hashlib
 import threading
 from typing import Callable, Optional
 
@@ -215,6 +216,51 @@ class RPiDeployer:
         exit_code = stdout.channel.recv_exit_status()
         return exit_code, stdout.read().decode(), stderr.read().decode()
 
+    # ── Empreintes md5 (local ↔ distant) ─────────────────────────────────────
+    @staticmethod
+    def local_md5(path: str) -> str:
+        """md5 hexadécimal d'un fichier local (lu par blocs)."""
+        h = hashlib.md5()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def remote_md5s(self, remote_paths: list) -> dict:
+        """md5 de plusieurs fichiers distants en UNE commande SSH.
+        Retourne {chemin: md5 | None}. None = fichier absent, illisible ou md5sum indisponible."""
+        res = {p: None for p in remote_paths}
+        if not remote_paths:
+            return res
+        quoted = " ".join("'" + p.replace("'", "'\\''") + "'" for p in remote_paths)
+        _, out, _ = self.run(f"md5sum {quoted} 2>/dev/null", timeout=60)
+        for line in out.splitlines():
+            parts = line.strip().split(None, 1)
+            if len(parts) == 2 and len(parts[0]) == 32:
+                name = parts[1].lstrip("*").strip()
+                if name in res:
+                    res[name] = parts[0].lower()
+        return res
+
+    def verify_uploaded(self, items: list) -> list:
+        """Contrôle après envoi. items = [(chemin_local, chemin_distant, libellé)].
+        Retourne la liste des libellés dont le contenu distant ≠ contenu local."""
+        rem = self.remote_md5s([r for _, r, _ in items])
+        bad = []
+        for local, remote, label in items:
+            if not os.path.isfile(local):
+                continue
+            lm, rm = self.local_md5(local), rem.get(remote)
+            if rm is None:
+                self.log_cb(f"[MD5] ⚠️  {label} : impossible de relire le fichier distant")
+                bad.append(label)
+            elif rm != lm:
+                self.log_cb(f"[MD5] ❌ {label} : distant {rm[:8]}… ≠ local {lm[:8]}…")
+                bad.append(label)
+            else:
+                self.log_cb(f"[MD5] ✅ {label} ({lm[:8]}…)")
+        return bad
+
     # ── Vérification intelligente avant déploiement ─────────────────────────
     def smart_check(self) -> dict:
         """
@@ -321,32 +367,47 @@ class RPiDeployer:
         log(f"  {'✅' if prog_present else '⚠️ '} programme.json{'':>2}{'(présent)' if prog_present else '(absent — sera créé)'}")
         log(f"  {'✅' if syn_present else 'ℹ️ '} synoptic.json{'':>3}{'(présent)' if syn_present else '(absent — sera créé)'}")
 
-        # ── Comparaison taille par taille de TOUS les fichiers serveur ────────
-        # (server.py seul ne suffit pas : un fichier ajouté côté Studio comme
-        #  mqtt_bridge.py peut être absent du RPi sans jamais être détecté si
-        #  on ne vérifie que server.py.)
+        # ── Comparaison du CONTENU (md5) de TOUS les fichiers serveur ─────────
+        # La taille seule ne suffit pas : deux versions différentes peuvent avoir
+        # exactement la même taille (une correction d'un caractère, par exemple).
+        # Un fichier ajouté côté Studio comme mqtt_bridge.py peut aussi être
+        # absent du RPi sans jamais être détecté si on ne vérifie que server.py.
         log("")
-        log("📦 Comparaison fichiers serveur (local ↔ distant) :")
+        log("📦 Comparaison fichiers serveur (local ↔ distant, md5) :")
         stale_files   = []
         missing_files = []
-        for rel in SERVER_FILES:
+        _local_files = [rel for rel in SERVER_FILES if os.path.isfile(os.path.join(SERVER_SRC, rel))]
+        _rem = self.remote_md5s([f"{rd}/{rel}" for rel in _local_files])
+        _md5_ok = any(v is not None for v in _rem.values())   # md5sum disponible sur le RPi ?
+        for rel in _local_files:            # fichier source absent côté Studio : rien à comparer
             local_fp = os.path.join(SERVER_SRC, rel)
-            if not os.path.isfile(local_fp):
-                continue  # fichier source absent côté Studio, rien à comparer
-            local_size = os.path.getsize(local_fp)
-            _, rsize_out, _ = self.run(f"stat -c '%s' {rd}/{rel} 2>/dev/null || echo -1")
-            try:
-                remote_size = int(rsize_out.strip())
-            except ValueError:
-                remote_size = -1
-            if remote_size == -1:
-                missing_files.append(rel)
-                log(f"  ❌ {rel:35s} absent sur le RPi")
-            elif remote_size != local_size:
-                stale_files.append(rel)
-                log(f"  🟡 {rel:35s} distant {remote_size}o ≠ local {local_size}o")
+            rmd5 = _rem.get(f"{rd}/{rel}")
+            if _md5_ok:
+                lmd5 = self.local_md5(local_fp)
+                if rmd5 is None:
+                    missing_files.append(rel)
+                    log(f"  ❌ {rel:35s} absent sur le RPi")
+                elif rmd5 != lmd5:
+                    stale_files.append(rel)
+                    log(f"  🟡 {rel:35s} contenu différent (distant {rmd5[:8]}… ≠ local {lmd5[:8]}…)")
+                else:
+                    log(f"  ✅ {rel}")
             else:
-                log(f"  ✅ {rel}")
+                # Repli : md5sum absent du RPi → comparaison de taille (moins fiable)
+                local_size = os.path.getsize(local_fp)
+                _, rsize_out, _ = self.run(f"stat -c '%s' {rd}/{rel} 2>/dev/null || echo -1")
+                try:
+                    remote_size = int(rsize_out.strip())
+                except ValueError:
+                    remote_size = -1
+                if remote_size == -1:
+                    missing_files.append(rel)
+                    log(f"  ❌ {rel:35s} absent sur le RPi")
+                elif remote_size != local_size:
+                    stale_files.append(rel)
+                    log(f"  🟡 {rel:35s} distant {remote_size}o ≠ local {local_size}o")
+                else:
+                    log(f"  ✅ {rel} (taille seulement — md5sum indisponible)")
         result["missing_files"] = missing_files
         result["stale_files"]   = stale_files
         if missing_files or stale_files:
@@ -396,7 +457,8 @@ class RPiDeployer:
     # ── Déploiement programme seul ────────────────────────────────────────────
     def deploy_prog_only(self, program_json, synoptic=None, extra_config: dict = None, fbd_diagram: dict = None) -> "DeployResult":
         """Envoie uniquement programme.json, fbd_diagram.json et synoptic.json puis redémarre le service.
-        Si server.py est absent ou a une taille différente de la version locale, il est mis à jour automatiquement."""
+        Si server.py est absent ou a un contenu (md5) différent de la version locale, il est mis à jour
+        automatiquement. Après l'envoi, le contenu des fichiers serveur est revérifié par md5."""
         if not self.is_connected():
             r = self.connect()
             if not r.success:
@@ -423,15 +485,15 @@ class RPiDeployer:
             _srv_local = _os.path.normpath(_os.path.join(
                 _os.path.dirname(_os.path.abspath(__file__)), '..', 'rpi_server', 'server.py'))
             if _os.path.isfile(_srv_local):
-                _local_size = _os.path.getsize(_srv_local)
-                _, _rsize_out, _ = self.run(f"stat -c '%s' {rd}/server.py 2>/dev/null || echo 0")
-                _remote_size = int(_rsize_out.strip() or '0')
-                if _remote_size != _local_size:
-                    self.log_cb(f"[UPDATE] server.py distant ({_remote_size}o) ≠ local ({_local_size}o) → mise à jour automatique")
+                _lmd5 = self.local_md5(_srv_local)
+                _rmd5 = self.remote_md5s([f"{rd}/server.py"]).get(f"{rd}/server.py")
+                if _rmd5 != _lmd5:
+                    _why = "absent ou illisible" if _rmd5 is None else f"contenu différent ({_rmd5[:8]}… ≠ {_lmd5[:8]}…)"
+                    self.log_cb(f"[UPDATE] server.py distant {_why} → mise à jour automatique")
                     self._sftp.put(_srv_local, f"{rd}/server.py")
-                    self.log_cb("[UPDATE] server.py mis à jour ✓")
+                    self.log_cb("[UPDATE] server.py envoyé")
                 else:
-                    self.log_cb("[OK] server.py à jour (taille identique)")
+                    self.log_cb(f"[OK] server.py à jour (md5 identique {_lmd5[:8]}…)")
 
             # ── Toujours envoyer tous les fichiers serveur (templates, static…) ──
             for rel in SERVER_FILES:
@@ -555,6 +617,18 @@ class RPiDeployer:
                 self._sftp.putfo(_io.BytesIO(syn_json.encode()), f"{rd}/synoptic.json")
                 nw = sum(len(p.get("widgets",[])) for p in synoptic["pages"]) if isinstance(synoptic,dict) and "pages" in synoptic else len(synoptic.get("widgets",[]))
                 self.log_cb(f"[PROG] Synoptique envoyé ({nw} widgets)")
+
+            # ── Vérification md5 des fichiers serveur avant de redémarrer ──────
+            self.log_cb("[MD5] Vérification du contenu des fichiers envoyés…")
+            _items = [(_os.path.join(SERVER_SRC, _rel), f"{rd}/{_rel}", _rel)
+                      for _rel in SERVER_FILES if _os.path.isfile(_os.path.join(SERVER_SRC, _rel))]
+            _items.append((_canvas_js_src2, f"{rd}/static/synoptic_canvas.js", "static/synoptic_canvas.js"))
+            _bad = self.verify_uploaded(_items)
+            if "server.py" in _bad:
+                return DeployResult(False, "server.py distant différent du local après envoi (md5) — "
+                                           "service NON redémarré, déploiement à refaire")
+            if _bad:
+                self.log_cb(f"[MD5] ⚠️  Fichiers non conformes : {', '.join(_bad)}")
 
             # Redémarrer le service
             self.log_cb("[SVC] Redémarrage du service PLC…")
@@ -738,6 +812,20 @@ class RPiDeployer:
                 self._sftp.put(_canvas_js_src, _canvas_js_dst)
             else:
                 self.log_cb("[WARN] synoptic_canvas.js introuvable dans ui/ — synoptique web non déployé")
+
+            # ── Vérification md5 des fichiers serveur avant de continuer ────────
+            self.log_cb("[MD5] Vérification du contenu des fichiers envoyés…")
+            _items = [(os.path.join(SERVER_SRC, _rel), f"{self.remote_dir}/{_rel}", _rel)
+                      for _rel in SERVER_FILES if os.path.isfile(os.path.join(SERVER_SRC, _rel))]
+            if os.path.isfile(_canvas_js_src):
+                _items.append((_canvas_js_src, f"{self.remote_dir}/static/synoptic_canvas.js",
+                               "static/synoptic_canvas.js"))
+            _bad = self.verify_uploaded(_items)
+            if "server.py" in _bad:
+                return DeployResult(False, "server.py distant différent du local après envoi (md5) — "
+                                           "service NON redémarré, déploiement à refaire")
+            if _bad:
+                self.log_cb(f"[MD5] ⚠️  Fichiers non conformes : {', '.join(_bad)}")
 
             # Auto-sauvegarde du programme existant avant écrasement
             self.log_cb("[BACKUP] Sauvegarde automatique du programme existant…")
