@@ -22,6 +22,9 @@ ap.add_argument("--seed", type=int, default=1234)
 ap.add_argument("--types", default="")
 ap.add_argument("--ignore-named", action="store_true",
                 help="ne pas comparer les variables AV/DV nommées (stockage différent studio/RPi)")
+ap.add_argument("--editor-keys", default="",
+                help="JSON {type: [clés]} des clés réellement générées par l'éditeur : ne teste que celles-là")
+ap.add_argument("--raw", action="store_true", help="valeurs de clés non réalistes (fuzz brut)")
 ap.add_argument("--detail", type=int, default=2, help="écarts détaillés par type")
 ap.add_argument("--studio", default="core/plc_engine.py")
 ap.add_argument("--rpi", default="rpi_server/server.py")
@@ -146,13 +149,22 @@ def gen_value(key, rnd):
     k = key.lower()
     if k in ("id", "type", "params"):
         return None
-    if "ref" in k and k not in ("ref_a", "ref_b"):
+    # Réalisme (l'éditeur) : sortie booléenne = bit M ou GPIO ; entrées analogiques = registres RF
+    if k == "output":
+        return rnd.choice(["M5", "M6", 5, 11]) if not args.raw else rnd.choice(OUT_REFS)
+    if not args.raw and (k.startswith("pv_ref") or k in ("reg_ref", "reg_sp", "reg_a", "reg_b", "reg_in", "pv", "sp_ref")):
+        return rnd.choice(["RF1", "RF2", "RF3", "RF110", "RF111"])
+    if not args.raw and k in ("cv_ref", "et_ref", "pt_ref"):
+        return rnd.choice(["RF120", "RF121", "RF122"])
+    if not args.raw and k in ("ref_a", "ref_b"):
+        return rnd.choice(["RF1", "RF2", "RF3", "RF110", "RF111", "M0", "M1"])
+    if "ref" in k:
         return rnd.choice(OUT_REFS if ("out" in k or k.startswith(("od", "oa"))) else IN_REFS)
     if k in ("op", "operator", "mode", "cmp", "func", "fn"):
         return rnd.choice(OPS)
     if k.startswith(("out_", "pin", "reg_", "in0", "in1", "in2", "in3", "idx", "oinc", "odec")) and k not in ("out_lo", "out_hi", "out_min", "out_max", "out_hour", "out_min", "out_sec", "out_mday", "out_wday"):
         if k.startswith(("out_", "oinc", "odec", "reg_out", "reg_runtime", "reg_starts", "reg_total")):
-            return rnd.choice(OUT_REFS + [5, 11])
+            return rnd.choice(OUT_REFS)
         return rnd.choice(IN_REFS)
     if k.endswith("_ref") or k in ("reg_out", "reg_in", "reg_a", "reg_b", "reg_c", "input", "output", "in1", "in2",
                                    "pv", "sp", "reg", "reg_ref"):
@@ -161,6 +173,8 @@ def gen_value(key, rnd):
         return rnd.choice(IN_REFS)
     if "cond" in k or k in ("in", "s", "r", "g", "en", "enable", "set", "reset", "cu", "cd", "ld", "trig"):
         return rnd.choice(COND)
+    if k in ("preset", "preset_ms", "rate", "hysteresis", "kp", "ki", "kd"):
+        return rnd.choice([0.5, 1.0, 2.0, 3.0, 5.0, 10.0])      # valeurs de réglage réalistes (> 0)
     if k == "bktype":
         return rnd.choice(["float", "bool"])
     if k in ("num", "index", "n", "n_in", "n_out", "antileg_day", "antileg_hour", "ctrl_mode",
@@ -270,13 +284,16 @@ def main():
     k_studio = branch_keys(studio_path)
     k_rpi = branch_keys(rpi_path)
     types = sorted(set(k_studio) | set(k_rpi))
+    ed = json.load(open(args.editor_keys)) if args.editor_keys else None
+    if ed is not None:
+        types = [t for t in types if t in ed]
     if args.types:
         want = set(args.types.split(","))
         types = [t for t in types if t in want]
     rnd = random.Random(args.seed)
     tot_diff, results = 0, {}
     for t in types:
-        keys = sorted(k_studio.get(t, set()) | k_rpi.get(t, set()))
+        keys = sorted(ed[t]) if ed is not None else sorted(k_studio.get(t, set()) | k_rpi.get(t, set()))
         n_diff, examples = 0, []
         for i in range(args.n):
             blk = gen_block(t, keys, rnd, i)

@@ -1151,7 +1151,9 @@ class PLCEngine:
                 self.counters[bid] = {"preset": preset, "acc": 0, "done": False, "_prev": False}
             c = self.counters[bid]
             if rst: c["acc"] = 0; c["done"] = False
-            elif cond and not c["_prev"]: c["acc"] += 1; c["done"] = c["acc"] >= preset
+            elif cond and not c["_prev"]:
+                c["acc"] += 1
+                if c["acc"] >= preset: c["done"] = True   # aligné studio : ne repasse jamais à False si le PV augmente ensuite
             c["_prev"] = cond
             if out: self.write_signal(out, c["done"])
             self._write_q(block, c["done"])
@@ -1387,12 +1389,19 @@ class PLCEngine:
             ld     = self.eval_cond(block.get("ld_cond") or block.get("ld"), default_if_none=False) if btype in ("ctd", "ctud") else False
             # Aligné sur core/plc_engine.py (CTUD) : CU et CD sont évalués indépendamment
             # (un front simultané se compense) et le compteur n'est pas plafonné à preset+1.
-            if rst:                         c["acc"] = 0; c["done"] = False
-            elif ld:                        c["acc"] = preset
+            if rst:
+                c["acc"] = 0; c["done"] = False
+            elif ld:
+                c["acc"] = preset
+                if btype == "ctd": c["done"] = False     # CTD : LD réarme "compteur atteint" (aligné studio)
             else:
-                if cu and not c["_cu"]:     c["acc"] = c["acc"] + 1
-                if cd and not c["_cd"]:     c["acc"] = max(c["acc"] - 1, 0)
-            c["done"] = c["acc"] >= preset if btype != "ctd" else c["acc"] <= 0
+                if cu and not c["_cu"]:
+                    c["acc"] = c["acc"] + 1
+                if cd and not c["_cd"]:
+                    c["acc"] = max(c["acc"] - 1, 0)
+                    if btype == "ctd": c["done"] = c["acc"] <= 0   # CTD : mis à jour seulement au décompte, pas à chaque cycle (aligné studio)
+            if btype != "ctd":
+                c["done"] = c["acc"] >= preset   # CTU/CTUD : recalculé à chaque cycle (déjà aligné studio, inchangé)
             c["_cu"] = cu; c["_cd"] = cd
             if out: self.write_signal(out, c["done"])
             self._write_q(block, c["done"])
@@ -1511,9 +1520,9 @@ class PLCEngine:
             a  = _rv(block.get("ref_a") or block.get("in1"))
             br = block.get("ref_b") or block.get("in2")
             b  = _rv(br) if br else float(block.get("val_b", 0))
-            op = block.get("op", btype)
+            op = block.get("op", "eq") if btype == "compare" else block.get("op", btype)   # aligné studio
             r  = {"gt":a>b,"ge":a>=b,"lt":a<b,"le":a<=b,"eq":abs(a-b)<1e-9,
-                  "ne":abs(a-b)>=1e-9,"compare":a==b}.get(op, False)
+                  "ne":abs(a-b)>=1e-9,"neq":abs(a-b)>=1e-9,"compare":a==b}.get(op, False)  # neq accepté comme ne (aligné studio)
             if out: self.write_signal(out, r)
 
         # ── Actionneurs ───────────────────────────────────────────────────
@@ -2063,17 +2072,15 @@ class PLCEngine:
             return self._exec_pyblock(block, dt_ms)
 
         # ── Blocs manquants — portés depuis le moteur desktop ─────────────
-
-        elif btype in ("compare", "gt", "ge", "lt", "le", "eq", "ne"):
-            op   = block.get("op", "gt")
-            a    = self.read_analog(block.get("ref_a", "RF0"))
-            b_v  = self.read_analog(block.get("ref_b")) if block.get("ref_b") else float(block.get("val_b", 0))
-            res  = {"gt":a>b_v,"ge":a>=b_v,"lt":a<b_v,"le":a<=b_v,"eq":a==b_v,"ne":a!=b_v}.get(op, False)
-            if out: self.write_signal(out, res)
+        # "compare"/"gt"/"ge"/"lt"/"le"/"eq"/"ne" sont déjà traités plus haut, avec la même
+        # lecture (RF/ANA via read_analog, sinon read_signal — donc M0/M1 compris) que
+        # core/plc_engine.py. Ce doublon s'exécutait quand même après coup, avec un défaut
+        # de ref_a sur "RF0" et sans lire les bits M : il écrasait le bon résultat par un
+        # mauvais. Supprimé — ne pas le rétablir sans aussi corriger ces deux défauts.
 
         elif btype == "compare_f":
             ref  = block.get("reg_ref", "RF0")
-            thr  = float(block.get("threshold", 80.0))
+            thr  = float(block.get("threshold", 0.0))   # aligné studio (l'éditeur écrit toujours "threshold" : sans effet en pratique)
             op   = block.get("op", "gt")
             val  = self.read_analog(ref)
             hyst = float(block.get("hysteresis", 0.0))

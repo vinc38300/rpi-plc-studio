@@ -1,0 +1,393 @@
+{
+ "coil": [
+  "condition",
+  "output",
+  "reg_out"
+ ],
+ "timer": [
+  "condition",
+  "et_ref",
+  "output",
+  "preset_ms",
+  "pt_ref",
+  "reg_out"
+ ],
+ "tof": [
+  "condition",
+  "et_ref",
+  "output",
+  "preset_ms",
+  "pt_ref",
+  "reg_out"
+ ],
+ "tp": [
+  "condition",
+  "et_ref",
+  "output",
+  "preset_ms",
+  "pt_ref",
+  "reg_out"
+ ],
+ "wait": [
+  "condition",
+  "delay_s",
+  "output",
+  "reg_out"
+ ],
+ "waith": [
+  "condition",
+  "delay_s",
+  "output",
+  "reg_out"
+ ],
+ "pulse": [
+  "condition",
+  "duration_s",
+  "output",
+  "reg_out"
+ ],
+ "counter": [
+  "condition",
+  "cv_ref",
+  "output",
+  "preset",
+  "pv_ref",
+  "reset_condition"
+ ],
+ "ctd": [
+  "cd_cond",
+  "cv_ref",
+  "ld_cond",
+  "output",
+  "preset",
+  "pv_ref"
+ ],
+ "ctud": [
+  "cd_cond",
+  "cu_cond",
+  "cv_ref",
+  "ld_cond",
+  "output",
+  "preset",
+  "pv_ref",
+  "reset_condition"
+ ],
+ "compare": [
+  "op",
+  "output",
+  "ref_a",
+  "ref_b",
+  "reg_out",
+  "val_b"
+ ],
+ "compare_f": [
+  "hysteresis",
+  "op",
+  "output",
+  "reg_out",
+  "reg_ref",
+  "threshold"
+ ],
+ "backup": [
+  "bktype",
+  "default",
+  "output",
+  "reg_out",
+  "val_in",
+  "val_out",
+  "varname"
+ ],
+ "av": [
+  "default",
+  "output",
+  "val_out",
+  "varname"
+ ],
+ "dv": [
+  "default",
+  "output",
+  "reg_out",
+  "varname"
+ ],
+ "boolean": [
+  "invert_o1",
+  "invert_o2",
+  "n_in",
+  "n_out",
+  "out1_ref",
+  "out2_ref",
+  "truth_table"
+ ],
+ "stoav": [
+  "reg_in",
+  "varname"
+ ],
+ "stoap": [
+  "reg_in",
+  "varname"
+ ],
+ "localtime": [
+  "out_hour",
+  "out_mday",
+  "out_min",
+  "out_sec",
+  "out_wday"
+ ],
+ "mqtt": [
+  "reg_in",
+  "reg_out",
+  "retain",
+  "stale_timeout",
+  "topic",
+  "val_type"
+ ],
+ "plancher": [
+  "dead_band",
+  "en_cond",
+  "kd",
+  "ki",
+  "kp",
+  "max_depart",
+  "max_temp",
+  "min_delta",
+  "min_temp",
+  "name",
+  "out_circ",
+  "out_v3v_fer",
+  "out_v3v_ouv",
+  "pv_ref_amb",
+  "pv_ref_depart",
+  "pv_ref_retour",
+  "reg_delta",
+  "reg_depart",
+  "reg_out",
+  "reg_retour",
+  "sp",
+  "sp_ref"
+ ],
+ "chaudiere": [
+  "hysteresis",
+  "max_depart",
+  "min_off_s",
+  "min_on_s",
+  "name",
+  "out_brulee",
+  "out_pompe",
+  "pv_ref_depart",
+  "pv_ref_retour",
+  "sp"
+ ],
+ "solar": [
+  "antigel_mode",
+  "antigel_temp_source",
+  "delta_off",
+  "delta_on",
+  "max_capteur",
+  "min_capteur",
+  "name",
+  "out_pompe",
+  "out_pompe_av",
+  "out_vanne_chauf",
+  "out_vanne_ecs",
+  "pump_delta_max",
+  "pump_min_pct",
+  "pump_mode",
+  "pv_ref_capteur",
+  "pv_ref_chauf",
+  "pv_ref_ecs",
+  "reg_delta",
+  "reg_rendement",
+  "reg_vitesse_pompe",
+  "sp_chauf",
+  "sp_ecs"
+ ],
+ "zone_chauf": [
+  "delay_close_s",
+  "delay_open_s",
+  "hysteresis",
+  "name",
+  "out_vanne",
+  "pv_ref",
+  "sp"
+ ],
+ "ecs_bloc": [
+  "antileg_day",
+  "antileg_hour",
+  "hysteresis",
+  "name",
+  "out_pompe",
+  "pv_ref_ecs",
+  "pv_ref_prim",
+  "sp_antileg",
+  "sp_ecs"
+ ],
+ "prog_h": [
+  "cond_vac",
+  "condition",
+  "h_debut_j",
+  "h_fin_j",
+  "hebdo_mode",
+  "m_debut_j",
+  "m_fin_j",
+  "name",
+  "out_actif",
+  "out_jour",
+  "out_vac_dv",
+  "reg_sp",
+  "sp_jour",
+  "sp_nuit",
+  "sp_vac"
+ ],
+ "contactor": [
+  "condition",
+  "name",
+  "pin"
+ ],
+ "valve3v": [
+  "cond_dec",
+  "cond_inc",
+  "name",
+  "out_dec",
+  "out_inc",
+  "pin_dec",
+  "pin_inc"
+ ],
+ "runtimcnt": [
+  "condition",
+  "label",
+  "name",
+  "reg_runtime",
+  "reg_starts",
+  "reg_total",
+  "reset_condition"
+ ],
+ "pt_in": [
+  "analog_ref",
+  "reg_out"
+ ],
+ "ana_in": [
+  "analog_ref",
+  "reg_out"
+ ],
+ "ds_in": [
+  "analog_ref",
+  "reg_out",
+  "resolution",
+  "rom_id"
+ ],
+ "sensor": [
+  "correction",
+  "name",
+  "ref",
+  "reg_out"
+ ],
+ "sel": [
+  "in0",
+  "in1",
+  "reg_out",
+  "sel_cond"
+ ],
+ "mux": [
+  "idx_ref",
+  "n_in",
+  "reg_out"
+ ],
+ "comph": [
+  "high",
+  "hyst",
+  "output",
+  "ref",
+  "reg_out"
+ ],
+ "compl": [
+  "hyst",
+  "low",
+  "output",
+  "ref",
+  "reg_out"
+ ],
+ "filt1": [
+  "reg_in",
+  "reg_out",
+  "tc_s"
+ ],
+ "avg": [
+  "n",
+  "reg_in",
+  "reg_out"
+ ],
+ "integ": [
+  "hi",
+  "ki",
+  "lo",
+  "output",
+  "reg_in",
+  "reg_out",
+  "reset_cond"
+ ],
+ "deriv": [
+  "kd",
+  "reg_in",
+  "reg_out"
+ ],
+ "deadb": [
+  "dead",
+  "output",
+  "reg_in",
+  "reg_out"
+ ],
+ "ramp": [
+  "output",
+  "rate",
+  "reg_out",
+  "reg_sp"
+ ],
+ "hyst": [
+  "band",
+  "output",
+  "reg_in",
+  "reg_out",
+  "sp"
+ ],
+ "scale": [
+  "in_hi",
+  "in_lo",
+  "out_hi",
+  "out_lo",
+  "reg_out",
+  "reg_ref"
+ ],
+ "pid": [
+  "kd",
+  "ki",
+  "kp",
+  "out_max",
+  "out_min",
+  "output",
+  "pv_ref",
+  "reg_out",
+  "setpoint"
+ ],
+ "carithm": [
+  "code",
+  "n_a",
+  "n_d",
+  "n_i",
+  "n_oa",
+  "n_od",
+  "n_oi",
+  "name",
+  "oi1_ref"
+ ],
+ "pyblock": [
+  "code",
+  "n_a",
+  "n_d",
+  "n_i",
+  "n_oa",
+  "n_od",
+  "n_oi",
+  "name",
+  "oi1_ref"
+ ]
+}

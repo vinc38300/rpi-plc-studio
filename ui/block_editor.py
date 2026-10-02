@@ -460,7 +460,34 @@ class BlockEditor(QWidget):
 
         Returns une nouvelle page dict (sans modifier l'originale).
         """
-        import json as _json, copy as _copy
+        import json as _json, copy as _copy, re as _re
+
+        # FIX : les blocs d'un groupe sont numérotés dans le contexte INTERNE du
+        # groupe (ids B2, B3... et registres RF100... qui repartent de zéro).
+        # Aplatis tels quels, ils entrent en collision avec ceux du programme
+        # principal : un bloc interne remplaçait le bloc de même id (ex. AV av0
+        # écrasé par le PYBLOCK du groupe) et écrivait dans le registre d'un
+        # autre bloc (RF100...). Chaque instance de groupe reçoit donc des ids
+        # préfixés et des registres RF neufs, au-dessus de tout RF existant.
+        _rf_full = _re.compile(r"RF(\d+)")
+        if getattr(self, "_grp_rf_next", None) is None:
+            _mx = max([int(n) for n in _re.findall(r"RF(\d+)", _json.dumps(page))] + [99])
+            self._grp_rf_next = _mx + 1
+
+        def _renumber(o, idmap, rfmap):
+            if isinstance(o, dict):
+                return {k: (idmap.get(v, v) if k in ("id", "bid") and isinstance(v, str)
+                            else _renumber(v, idmap, rfmap)) for k, v in o.items()}
+            if isinstance(o, list):
+                return [_renumber(v, idmap, rfmap) for v in o]
+            if isinstance(o, str):
+                m = _rf_full.fullmatch(o)
+                if m and int(m.group(1)) >= 100:      # RF0..RF99 = registres système
+                    if o not in rfmap:
+                        rfmap[o] = f"RF{self._grp_rf_next}"
+                        self._grp_rf_next += 1
+                    return rfmap[o]
+            return o
 
         def _flatten_once(page_dict):
             """Un seul passage d'aplatissement — retourne (nouvelle_page, changed)."""
@@ -535,6 +562,29 @@ class BlockEditor(QWidget):
                                                "port": iw["src"]["port"]}
                             break
 
+                # Ids préfixés + registres RF neufs pour cette instance de groupe
+                _idmap = {ib["id"]: f"{gid}_{ib['id']}" for ib in real_blocks}
+                _rfmap = {}
+                # FIX : un bloc câblé sur la sortie du GROUP (OR, AND, COMPH...) a
+                # mémorisé le registre de sortie du GROUP (params.reg_out) comme
+                # source. Après aplatissement, le fil est bien repointé vers le bloc
+                # interne, mais le paramètre mémorisé ne suit pas : le bloc aval lisait
+                # un registre que personne n'écrivait. On fait donc écrire la source
+                # interne dans le registre du GROUP lui-même (groupe à sortie unique).
+                _grp_ro = (b.get("params") or {}).get("reg_out")
+                if isinstance(_grp_ro, str) and _rf_full.fullmatch(_grp_ro) and len(gout_map) == 1:
+                    _src_id = list(gout_map.values())[0]["bid"]
+                    for _ib in real_blocks:
+                        if _ib["id"] == _src_id:
+                            _old_ro = (_ib.get("params") or {}).get("reg_out")
+                            if isinstance(_old_ro, str) and _rf_full.fullmatch(_old_ro):
+                                _rfmap[_old_ro] = _grp_ro
+                            break
+                real_blocks      = _renumber(real_blocks,      _idmap, _rfmap)
+                real_inner_wires = _renumber(real_inner_wires, _idmap, _rfmap)
+                gin_map          = _renumber(gin_map,          _idmap, _rfmap)
+                gout_map         = _renumber(gout_map,         _idmap, _rfmap)
+
                 # Fils externes pointant vers / depuis ce GROUP
                 ext_wires_in  = [w for w in new_wires if w["dst"]["bid"] == gid]
                 ext_wires_out = [w for w in new_wires if w["src"]["bid"] == gid]
@@ -590,6 +640,9 @@ class BlockEditor(QWidget):
         (à la manière de ProviewR).  Avant ce correctif, chaque page était compilée
         indépendamment et les signaux inter-pages étaient perdus.
         """
+        # Compteur RF des groupes : au-dessus de tout RF de TOUTES les pages
+        import json as _j, re as _r
+        self._grp_rf_next = max([int(n) for n in _r.findall(r"RF(\d+)", _j.dumps(diagram))] + [99]) + 1
         if "pages" in diagram:
             # ── Fusionner tous les blocs + fils de toutes les pages ──────────
             all_blocks: list = []
@@ -966,9 +1019,14 @@ class BlockEditor(QWidget):
             if t in ("CTU","CTD","CTUD","RUNTIMCNT"):
                 return {"type": "counter_done", "id": src_b["id"]}
             # Sorties COMPH/COMPL/HYST → bit mémoire ou signal direct
-            if t in ("COMPH", "COMPL", "HYST"):
+            if t in ("COMPH", "COMPL", "HYST", "COMPARE_F"):
                 reg = p.get("reg_out", "M0")
-                if reg.startswith("M"):
+                # FIX : le canvas affecte un registre RF* (et non un bit M) comme
+                # reg_out du comparateur. Sans ce cas, build_cond() renvoyait None :
+                # aucune bobine n'était créée pour l'OUTPUT câblé derrière, et le
+                # comparateur n'écrivait que dans son registre RF -> la sortie GPIO
+                # ne se déclenchait jamais (comparateur vert, relais au repos).
+                if isinstance(reg, str) and (reg.startswith("M") or reg.startswith("RF")):
                     return {"type": "input", "ref": reg}
             # SR_R / SR_S → lire le bit
             if t in ("SR_R", "SR_S"):
@@ -1857,6 +1915,15 @@ class BlockEditor(QWidget):
                 blk["ref"]     = _ref_src or p.get("ref","RF0")
                 blk["high"]    = p.get("high", 80.0)
                 blk["hyst"]    = p.get("hyst", 0.5)
+                # FIX : seuil câblé sur le port HIG (AV, ADD, CONN...) — sans ça
+                # seul le champ "high" tapé dans le bloc était transmis aux
+                # moteurs et le fil HIG était ignoré.
+                _hsb, _hsp = wire_src(bid, "HIG")
+                _hv = analog_src_ref(_hsb, _hsp)
+                if isinstance(_hv, str) and _hv.startswith("RF"):
+                    blk["high_ref"] = _hv
+                elif isinstance(_hv, (int, float)) and not isinstance(_hv, bool):
+                    blk["high"] = float(_hv)          # CONST câblée
                 blk["reg_out"] = p.get("reg_out","M0")
                 out = resolve_bool_out(bid, "HL")
                 if out is not None: blk["output"] = out
@@ -1872,6 +1939,13 @@ class BlockEditor(QWidget):
                 blk["ref"]     = _ref_src or p.get("ref","RF0")
                 blk["low"]     = p.get("low", 10.0)
                 blk["hyst"]    = p.get("hyst", 0.5)
+                # FIX : seuil câblé sur le port LOW (cf. COMPH ci-dessus)
+                _lsb, _lsp = wire_src(bid, "LOW")
+                _lv = analog_src_ref(_lsb, _lsp)
+                if isinstance(_lv, str) and _lv.startswith("RF"):
+                    blk["low_ref"] = _lv
+                elif isinstance(_lv, (int, float)) and not isinstance(_lv, bool):
+                    blk["low"] = float(_lv)           # CONST câblée
                 blk["reg_out"] = p.get("reg_out","M1")
                 out = resolve_bool_out(bid, "LL")
                 if out is not None: blk["output"] = out

@@ -125,18 +125,18 @@
       "mode": "output",
       "active_low": true
     },
+    "13": {
+      "name": "CT 20/21 K4",
+      "mode": "output",
+      "active_low": true
+    },
     "9": {
-      "name": "K5",
+      "name": "K5 Lampe rouge - stop bois",
       "mode": "output",
       "active_low": true
     },
     "5": {
       "name": "Circulateur CR1",
-      "mode": "output",
-      "active_low": true
-    },
-    "13": {
-      "name": "CT 20/21 K4",
       "mode": "output",
       "active_low": true
     },

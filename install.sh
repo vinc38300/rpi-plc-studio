@@ -435,6 +435,8 @@ Description=RPi-PLC Studio v${VERSION} — Automate programmable
 Documentation=https://github.com/rpi-plc
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -443,8 +445,6 @@ WorkingDirectory=${DATA_DIR}
 ExecStart=${PY} ${APP_DIR}/server.py --data ${DATA_DIR}
 Restart=always
 RestartSec=10
-StartLimitIntervalSec=120
-StartLimitBurst=10
 TimeoutStopSec=15
 KillMode=mixed
 # Logs

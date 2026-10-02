@@ -11,7 +11,7 @@
   --border: #30363d; --text: #e6edf3; --text2: #8b949e; --text3: #484f58;
   --accent: #58a6ff; --green: #3fb950; --red: #f85149; --amber: #d29922;
   --purple: #bc8cff; --teal: #39d353; --cyan: #00d4ff; --orange: #f0883e;
-  --r: 8px; --font: 'Segoe UI', system-ui, sans-serif;
+  --r: 8px; --font: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,41 +19,41 @@ html { scroll-behavior: smooth; }
 body {
   font-family: var(--font); background: var(--bg); color: var(--text);
   font-size: 15px; line-height: 1.7;
+  display: grid; grid-template-columns: 280px 1fr; min-height: 100vh;
 }
 
 /* ── SIDEBAR ── */
 nav {
   background: var(--bg2); border-right: 1px solid var(--border);
-  position: fixed; left: 0; top: 0;
-  width: 260px; height: 100vh; overflow-y: auto;
-  padding: 0 0 40px;
-  z-index: 200;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 0 0 40px; display: flex; flex-direction: column;
 }
 nav::-webkit-scrollbar { width: 4px; }
 nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .nav-logo {
-  padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+  padding: 20px 20px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .nav-logo h1 { font-size: 18px; font-weight: 800; color: var(--accent); }
 .nav-logo h1 span { color: var(--green); }
-.nav-logo p { font-size: 11px; color: #6e7681; margin-top: 2px; }
+.nav-logo p { font-size: 12px; color: var(--text3); margin-top: 2px; }
 .nav-section {
-  padding: 14px 20px 4px; font-size: 10px; font-weight: 700;
-  color: #6e7681; text-transform: uppercase; letter-spacing: 1.5px;
-  line-height: 1.4;
+  padding: 14px 20px 4px; font-size: 12px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 1px;
+  flex-shrink: 0;
 }
 nav a {
-  display: block; padding: 6px 20px 6px 28px; font-size: 13px; line-height: 1.5;
-  color: #c9d1d9; text-decoration: none; border-left: 2px solid transparent;
+  display: block; padding: 6px 20px 6px 28px; font-size: 14px;
+  color: var(--text2); text-decoration: none; border-left: 2px solid transparent;
   transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 0;
 }
-nav a:hover { color: #e6edf3; background: var(--bg3); }
+nav a:hover { color: var(--text); background: var(--bg3); }
 nav a.active { color: var(--accent); border-left-color: var(--accent); background: #0d1f35; }
-nav a.sub { padding-left: 36px; font-size: 12px; color: #aab4c0; }
+nav a.sub { padding-left: 36px; font-size: 13px; }
 
 /* ── MAIN ── */
-main { margin-left: 260px; max-width: 960px; padding: 40px 48px 80px; }
-@media (max-width: 900px) { nav { display: none; } main { margin-left: 0; padding: 24px 20px; } }
+main { max-width: 960px; padding: 48px 48px 80px; }
+@media (max-width: 900px) { body { grid-template-columns: 1fr; } nav { display: none; } main { padding: 24px 20px; } }
 
 /* ── TYPOGRAPHY ── */
 h1 { font-size: 32px; font-weight: 800; color: var(--text); margin-bottom: 12px; line-height: 1.2; }
@@ -73,23 +73,6 @@ li::marker { color: var(--text3); }
 strong { color: var(--text); font-weight: 600; }
 em { color: var(--text2); font-style: italic; }
 hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
-
-
-/* ── EXAMPLE CARDS ── */
-.example-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px; margin: 16px 0 24px;
-}
-.example-card {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 16px 18px;
-}
-.example-title {
-  font-size: 14px; font-weight: 700; color: var(--accent);
-  margin-bottom: 8px;
-}
-.example-desc { font-size: 13px; color: var(--text2); line-height: 1.6; }
-.example-desc strong { color: var(--text); }
 
 /* ── CODE ── */
 code {
@@ -258,11 +241,10 @@ footer {
 <nav>
   <div class="nav-logo">
     <h1>RPi-PLC<span> Studio</span></h1>
-    <p>Documentation Utilisateur v3.2</p>
+    <p>Documentation Utilisateur v2.0</p>
   </div>
 
   <div class="nav-section">Introduction</div>
-  <a href="#nouveautes">🆕 Nouveautés v3.2</a>
   <a href="#apercu">Aperçu général</a>
   <a href="#archi">Architecture du projet</a>
   <a href="#install">Installation</a>
@@ -294,8 +276,6 @@ footer {
   <a href="#blocs-metier" class="sub">SOLAR — Solaire thermique</a>
   <a href="#blocs-metier" class="sub">ZONE_CHAUF — Zone chauffage</a>
   <a href="#blocs-metier" class="sub">ECS_BLOC — Eau Chaude Sanitaire</a>
-  <a href="#prog-h">📅 PROG_H — Planning Jour/Nuit</a>
-  <a href="#synoptic-metier">🏭 Synoptiques Métier</a>
   <a href="#carithm">Bloc CArithm (code C)</a>
   <a href="#pyblock">🐍 Bloc PYBLOCK (Python natif)</a>
   <a href="#pyblock" class="sub">Variables disponibles</a>
@@ -307,10 +287,13 @@ footer {
   <a href="#gpio-map">Carte GPIO RPi 3</a>
   <a href="#config-json">config.json</a>
 
-  <a href="#gpio-config-dialog">📌 Configurateur GPIO</a>
+  <div class="nav-section">Interface PC</div>
+  <a href="#gpio-config-dialog">Configurateur GPIO</a>
+  <a href="#analog-config-dialog">Configurateur Analogique</a>
 
   <div class="nav-section">Déploiement RPi</div>
   <a href="#deploy">Déploiement SSH</a>
+  <a href="#tailscale-headscale">Tailscale / Headscale</a>
   <a href="#server">Serveur autonome</a>
   <a href="#setup-autonomy">setup_autonomy.sh</a>
   <a href="#gpio-library">Bibliothèque GPIO (gpiod)</a>
@@ -344,22 +327,15 @@ footer {
   <a href="#syn-nav-widgets" class="sub">Widgets de navigation</a>
   <a href="#syn-nav-bar" class="sub">Barre navigation fixe</a>
   <a href="#syn-sidebar">Sidebar ongletée (v2)</a>
-  <a href="#syn-widgets">Les 13 widgets PLC</a>
+  <a href="#syn-widgets">Les 14 widgets PLC</a>
   <a href="#syn-pid">Symboles P&amp;ID (30)</a>
-  <a href="#syn-anim">Symboles animés (6)</a>
+  <a href="#syn-anim">Symboles animés (7)</a>
   <a href="#syn-images">Import d'images</a>
   <a href="#syn-vue">Mode vue opérateur</a>
   <a href="#pwa">Application mobile PWA</a>
   <a href="#validation">Validation du câblage FBD</a>
 
   <div class="nav-section">Référence</div>
-  <a href="#recettes">📋 Recettes complètes</a>
-  <a class="sub" href="#recette-thermostat">Thermostat différentiel</a>
-  <a class="sub" href="#recette-chaudiere">Séquence chaudière</a>
-  <a class="sub" href="#recette-plancher">Plancher multi-zones</a>
-  <a class="sub" href="#recette-compteur">Compteur horaire</a>
-  <a class="sub" href="#recette-telegram">Alerte Telegram</a>
-  <a class="sub" href="#recette-pyblock-vs-carithm">PyBlock vs CArithm</a>
   <a href="#raccourcis-globaux">Raccourcis clavier</a>
   <a href="#registres">Registres RF & Mémoires M</a>
   <a href="#api-complete">API REST complète</a>
@@ -373,9 +349,9 @@ footer {
 <!-- ── COVER ── -->
 <div class="cover">
   <h1>RPi-PLC Studio</h1>
-  <p class="subtitle">Documentation Utilisateur Complète — Automate Programmable Visuel pour Raspberry Pi 3/4/5</p>
+  <p class="subtitle">Documentation Utilisateur Complète — Automate Programmable Visuel pour Raspberry Pi 3</p>
   <div class="cover-meta">
-    <div class="cover-badge">Version <span>3.1</span></div>
+    <div class="cover-badge">Version <span>2.0</span></div>
     <div class="cover-badge">Matériel <span>RPi 3 · ADS1115 · NTC40</span></div>
     <div class="cover-badge">Interface <span>FBD / SCADA</span></div>
     <div class="cover-badge">Python <span>3.x · PyQt5 · Flask</span></div>
@@ -386,7 +362,6 @@ footer {
 <div class="toc">
   <h3>Table des matières</h3>
   <ol>
-    <li><a href="#nouveautes">🆕 Nouveautés v3.2</a></li>
     <li><a href="#apercu">Aperçu général</a></li>
     <li><a href="#archi">Architecture du projet</a></li>
     <li><a href="#install">Installation</a></li>
@@ -397,11 +372,12 @@ footer {
         <li><a href="#props">Panneau propriétés</a></li>
       </ul>
     </li>
-    <li><a href="#blocs-es">Bibliothèque de blocs (56 blocs)</a></li>
+    <li><a href="#blocs-es">Bibliothèque de blocs (86 blocs)</a></li>
     <li><a href="#blocs-group">Blocs Groupes — Encapsulation &amp; bibliothèque</a></li>
     <li><a href="#carithm">Bloc CArithm — Code C embarqué</a></li>
     <li><a href="#carte-io">Matériel — Carte E/S NTC40</a></li>
     <li><a href="#deploy">Déploiement sur Raspberry Pi</a></li>
+    <li><a href="#tests">🧪 Tests automatisés — parité studio/RPi</a></li>
     <li><a href="#scada-intro">Interface SCADA distante</a></li>
     <li><a href="#api">Référence API REST</a></li>
     <li><a href="#exemples">Exemples de programmes</a></li>
@@ -414,9 +390,9 @@ footer {
     <li><a href="#synoptique-doc">Éditeur de synoptique v2</a>
       <ul class="sub-toc">
         <li><a href="#syn-sidebar">Sidebar ongletée</a></li>
-        <li><a href="#syn-widgets">Les 13 widgets PLC</a></li>
+        <li><a href="#syn-widgets">Les 14 widgets PLC</a></li>
         <li><a href="#syn-pid">30 symboles P&amp;ID</a></li>
-        <li><a href="#syn-anim">6 symboles animés</a></li>
+        <li><a href="#syn-anim">7 symboles animés</a></li>
         <li><a href="#syn-images">Import d'images</a></li>
         <li><a href="#syn-vue">Mode vue opérateur</a></li>
       </ul>
@@ -429,118 +405,6 @@ footer {
 </div>
 
 <!-- ════════════════════════════════════════════════════════════ -->
-<!-- ── NOUVEAUTÉS v3.2 ── -->
-<h2 id="nouveautes33"><span class="icon">🆕</span> Nouveautés &amp; Corrections v3.3</h2>
-
-<h3>✅ Corrections de bugs critiques</h3>
-<table class="ref-table">
-  <thead><tr><th>Fichier</th><th>Bug corrigé</th></tr></thead>
-  <tbody>
-    <tr>
-      <td><code>ui/block_editor.py</code></td>
-      <td><strong>CARITHM — sorties jamais écrites.</strong> Le bloc compilé ne contenait pas
-      <code>n_a/n_d/n_i/n_oa/n_od/n_oi</code>. Le moteur lisait
-      <code>block.get("n_od", 0)</code> → 0, donc la boucle d'écriture des sorties
-      <code>od1..od8</code> s'exécutait 0 fois. K1 ne recevait jamais le signal du bloc.
-      Correction : les 6 paramètres sont maintenant copiés dans le bloc compilé, identique à PYBLOCK.</td>
-    </tr>
-    <tr>
-      <td><code>core/plc_engine.py</code></td>
-      <td><strong>Sondes ANA — affichent 66,2 °C par défaut en simulation.</strong>
-      <code>sim_value</code> était initialisé à <code>0,55 V</code>. La formule NTC/PT100 sur 0,55 V donnait
-      ~66,2 °C à chaque cycle. Correction : <code>sim_value = -1.0</code> (marqueur "override °C direct")
-      — les sondes affichent désormais <strong>20,0 °C</strong> par défaut.</td>
-    </tr>
-    <tr>
-      <td><code>rpi_server/server.py</code></td>
-      <td>Même bug simulation sondes que plc_engine.py, corrigé avec la même logique :
-      valeur par défaut 20 °C si aucune tension simulée définie.</td>
-    </tr>
-    <tr>
-      <td><code>ui/main_window.py</code></td>
-      <td><strong>Bouton Doc</strong> ouvrait parfois le gestionnaire de fichiers au lieu d'un navigateur.
-      Correction : on essaie Firefox → Chromium → Google Chrome → fallback <code>webbrowser</code> Python.</td>
-    </tr>
-  </tbody>
-</table>
-
-<div class="warning" style="margin-top:16px;">
-  <strong>⚠ Piège courant PyBlock — opérateur négatif parasite</strong><br>
-  Une faute de frappe fréquente : écrire <code>elif A1 &lt; -A2</code> au lieu de <code>elif A1 &lt; A2</code>.
-  Le tiret transforme le seuil en valeur négative (~−66 °C pour une sonde à 66 °C) → la condition n'est
-  <em>jamais vraie</em>, le contacteur reste collé à ON.<br>
-  <strong>Règle :</strong> utilisez toujours <code>od1 = A1 &gt; A2</code> (comparaison directe, sans <code>state</code>)
-  quand il n'y a pas d'hystérésis à mémoriser.
-</div>
-
-<h2 id="nouveautes"><span class="icon">🆕</span> Nouveautés v3.2</h2>
-
-<div class="tip">
-  <span>💡</span>
-  <div><strong>Mise à jour du 27 mars 2026.</strong> Trois corrections importantes : sélecteurs RF persistants, éditeur d'horaires hebdomadaires dans le synoptique, et stabilité du moteur PLC en cas d'erreur.</div>
-</div>
-
-<h3>✅ Corrections de bugs</h3>
-<table>
-  <tr><th>Bug</th><th>Fichier corrigé</th><th>Explication</th></tr>
-  <tr>
-    <td><strong>SP actif (RF) revenait à "—" dans les propriétés</strong></td>
-    <td><code>ui/synoptic_canvas.js</code></td>
-    <td>Les sélecteurs <code>varSP</code>, <code>varDep</code>, <code>varRet</code>, <code>varEcs</code>, <code>varPrim</code>, <code>varCapt</code>, <code>varChauf</code>, <code>varDelta</code> comparaient tous avec <code>w.varRef</code> au lieu de leur propre clé. Ajout des helpers <code>rfFor(key)</code> et <code>anFor(key)</code>.</td>
-  </tr>
-  <tr>
-    <td><strong>Messages [SAFE] en boucle infinie dans le terminal</strong></td>
-    <td><code>core/plc_engine.py</code></td>
-    <td>Après 10 erreurs consécutives, le compteur était remis à 0 → nouvelle boucle de 10 erreurs → nouveau SAFE. Le moteur reste maintenant en état sûr (cycle ralenti à 2s) jusqu'à un stop/reload explicite, et affiche l'erreur réelle.</td>
-  </tr>
-  <tr>
-    <td><strong>Moteur RPi non mis à jour lors du déploiement programme</strong></td>
-    <td><code>core/deployer.py</code></td>
-    <td><code>deploy_prog_only</code> comparait la taille de <code>server.py</code> local vs distant — si différente, il met à jour automatiquement tous les fichiers serveur avant de redémarrer le service.</td>
-  </tr>
-</table>
-
-<h3>✨ Nouvelle fonctionnalité — Éditeur d'horaires hebdomadaires dans le synoptique</h3>
-<p>
-  Le widget <code>prog_h_w</code> (Planning Jour/Nuit) expose maintenant dans son panneau propriétés
-  un <strong>éditeur d'horaires complet par jour de semaine</strong> :
-</p>
-<ul>
-  <li>Case à cocher pour activer/désactiver chaque jour (ex : week-end en veille)</li>
-  <li>Sélecteurs Début/Fin par pas de 15 minutes pour chaque jour</li>
-  <li>Le calendrier du widget se met à jour en temps réel</li>
-  <li>La timeline 24h affiche maintenant l'horaire réel du jour courant (pas une valeur globale)</li>
-</ul>
-<div class="note">
-  <span>📝</span>
-  <div>Ces horaires sont distincts des consignes SP jour/nuit/vac qui restent configurées dans le bloc FBD PROG_H. Le widget synoptique <b>affiche</b> les horaires ; le <b>calcul</b> est fait par le moteur FBD.</div>
-</div>
-
-<h3>✅ Corrections v3.1 (rappel)</h3>
-<table>
-  <tr><th>Bug</th><th>Fichier corrigé</th><th>Explication</th></tr>
-  <tr>
-    <td><strong>Blocs OUTPUT/CONTACTOR revenaient à K1</strong></td>
-    <td><code>fbd_canvas.js</code></td>
-    <td>Le sélecteur HTML retourne une <em>chaîne</em> (<code>"6"</code>) alors que le tableau <code>GPIO_OUT</code> contient des <em>entiers</em>. <code>GPIO_OUT.includes("6")</code> retournait toujours <code>false</code>, remettant le bloc sur K1. Correctif : <code>parseInt()</code> à la lecture du sélecteur et dans <code>setGpioConfig()</code>.</td>
-  </tr>
-  <tr>
-    <td><strong>Script de navigation tronqué</strong></td>
-    <td><code>rpi-plc-studio-doc.html</code></td>
-    <td>L'injection Cloudflare tronquait le script IntersectionObserver de la sidebar, rendant la navigation non fonctionnelle.</td>
-  </tr>
-</table>
-
-<h3>🧩 Éditeur de bloc — Modale avancée</h3>
-<p>
-  Un double-clic sur n'importe quel bloc ouvre une <strong>modale d'édition complète</strong> avec deux onglets :
-</p>
-<ul>
-  <li><strong>⚙ Paramètres</strong> — tous les champs configurables en temps réel avec aperçu instantané sur le canvas</li>
-  <li><strong>📖 Documentation</strong> — description complète du bloc, entrées/sorties, exemples d'utilisation</li>
-</ul>
-<p>Le bouton <strong>✓ Appliquer</strong> déclenche un rendu immédiat. La modale est déplaçable et redimensionnable.</p>
-
 <h2 id="apercu"><span class="icon">🎯</span> Aperçu général</h2>
 
 <div class="section-intro">
@@ -574,46 +438,64 @@ footer {
 <h2 id="archi"><span class="icon">🏗</span> Architecture du projet</h2>
 
 <pre><code>rpi-plc-studio/
-├── <span class="val">main.py</span>                    <span class="comment"># Point d'entrée — lance l'interface PyQt5</span>
-├── <span class="val">install.sh</span>                 <span class="comment"># Script d'installation des dépendances PC</span>
+├── <span class="val">main.py</span>                     <span class="comment"># Point d'entrée — lance l'interface PyQt5</span>
+├── <span class="val">install.sh</span>                  <span class="comment"># Installation des dépendances PC (poste de travail)</span>
+├── <span class="val">install-studio.sh</span>           <span class="comment"># Installation via le paquet .deb (rpi-plc-studio)</span>
 ├── core/
-│   ├── <span class="val">plc_engine.py</span>          <span class="comment"># Moteur PLC PC : scan, blocs, analogique, PID</span>
-│   ├── <span class="val">deployer.py</span>            <span class="comment"># Déploiement SSH vers le RPi</span>
-│   └── <span class="val">project.py</span>             <span class="comment"># Gestion des fichiers projet (.json)</span>
+│   ├── <span class="val">plc_engine.py</span>           <span class="comment"># Moteur PLC PC : scan, 89 types de blocs, analogique, PID</span>
+│   ├── <span class="val">deployer.py</span>             <span class="comment"># Déploiement SSH vers le RPi — vérification md5 du contenu</span>
+│   ├── <span class="val">project.py</span>              <span class="comment"># Gestion des fichiers projet (.plcproj)</span>
+│   └── <span class="val">headscale_api.py</span>        <span class="comment"># Client REST Headscale — voir § Tailscale / Headscale</span>
 ├── ui/
-│   ├── <span class="val">main_window.py</span>         <span class="comment"># Fenêtre principale PyQt5</span>
-│   ├── <span class="val">block_editor.py</span>        <span class="comment"># Widget QWebEngineView + PyBridge</span>
-│   ├── <span class="val">fbd_canvas.html</span>        <span class="comment"># Canvas HTML5/Canvas — éditeur FBD complet</span>
-│   ├── <span class="val">gpio_panel.py</span>          <span class="comment"># Panneau GPIO temps réel</span>
-│   └── <span class="val">deploy_dialog.py</span>       <span class="comment"># Fenêtre de déploiement SSH</span>
-├── resources/
-│   └── <span class="val">style.qss</span>              <span class="comment"># Thème sombre de l'application</span>
-└── rpi_server/                    <span class="comment"># Tout ce qui tourne SUR le RPi</span>
-    ├── <span class="val">server.py</span>              <span class="comment"># Serveur Flask + moteur PLC 51 blocs</span>
-    ├── <span class="val">auth.py</span>                <span class="comment"># Authentification, sessions, HTTPS auto-signé</span>
-    ├── <span class="val">telegram_bot.py</span>        <span class="comment"># Bot Telegram — alertes et commandes</span>
-    ├── <span class="val">recipes.py</span>             <span class="comment"># Gestionnaire de recettes/profils</span>
-    ├── <span class="val">backup_manager.py</span>      <span class="comment"># Sauvegardes versionnées (20 versions)</span>
-    ├── <span class="val">calibration.py</span>         <span class="comment"># Calibration offset/gain par sonde</span>
-    ├── <span class="val">report_generator.py</span>    <span class="comment"># Rapports HTML/CSV avec sparklines</span>
-    ├── <span class="val">config.json</span>            <span class="comment"># Configuration matérielle + sécurité + Telegram</span>
-    ├── <span class="val">programme.json</span>         <span class="comment"># Programme PLC actif</span>
-    ├── <span class="val">calibration.json</span>       <span class="comment"># Calibrations des sondes (généré)</span>
-    ├── <span class="val">recipes.json</span>           <span class="comment"># Recettes de consignes (généré)</span>
-    ├── <span class="val">synoptic.json</span>          <span class="comment"># Synoptique personnalisé (généré)</span>
-    ├── <span class="val">history.db</span>             <span class="comment"># SQLite — historique 30 jours</span>
-    ├── backups/                   <span class="comment"># Sauvegardes versionnées auto</span>
+│   ├── <span class="val">main_window.py</span>          <span class="comment"># Fenêtre principale PyQt5</span>
+│   ├── <span class="val">block_editor.py</span>         <span class="comment"># Widget QWebEngineView + pont Python ↔ JS (compile le programme)</span>
+│   ├── <span class="val">fbd_canvas.html</span>         <span class="comment"># Coquille HTML de l'éditeur FBD</span>
+│   ├── <span class="val">fbd_canvas.js</span>           <span class="comment"># Éditeur FBD complet — palette, canvas, compilateur de fils</span>
+│   ├── <span class="val">gpio_panel.py</span>           <span class="comment"># Panneau GPIO temps réel</span>
+│   ├── <span class="val">gpio_config_dialog.py</span>   <span class="comment"># Éditeur de configuration GPIO — voir § Configurateur GPIO</span>
+│   ├── <span class="val">analog_config_dialog.py</span> <span class="comment"># Éditeur des sondes analogiques (types, canaux ADS1115)</span>
+│   ├── <span class="val">deploy_dialog.py</span>        <span class="comment"># Fenêtre de déploiement SSH — Analyser / Programme seul / Déployer</span>
+│   ├── <span class="val">synoptic_window.py</span>      <span class="comment"># Fenêtre dédiée à l'éditeur de synoptique</span>
+│   ├── <span class="val">synoptic_editor.py</span>      <span class="comment"># Éditeur de synoptique embarqué (QWebEngineView)</span>
+│   ├── <span class="val">synoptic_canvas.html</span>    <span class="comment"># Coquille HTML de l'éditeur de synoptique</span>
+│   ├── <span class="val">synoptic_canvas.js</span>      <span class="comment"># Moteur JS du synoptique — identique à rpi_server/static/synoptic_canvas.js</span>
+│   ├── <span class="val">synoptic_viewer.py</span>      <span class="comment"># Visionneuse plein écran du synoptique RPi</span>
+│   ├── <span class="val">regulech_view.py</span>        <span class="comment"># Vue embarquée du synoptique de régulation thermique</span>
+│   └── <span class="val">rpi_monitor.py</span>          <span class="comment"># Moniteur RPi en direct (polling de l'état)</span>
+├── resources/                  <span class="comment"># Copies packagées dans le .deb studio</span>
+│   ├── <span class="val">style.qss</span>, <span class="val">theme_dark.qss</span>, <span class="val">theme_light.qss</span>   <span class="comment"># Thèmes de l'application</span>
+│   ├── <span class="val">plc_engine.py</span>           <span class="comment"># Copie de core/plc_engine.py — doit rester identique</span>
+│   └── <span class="val">rpi-plc-studio-doc.html</span>, <span class="val">doc-blocs-metier.html</span>, <span class="val">blocs-primitifs-doc.html</span>, <span class="val">rpi-plc-studio-icon.svg</span>
+├── tests/                      <span class="comment"># Bancs de test studio ↔ RPi — voir § Tests automatisés</span>
+│   ├── <span class="val">parity_fuzz.py</span>, <span class="val">editor_keys.json</span>
+│   └── <span class="val">test_block_isolation.py</span>, <span class="val">test_deployer_md5.py</span>
+└── rpi_server/                 <span class="comment"># Tout ce qui tourne SUR le Raspberry Pi</span>
+    ├── <span class="val">server.py</span>               <span class="comment"># Serveur Flask + moteur PLC (89 types de blocs)</span>
+    ├── <span class="val">auth.py</span>                 <span class="comment"># Authentification, sessions, HTTPS auto-signé</span>
+    ├── <span class="val">telegram_bot.py</span>         <span class="comment"># Bot Telegram — alertes et commandes</span>
+    ├── <span class="val">mqtt_bridge.py</span>          <span class="comment"># Pont MQTT — utilisé par le bloc MQTT</span>
+    ├── <span class="val">recipes.py</span>              <span class="comment"># Gestionnaire de recettes/profils</span>
+    ├── <span class="val">backup_manager.py</span>       <span class="comment"># Sauvegardes versionnées (20 versions)</span>
+    ├── <span class="val">calibration.py</span>          <span class="comment"># Calibration offset/gain par sonde</span>
+    ├── <span class="val">report_generator.py</span>     <span class="comment"># Rapports HTML/CSV avec sparklines</span>
+    ├── <span class="val">testeur_plc.html</span>        <span class="comment"># Page de test manuel (supervision autonome)</span>
+    ├── <span class="val">config.json</span>             <span class="comment"># Configuration matérielle + sécurité + Telegram</span>
+    ├── <span class="val">programme.json</span>          <span class="comment"># Programme PLC actif</span>
+    ├── <span class="val">calibration.json</span>        <span class="comment"># Calibrations des sondes (généré)</span>
+    ├── <span class="val">recipes.json</span>            <span class="comment"># Recettes de consignes (généré)</span>
+    ├── <span class="val">synoptic.json</span>           <span class="comment"># Synoptique personnalisé (généré)</span>
+    ├── <span class="val">history.db</span>              <span class="comment"># SQLite — historique 30 jours</span>
+    ├── <span class="val">backups/</span>                <span class="comment"># Sauvegardes versionnées auto</span>
+    ├── <span class="val">rpi-plc.service</span>         <span class="comment"># Unité systemd</span>
+    ├── <span class="val">setup_autonomy.sh</span>       <span class="comment"># Script d'installation complet (groupes, I²C/SPI, service)</span>
     ├── static/
-    │   ├── <span class="val">sw.js</span>              <span class="comment"># Service Worker PWA</span>
-    │   ├── <span class="val">manifest.json</span>      <span class="comment"># Manifest PWA</span>
-    │   ├── <span class="val">icon-192.png</span>       <span class="comment"># Icônes installation mobile</span>
-    │   └── <span class="val">icon-512.png</span>
-    ├── <span class="val">rpi-plc.service</span>        <span class="comment"># Unité systemd</span>
-    ├── <span class="val">setup_autonomy.sh</span>      <span class="comment"># Script installation complet</span>
+    │   ├── <span class="val">sw.js</span>, <span class="val">manifest.json</span>, <span class="val">icon-192.png</span>, <span class="val">icon-512.png</span>   <span class="comment"># PWA</span>
+    │   └── <span class="val">synoptic_canvas.js</span>  <span class="comment"># Moteur JS du synoptique — identique à ui/synoptic_canvas.js</span>
     └── templates/
-        ├── <span class="val">index.html</span>         <span class="comment"># Interface monitoring (port 5000/)</span>
-        ├── <span class="val">scada.html</span>         <span class="comment"># SCADA 11 onglets (port 5000/scada)</span>
-        └── <span class="val">synoptic.html</span>      <span class="comment"># Éditeur synoptique (port 5000/synoptic)</span></code></pre>
+        ├── <span class="val">index.html</span>          <span class="comment"># Interface monitoring (port 5000/)</span>
+        ├── <span class="val">scada.html</span>          <span class="comment"># SCADA 11 onglets (port 5000/scada)</span>
+        ├── <span class="val">synoptic.html</span>       <span class="comment"># Éditeur synoptique (port 5000/synoptic)</span>
+        └── <span class="val">synoptic_mobile.html</span> <span class="comment"># Version mobile du synoptique</span></code></pre>
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
@@ -699,6 +581,56 @@ sudo i2cdetect -y 1
 </table>
 
 <!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="analog-config-dialog"><span class="icon">🌡</span> Configurateur Analogique</h2>
+
+<p class="section-intro">
+  Le configurateur analogique (<strong>Raspberry Pi → 🌡 Configurer les sondes…</strong>, raccourci <code>Ctrl+T</code>) permet de définir le type de chaque sonde raccordée aux 3 cartes ADS1115, et de déclarer les sondes DS18B20 (1-Wire), sans éditer <code>config.json</code> à la main. La configuration est sauvegardée dans le projet <code>.plcproj</code> (champ <code>plc.analog_config</code>) et poussée vers le canvas FBD, le synoptique et le <code>config.json</code> du serveur lors du déploiement.
+</p>
+
+<h3>Paramètres globaux du pont diviseur</h3>
+<table>
+  <tr><th>Champ</th><th>Valeurs</th><th>Description</th></tr>
+  <tr><td><code>r_ref_ohm</code></td><td>100 – 100 000 Ω (défaut 10 000)</td><td>Résistance de référence du pont diviseur, commune aux 12 canaux ADS1115.</td></tr>
+  <tr><td><code>vcc</code></td><td>1,8 – 5,0 V (défaut 3,3)</td><td>Tension d'alimentation du pont, commune aux 12 canaux.</td></tr>
+</table>
+
+<h3>Sondes ADS1115 (ANA0–ANA11)</h3>
+<p>Les 12 canaux sont fixes (<code>ANA0</code>…<code>ANA11</code>, répartis sur 3 cartes ADS1115) ; seuls le nom et le type de sonde sont éditables par ligne :</p>
+<table>
+  <tr><th>Champ</th><th>Valeurs</th><th>Description</th></tr>
+  <tr><td><code>Nom</code></td><td>Texte libre</td><td>Libellé affiché dans le SCADA et les blocs FBD (ex : <em>Ballon ECS</em>).</td></tr>
+  <tr><td><code>Type de sonde</code></td><td><code>PT100</code>, <code>PT1000</code>, <code>NTC10K</code>, <code>NTC10K_3977</code></td><td>Voir § <a href="#carte-io">Types de sondes supportés</a>. Peut différer d'un canal à l'autre.</td></tr>
+</table>
+
+<h3>Sondes DS18B20 (1-Wire)</h3>
+<p>Liste à taille variable, distincte des 12 canaux ADS1115 — bouton <strong>+ Ajouter une sonde DS18B20</strong> pour en déclarer une nouvelle, <strong>✕</strong> pour en retirer une :</p>
+<table>
+  <tr><th>Champ</th><th>Valeurs</th><th>Description</th></tr>
+  <tr><td><code>id</code></td><td>Texte libre (ex : <code>DS0</code>)</td><td>Référence utilisée par le bloc <code>DS_IN(ref=...)</code> dans le canvas FBD.</td></tr>
+  <tr><td><code>Nom</code></td><td>Texte libre</td><td>Libellé affiché dans le SCADA (ex : <em>Sonde extérieure</em>).</td></tr>
+  <tr><td><code>serial</code></td><td><code>28-xxxxxxxxxxxx</code>, ou vide</td><td>Numéro de série 1-Wire. Laissé vide, la sonde est assignée par ordre de découverte sur le bus (voir § <a href="#carte-io">Carte E/S</a> et § Dépannage pour la commande de recherche du serial).</td></tr>
+</table>
+
+<h3>Workflow typique</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Ouvrir le configurateur</strong> via <em>Raspberry Pi → 🌡 Configurer les sondes…</em> (Ctrl+T).</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Choisir le type de sonde</strong> pour chaque canal ADS1115 utilisé, et ajuster <code>r_ref_ohm</code>/<code>vcc</code> si le pont diffère du standard (10 kΩ / 3,3 V).</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Déclarer les sondes DS18B20</strong> le cas échéant : <em>+ Ajouter une sonde DS18B20</em>, renseigner l'<code>id</code>, le nom, et le <code>serial</code> si plusieurs sondes 1-Wire coexistent sur le bus.</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Valider</strong> — la config est sauvegardée dans <code>plc.analog_config</code> du projet <code>.plcproj</code>.</div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-body"><strong>Déployer</strong> via <em>🚀 Déployer</em> — le <code>config.json</code> du serveur RPi est mis à jour avec les sections <code>"analog"</code> (<code>ads</code>, <code>ds18b20</code>) correspondantes.</div></div>
+</div>
+
+<div class="tip">
+  <span class="ci">💡</span>
+  <p>Le type de sonde choisi ici est immédiatement reflété dans les blocs <code>ANA_IN</code>, <code>PT_IN</code>, <code>SENSOR</code> et <code>DS_IN</code> du canvas FBD : les références <code>ANA0</code>…<code>ANA11</code> et <code>DS0</code>, <code>DS1</code>… affichées dans ces blocs proviennent de ce configurateur, pas d'une saisie libre.</p>
+</div>
+
+<div class="note">
+  <span class="ci">ℹ</span>
+  <p>Contrairement au GPIO (pin fixe, mode/pull configurables), les 12 canaux ADS1115 sont des emplacements fixes (<code>ANA0</code>…<code>ANA11</code>) : seuls le nom et le type de sonde changent. Les sondes DS18B20 sont à l'inverse une liste libre, sans limite de nombre liée au matériel (seule la bande passante du bus 1-Wire la limite en pratique).</p>
+</div>
+
+
 <h2 id="gpio-config-dialog"><span class="icon">📌</span> Configurateur GPIO</h2>
 
 <p class="section-intro">
@@ -791,7 +723,7 @@ sudo i2cdetect -y 1
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="palette"><span class="icon">📦</span> Palette de blocs</h2>
 
-<p>La palette à gauche du canvas liste les <strong>56 blocs disponibles</strong> en 12 catégories. Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
+<p>La palette à gauche du canvas liste les <strong>86 blocs disponibles</strong> en 15 catégories (E/S, Logique, Bobines, Temps, Compteurs, Comparaison, Analogique, Calcul, Arithmétique, Variables, Actionneurs, Métier, Connecteurs, Groupes, Cartouche). Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
 
 <h3>Pour ajouter un bloc</h3>
 <ul>
@@ -800,7 +732,7 @@ sudo i2cdetect -y 1
   <li><strong>Double-clic</strong> sur le canvas → menu de sélection du type de bloc</li>
 </ul>
 
-<h3 id="props">Panneau de propriétés &amp; Éditeur de bloc</h3>
+<h3 id="props">Panneau de propriétés</h3>
 <p>Cliquer sur un bloc ouvre ses propriétés dans le panneau droit. Les modifications sont <strong>appliquées en temps réel</strong> — pas besoin de valider.</p>
 
 <div class="note"><div class="ci">ℹ</div><p>Pour les blocs analogiques (PT_IN, ANA_IN), un <strong>curseur de simulation</strong> permet de forcer la valeur en mode PC sans matériel. La valeur est transmise au moteur PLC en temps réel.</p></div>
@@ -808,7 +740,6 @@ sudo i2cdetect -y 1
 
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-es"><span class="icon">🔌</span> Bibliothèque de blocs — E/S</h2>
-<div class="note"><span>🔄</span><div><strong>Synchronisation automatique du nom (v3.1)</strong> — Quand tu sélectionnes un GPIO dans le panneau propriétés d'un bloc INPUT, OUTPUT ou CONTACTOR, le champ <em>Nom</em> se met à jour automatiquement avec le nom de la config GPIO. Le nom reste modifiable librement après.</div></div>
 
 <div class="block-grid">
   <div class="block-card">
@@ -1057,55 +988,6 @@ sudo i2cdetect -y 1
 </div>
 
 
-
-<h3>Exemples concrets — Logique booléenne</h3>
-
-<div class="example-grid">
-
-  <div class="example-card">
-    <div class="example-title">🔒 Verrouillage démarrage moteur</div>
-    <div class="example-desc">
-      Un moteur ne démarre que si le sectionneur est fermé <strong>ET</strong> que la sécurité thermique
-      n'est pas déclenchée. Câblage : <code>INPUT(Sectionneur) → AND.IN1</code>,
-      <code>INPUT(Therm.OK) → AND.IN2</code>, <code>AND.OUT → OUTPUT(Marche)</code>.
-    </div>
-<div class="code-block">Sectionneur:1  Therm_OK:1  →  Marche:1  ✓
-Sectionneur:1  Therm_OK:0  →  Marche:0  (thermique déclenché)
-Sectionneur:0  Therm_OK:1  →  Marche:0  (coupure amont)</div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">🔔 Alarme multi-capteurs</div>
-    <div class="example-desc">
-      Déclencher une alarme sonore si <strong>AU MOINS UN</strong> capteur de fumée est actif.
-      Câblage : <code>INPUT(Fumée1) → OR.IN1</code>, <code>INPUT(Fumée2) → OR.IN2</code>,
-      <code>OR.OUT → OUTPUT(Sirène)</code>.
-    </div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">💡 Interrupteur va-et-vient</div>
-    <div class="example-desc">
-      Chaque appui bascule la lampe. Câblage :
-      <code>INPUT(BP1) → XOR.IN1</code>, <code>INPUT(BP2) → XOR.IN2</code>,
-      <code>XOR.OUT → SR_S.SET</code> — ou plus simplement avec un seul BP et une bascule SR_S.
-    </div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">⛽ Pompe de remplissage (bascule SR)</div>
-    <div class="example-desc">
-      La pompe démarre sur niveau bas (S=1), s'arrête sur niveau haut (R=1).
-      Câblage : <code>INPUT(Niveau_bas) → SR.S1</code>,
-      <code>INPUT(Niveau_haut) → SR.R</code>,
-      <code>SR.Q1 → OUTPUT(Pompe)</code>.<br>
-      <em>Utiliser SR (Set prioritaire) pour éviter une coupure intempestive si les deux niveaux
-      sont vus simultanément en transitoire.</em>
-    </div>
-  </div>
-
-</div>
-
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-bobines"><span class="icon">🔋</span> Bobines & Affectation</h2>
 
@@ -1197,76 +1079,6 @@ Sectionneur:0  Therm_OK:1  →  Marche:0  (coupure amont)</div>
 </div>
 
 
-
-<h3>Exemples concrets — Bobines, Temporisations &amp; Compteurs</h3>
-
-<div class="example-grid">
-
-  <div class="example-card">
-    <div class="example-title">⏳ TON — Anti-rebond bouton</div>
-    <div class="example-desc">
-      Éviter les faux démarrages dus aux rebonds mécaniques. Le signal doit rester stable
-      <strong>50 ms</strong> avant d'être accepté.
-      Câblage : <code>INPUT(BP) → TON.IN</code>, <code>CONST(50) → TON.PT</code>,
-      <code>TON.Q → OUTPUT(Action)</code>.
-    </div>
-<div class="code-block">BP appui 30 ms puis relâche → TON ne déclenche pas (rebond ignoré)
-BP appui &gt; 50 ms           → TON.Q = 1 → Action confirmée</div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">🌀 TOF — Ventilateur de refroidissement</div>
-    <div class="example-desc">
-      Le ventilateur continue <strong>3 minutes</strong> après extinction du moteur pour
-      évacuer la chaleur résiduelle. Câblage : <code>INPUT(Moteur_marche) → TOF.IN</code>,
-      <code>CONST(180000) → TOF.PT</code>, <code>TOF.Q → OUTPUT(Ventilateur)</code>.
-    </div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">💧 TP — Impulsion de purge vanne</div>
-    <div class="example-desc">
-      Ouvre la vanne de purge exactement <strong>5 secondes</strong> à chaque demande,
-      quel que soit le temps d'appui sur le bouton.
-      Câblage : <code>INPUT(BP_Purge) → TP.IN</code>, <code>CONST(5000) → TP.PT</code>,
-      <code>TP.Q → OUTPUT(Vanne_purge)</code>.
-    </div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">🔢 CTU — Compteur de cycles machine</div>
-    <div class="example-desc">
-      Compter les pièces produites, déclencher une maintenance à 10 000 pièces.
-      Câblage : <code>INPUT(Capteur_pièce) → CTU.CU</code>,
-      <code>CONST(10000) → CTU.PV</code>,
-      <code>CTU.Q → OUTPUT(Alarme_maintenance)</code>,
-      <code>CTU.CV → BACKUP(nb_pièces)</code> pour mémoriser entre redémarrages.
-    </div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">🔋 SET/RESET — Mémorisation défaut</div>
-    <div class="example-desc">
-      Un défaut détecté s'enregistre et reste actif même après disparition de la cause.
-      Nécessite un acquittement opérateur.<br>
-      Câblage : <code>INPUT(Défaut_capteur) → SET.S</code>,
-      <code>INPUT(BP_Acquittement) → RESET.R</code>,
-      les deux câblés vers le même <code>M5</code> (bit mémoire).
-    </div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">📋 MOVE — Sélection de consigne</div>
-    <div class="example-desc">
-      Basculer entre consigne hiver (19 °C) et été (26 °C) selon un interrupteur de saison.
-      Câblage : <code>CONST(19) → MOVE_Hiver.IN</code> + <code>INPUT(Mode_hiver) → MOVE_Hiver.EN</code>,
-      <code>CONST(26) → MOVE_Ete.IN</code> + <code>NOT(Mode_hiver) → MOVE_Ete.EN</code>,
-      les deux <code>MOVE.OUT → RF2</code> (registre consigne commun).
-    </div>
-  </div>
-
-</div>
-
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-comp"><span class="icon">⚖</span> Comparaison</h2>
 
@@ -1314,6 +1126,11 @@ BP appui &gt; 50 ms           → TON.Q = 1 → Action confirmée</div>
     <div class="block-ports"><span class="port-out">VAL (°C)</span></div>
   </div>
   <div class="block-card">
+    <div class="block-card-header"><span class="block-badge" style="color:#4fd1c5;border-color:#4fd1c540">DS_IN</span><span class="block-card-title">Sonde DS18B20 (1-Wire)</span></div>
+    <div class="block-card-desc">Lecture d'une sonde numérique DS18B20 sur le bus 1-Wire (GPIO4 par défaut, résistance de tirage 4,7 kΩ vers 3,3 V, <code>dtoverlay=w1-gpio</code>). Contrairement à SENSOR/ANA_IN, pas de pont diviseur ni de calcul résistance→°C : le capteur renvoie directement une valeur numérique, lue en tâche de fond sans bloquer le cycle PLC. Fusionnée dans le même cache que les sondes ANA → visible avec les mêmes commandes (SCADA, <code>/temp</code> Telegram, historique). Une sonde par référence <code>DSx</code> doit être déclarée dans <code>config.json → analog.ds18b20</code> (id, nom, et <code>serial</code> optionnel — laissé vide, la sonde est assignée par ordre de découverte sur le bus ; à renseigner explicitement si plusieurs sondes DS18B20 coexistent).</div>
+    <div class="block-ports"><span class="port-out">VAL (°C)</span></div>
+  </div>
+  <div class="block-card">
     <div class="block-card-header"><span class="block-badge" style="color:#ffaa00;border-color:#ffaa0040">COMPARE_F</span><span class="block-card-title">Comparateur flottant avec hystérésis</span></div>
     <div class="block-card-desc">Compare un registre RF à un seuil avec hystérésis pour éviter les oscillations. Opérations : &gt;, &lt;, ≥, ≤, = (±hystérésis). Sorties GT, LT, EQ selon le résultat.</div>
     <div class="block-ports"><span class="port-in">IN</span><span class="port-in">SP</span><span class="port-out">GT/LT/EQ</span></div>
@@ -1330,66 +1147,6 @@ BP appui &gt; 50 ms           → TON.Q = 1 → Action confirmée</div>
   </div>
 </div>
 
-
-
-<h3>Exemples concrets — Analogique, Mesure &amp; PID</h3>
-
-<div class="example-grid">
-
-  <div class="example-card">
-    <div class="example-title">🌡 SENSOR + COMPARE_F — Thermostat avec hystérésis</div>
-    <div class="example-desc">
-      Chaudière ON si T &lt; 19 °C, OFF si T &gt; 21 °C (hystérésis 2 °C évite les courts-cycles).
-    </div>
-<div class="code-block">SENSOR(ANA0) → COMPARE_F.IN
-CONST(20)    → COMPARE_F.SP   (consigne centre)
-hystérésis   = 1.0°C → paramètre COMPARE_F
-COMPARE_F.LT → SR.S1    (trop froid → allume)
-COMPARE_F.GT → SR.R     (assez chaud → éteint)
-SR.Q1        → OUTPUT(Chaudière)</div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">📊 SCALE — Capteur 4–20 mA → %</div>
-    <div class="example-desc">
-      Convertir la tension d'un transmetteur 4–20 mA (via résistance 250 Ω → 1 à 5 V)
-      en pourcentage pour une jauge synoptique.
-    </div>
-<div class="code-block">ANA_IN(canal3) → SCALE.IN
-in_lo  = 1.0  (V, correspond à 4 mA = 0%)
-in_hi  = 5.0  (V, correspond à 20 mA = 100%)
-out_lo = 0.0
-out_hi = 100.0
-SCALE.OUT → RF5  (affiché dans widget Jauge synoptique)</div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">🎛 PID — Régulation température four</div>
-    <div class="example-desc">
-      Maintenir le four à 180 °C avec modulation PWM de la résistance chauffante.
-    </div>
-<div class="code-block">SENSOR(ANA2)  → PID.PV      (mesure)
-BACKUP(cons)  → PID.SP      (consigne persistante, réglable synoptique)
-INPUT(Marche) → PID.EN
-out_min=0, out_max=100      (% puissance)
-Kp=2.0  Ki=0.05  Kd=0.5
-PID.OUT → SCALE(0-100 → 0-255) → RF8 → PWM GPIO18</div>
-  </div>
-
-  <div class="example-card">
-    <div class="example-title">🔁 MUX — Loi d'eau multi-modes</div>
-    <div class="example-desc">
-      Selon le mode de chauffe sélectionné (0=Standard, 1=Eco, 2=Boost),
-      choisir la bonne loi d'eau parmi 3 valeurs précalculées.
-    </div>
-<div class="code-block">CARITHM(loi std) → RF0
-CARITHM(loi eco) → RF1
-CARITHM(loi boost) → RF2
-DV(mode_chauffe) → MUX.IDX
-MUX(In0=RF0, In1=RF1, In2=RF2) → RF10  (consigne départ retenue)</div>
-  </div>
-
-</div>
 
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-calcul"><span class="icon">🔢</span> Calcul & Traitement</h2>
@@ -1462,7 +1219,32 @@ MUX(In0=RF0, In1=RF1, In2=RF2) → RF10  (consigne départ retenue)</div>
     <div class="block-card-desc">Fournit l'heure et le jour courant du système RPi. HOUR = heure (0–23), MDAY = jour du mois (1–31), WDAY = jour de la semaine (0=Dimanche … 6=Samedi).</div>
     <div class="block-ports"><span class="port-out">HOUR</span><span class="port-out">MDAY</span><span class="port-out">WDAY</span></div>
   </div>
+  <div class="block-card">
+    <div class="block-card-header"><span class="block-badge" style="color:#bc8cff;border-color:#bc8cff40">MQTT</span><span class="block-card-title">Pont MQTT (subscribe / publish)</span></div>
+    <div class="block-card-desc">
+      Abonne un registre RF à un topic MQTT (subscribe) et/ou publie un registre RF vers un topic (publish) — un seul bloc fait les deux selon ce qui est câblé.<br><br>
+      <strong>Propriétés :</strong> <em>Topic</em>, <em>Type de valeur</em> (float / bool), <em>Retain</em>.<br>
+      • <em>reg_out</em> (entrée câblée vers le bloc) : registre RF écrit avec la valeur reçue sur le topic (subscribe)<br>
+      • <em>reg_in</em> (sortie câblée depuis le bloc) : registre RF dont la valeur est publiée vers le topic (publish)<br><br>
+      <strong>Connexion au broker :</strong> configurée globalement (pas par bloc) dans <code>config.json</code>, section <code>mqtt</code> :
+      <pre><code>"mqtt": {
+  "enabled": true,
+  "host": "192.168.1.50",
+  "port": 1883,
+  "username": "",
+  "password": "",
+  "keepalive": 60
+}</code></pre>
+    </div>
+    <div class="block-ports"><span class="port-in">reg_in (publish)</span><span class="port-out">reg_out (subscribe)</span></div>
+  </div>
 </div>
+
+<div class="warn"><div class="ci">⚠</div><p><strong>Dépendance :</strong> le bloc MQTT nécessite le paquet <code>python3-paho-mqtt</code> (inclus dans les dépendances du <code>.deb</code> serveur ≥ 3.4-3 ; sur une installation antérieure, <code>sudo apt install python3-paho-mqtt</code>). Sans ce paquet, le pont MQTT se désactive silencieusement — le serveur démarre normalement mais les topics ne sont jamais lus ni publiés, sans erreur visible dans l'interface. Vérifier <code>journalctl -u rpi-plc</code> en cas de doute.</p></div>
+
+<div class="note"><div class="ci">ℹ</div><p><strong>Republish uniquement sur changement :</strong> côté publish, le pont n'émet que si la valeur du registre a changé depuis le dernier scan (anti-doublon). C'est invisible pour la plupart des usages, mais ça veut dire qu'un bloc MQTT publish <strong>ne peut pas servir de "keepalive" périodique</strong> pour un broker qui exige une republication régulière même à valeur constante (cas de Venus OS — voir ci-dessous). Pour forcer une republication périodique, faire varier légèrement la valeur publiée (ex. alterner avec un OSCIL/TIMER) plutôt que publier une constante.</p></div>
+
+<div class="note"><div class="ci">ℹ</div><p><strong>Cas Victron Venus OS :</strong> le SOC batterie est disponible sur <code>N/&lt;portalId&gt;/system/0/Dc/Battery/Soc</code>, mais Venus OS arrête de publier si personne n'a envoyé de "keepalive" — abonnez-vous d'abord (ou publiez une fois) sur <code>R/&lt;portalId&gt;/keepalive</code> pour réveiller le broker avant de relier le topic SOC à un bloc MQTT subscribe.</p></div>
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
@@ -1708,109 +1490,6 @@ Anti-légio : si (WDAY==antileg_day ET HOUR==antileg_hour)
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
-<h2 id="prog-h"><span class="icon">📅</span> Bloc PROG_H — Programmation horaire Jour/Nuit</h2>
-
-<div class="section-intro">
-  Le bloc <strong>PROG_H</strong> (Programmation Horaire) gère automatiquement la sélection de consigne selon l'heure de la journée et un mode vacances. Il est conçu pour se connecter directement aux blocs PLANCHER, ZONE_CHAUF ou tout autre bloc qui accepte une consigne via registre RF.
-</div>
-
-<div class="tip">
-  <span>💡</span>
-  <div><strong>Cas d'usage typique :</strong> PROG_H calcule la consigne active (jour/nuit/vacances) → écrit dans <code>RF5</code> → PLANCHER lit <code>RF5</code> comme consigne SP. Un seul bloc pilote tout le système de régulation.</div>
-</div>
-
-<h3>Ports du bloc</h3>
-<table>
-  <thead><tr><th>Port</th><th>Direction</th><th>Type</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td><code>EN</code></td><td>Entrée</td><td>Bool</td><td>Enable — désactive tout si 0 (sort SP_nuit)</td></tr>
-    <tr><td><code>VAC</code></td><td>Entrée</td><td>Bool</td><td>Forcer mode Vacances (override horaire)</td></tr>
-    <tr><td><code>JOUR</code></td><td>Sortie</td><td>Bool</td><td>1 si on est en plage horaire de jour</td></tr>
-    <tr><td><code>SP_ACT</code></td><td>Sortie</td><td>Float</td><td>Consigne active (valeur du registre RF configuré)</td></tr>
-    <tr><td><code>VAC_OUT</code></td><td>Sortie</td><td>Bool</td><td>Reflet de l'entrée VAC (pour chaîner)</td></tr>
-    <tr><td><code>ACTIF</code></td><td>Sortie</td><td>Bool</td><td>1 si le jour courant est actif (mode hebdo)</td></tr>
-  </tbody>
-</table>
-
-<h3>Paramètres — Mode simple (même plage tous les jours)</h3>
-<table>
-  <thead><tr><th>Paramètre</th><th>Défaut</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td><code>h_debut_j / m_debut_j</code></td><td>06 h 30</td><td>Début de la plage JOUR</td></tr>
-    <tr><td><code>h_fin_j / m_fin_j</code></td><td>22 h 00</td><td>Fin de la plage JOUR</td></tr>
-    <tr><td><code>sp_jour</code></td><td>20.0 °C</td><td>Consigne pendant la plage JOUR</td></tr>
-    <tr><td><code>sp_nuit</code></td><td>17.0 °C</td><td>Consigne hors plage JOUR</td></tr>
-    <tr><td><code>sp_vac</code></td><td>15.0 °C</td><td>Consigne en mode VACANCES</td></tr>
-    <tr><td><code>reg_sp</code></td><td>RF5</td><td>Registre RF où écrire la consigne active</td></tr>
-    <tr><td><code>out_jour</code></td><td>—</td><td>Variable DV booléenne reflétant JOUR</td></tr>
-    <tr><td><code>out_vac_dv</code></td><td>—</td><td>Variable DV booléenne reflétant VAC</td></tr>
-    <tr><td><code>out_actif</code></td><td>—</td><td>Variable DV booléenne : jour actif (hebdo)</td></tr>
-  </tbody>
-</table>
-
-<h3>Mode hebdomadaire — planning par jour de semaine</h3>
-<p>Activer <strong>hebdo_mode = true</strong> dans le panneau propriétés FBD pour définir des horaires différents pour chaque jour. Chaque jour <code>d0</code> (Lundi) à <code>d6</code> (Dimanche) est un objet JSON :</p>
-<table>
-  <thead><tr><th>Clé JSON</th><th>Type</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td><code>active</code></td><td>Bool</td><td>Jour actif (<code>true</code>) ou jour de repos (<code>false</code>, ex : week-end)</td></tr>
-    <tr><td><code>h_deb / m_deb</code></td><td>Int</td><td>Heure et minute de début de la plage JOUR ce jour-là</td></tr>
-    <tr><td><code>h_fin / m_fin</code></td><td>Int</td><td>Heure et minute de fin de la plage JOUR ce jour-là</td></tr>
-    <tr><td><code>sp_jour</code></td><td>Float</td><td>Consigne JOUR pour ce jour (remplace la valeur globale)</td></tr>
-    <tr><td><code>sp_nuit</code></td><td>Float</td><td>Consigne NUIT pour ce jour</td></tr>
-  </tbody>
-</table>
-
-<div class="tip">
-  <span>⚙</span>
-  <div><strong>Plage enjambant minuit :</strong> si <code>h_fin_j &lt; h_debut_j</code> (ex : début 22h, fin 06h), le moteur détecte automatiquement une plage nocturne inversée et calcule correctement le mode JOUR/NUIT.</div>
-</div>
-
-<div class="tip">
-  <span>📅</span>
-  <div><strong>Édition des horaires dans le synoptique :</strong> en mode <strong>Édition</strong>, cliquer sur le widget <code>prog_h_w</code> → panneau Propriétés → section <em>Horaires hebdomadaires</em>. Cocher/décocher les jours, ajuster les horaires début/fin par menu déroulant (pas de 15 min). Les modifications sont reflétées instantanément dans le widget.</div>
-</div>
-
-<!-- ════════════════════════════════════════════════════════════ -->
-<h2 id="synoptic-metier"><span class="icon">🏭</span> Pages synoptiques Blocs Métier</h2>
-
-<div class="section-intro">
-  Chaque bloc Métier dispose d'un <strong>widget synoptique dédié</strong> et d'une <strong>page pré-construite</strong> injectable en un clic. Ces pages donnent une vue opérateur complète sans aucune configuration manuelle.
-</div>
-
-<h3>Widgets disponibles</h3>
-<table>
-  <thead><tr><th>Widget</th><th>Type palette</th><th>Variables lues</th></tr></thead>
-  <tbody>
-    <tr><td>🔥 Plancher chauffant</td><td><code>plancher_w</code></td><td>varRef (T° amb), varSP (RF consigne), varDep (RF départ), varRet (RF retour), dvCirc, dvV3v, dvErr</td></tr>
-    <tr><td>🔥 Chaudière</td><td><code>chaudiere_w</code></td><td>varRet (RF), varDep (RF), varSP (RF consigne), dvBrulee, dvPompe, dvAlm</td></tr>
-    <tr><td>☀ Solaire thermique</td><td><code>solar_w</code></td><td>varCapt (RF/ANA), varEcs (RF/ANA), varChauf (RF/ANA), varDelta (RF), dvPompe, dvVanneEcs, dvVanneCh, dvAlm</td></tr>
-    <tr><td>🏠 Zone chauffage</td><td><code>zone_chauf_w</code></td><td>varRef (ANA/RF T° amb), varSP (RF consigne), dvVanne, dvActive</td></tr>
-    <tr><td>💧 ECS</td><td><code>ecs_w</code></td><td>varEcs (ANA/RF), varPrim (ANA/RF), varSP (RF consigne), dvPompe, dvAlm</td></tr>
-    <tr><td>📅 Planning Jour/Nuit</td><td><code>prog_h_w</code></td><td>varSP (RF SP actif lu), dvJour (bool), dvVac (bool) — horaires édités dans les propriétés</td></tr>
-  </tbody>
-</table>
-
-<div class="tip">
-  <span>🔧</span>
-  <div><strong>Correctif v3.2 :</strong> le sélecteur "SP actif (RF)" et toutes les variables de type <code>varSP</code>, <code>varDep</code>, <code>varRet</code>, <code>varEcs</code>, etc. conservent maintenant leur valeur à la réouverture du panneau propriétés. Ce bug (sélect revenant à "—") est corrigé.</div>
-</div>
-
-<h3>Injection des pages pré-construites</h3>
-<ol>
-  <li>Ouvrir l'éditeur de synoptique (<kbd>F8</kbd>)</li>
-  <li>Menu <strong>Synoptique → 🏭 Ajouter pages Blocs Métier…</strong></li>
-  <li>Confirmer → 6 pages s'ajoutent à la fin du projet</li>
-  <li>Configurer chaque widget : cliquer dessus en mode Édition → panneau Propriétés → lier les variables RF/DV aux sorties de vos blocs FBD</li>
-</ol>
-
-<div class="tip">
-  <span>🔗</span>
-  <div><strong>Liaison rapide :</strong> les pages pré-construites utilisent les valeurs par défaut des blocs Métier (RF0-RF14, k1-k10). Si vos blocs sont configurés avec ces mêmes références, le synoptique est opérationnel immédiatement après injection.</div>
-</div>
-
-
-<!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="carithm"><span class="icon">💻</span> Bloc CArithm — Code C embarqué</h2>
 
 <div class="section-intro">
@@ -1975,30 +1654,28 @@ T_celsius = T_kelvin - 273.15
     <span class="key">"sample_rate"</span>: <span class="val">860</span>,          <span class="comment">// Fréquence d'échantillonnage ADS1115 (8/16/32/64/128/250/475/860 SPS)</span>
     <span class="key">"r_ref_ohm"</span>:  <span class="val">10000</span>,        <span class="comment">// Résistance de référence du pont diviseur (Ω)</span>
     <span class="key">"vcc"</span>:        <span class="val">3.3</span>,          <span class="comment">// Tension d'alimentation du pont (V)</span>
-    <span class="key">"probe_type"</span>: <span class="str">"NTC40"</span>,      <span class="comment">// Type de sonde par défaut : "PT100", "PT1000", "NTC10K", "NTC40"</span>
-    <span class="key">"ntc_beta"</span>:   <span class="val">3950</span>,         <span class="comment">// Coefficient β de la NTC (K) — utilisé si probe_type="NTC40" ou "NTC10K"</span>
-    <span class="key">"ntc_r0"</span>:    <span class="val">40000</span>,        <span class="comment">// Résistance nominale NTC à 25°C (Ω) — 40 000 Ω pour NTC40</span>
+    <span class="key">"probe_type"</span>: <span class="str">"NTC10K"</span>,     <span class="comment">// Type de sonde par défaut : "PT100", "PT1000", "NTC10K", "NTC10K_3977"</span>
     <span class="key">"ads"</span>: [
       {
         <span class="key">"id"</span>: <span class="str">"ADS0"</span>, <span class="key">"address"</span>: <span class="str">"0x48"</span>,
         <span class="key">"channels"</span>: [
-          { <span class="key">"id"</span>: <span class="str">"ANA0"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 1"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
-          { <span class="key">"id"</span>: <span class="str">"ANA1"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 2"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
-          { <span class="key">"id"</span>: <span class="str">"ANA2"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 3"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
-          { <span class="key">"id"</span>: <span class="str">"ANA3"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 4"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> }
+          { <span class="key">"id"</span>: <span class="str">"ANA0"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 1"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA1"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 2"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA2"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 3"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA3"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 4"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> }
         ]
       },
       {
         <span class="key">"id"</span>: <span class="str">"ADS1"</span>, <span class="key">"address"</span>: <span class="str">"0x49"</span>,
         <span class="key">"channels"</span>: [
-          { <span class="key">"id"</span>: <span class="str">"ANA4"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 5"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA4"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 5"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
           <span class="comment">// ... ANA5, ANA6, ANA7</span>
         ]
       },
       {
         <span class="key">"id"</span>: <span class="str">"ADS2"</span>, <span class="key">"address"</span>: <span class="str">"0x4A"</span>,
         <span class="key">"channels"</span>: [
-          { <span class="key">"id"</span>: <span class="str">"ANA8"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 9"</span>,  <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA8"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 9"</span>,  <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
           <span class="comment">// ... ANA9, ANA10, ANA11</span>
         ]
       }
@@ -2018,13 +1695,18 @@ T_celsius = T_kelvin - 273.15
   <tr><th>probe_type</th><th>Méthode de calcul</th><th>Paramètres requis</th></tr>
   <tr><td><code>PT100</code></td><td>Table de résistance Callendar-Van Dusen, R₀=100 Ω</td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
   <tr><td><code>PT1000</code></td><td>Même algorithme, R₀=1000 Ω</td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
-  <tr><td><code>NTC10K</code></td><td>Steinhart-Hart β : R₀=10 kΩ à 25°C</td><td><code>ntc_beta</code>, <code>ntc_r0</code>, <code>r_ref_ohm</code>, <code>vcc</code></td></tr>
-  <tr><td><code>NTC40</code></td><td>Steinhart-Hart β : R₀=40 kΩ à 25°C — <strong>sonde utilisée sur cette carte</strong></td><td><code>ntc_beta</code>=3950, <code>ntc_r0</code>=40000, <code>r_ref_ohm</code>, <code>vcc</code></td></tr>
+  <tr><td><code>NTC10K</code></td><td>Steinhart-Hart β : R₀=10 kΩ à 25°C, β=3950 — <strong>type par défaut, utilisé sur cette carte</strong></td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
+  <tr><td><code>NTC10K_3977</code></td><td>Même pont, β=3977 (variante précision pour certains lots de sondes 10 kΩ)</td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
 </table>
 
 <div class="note">
   <span class="ci">ℹ</span>
-  <p>Le type de sonde peut être surchargé <strong>par canal</strong> via le champ <code>"probe"</code> dans la définition du canal. Cela permet de mélanger PT100, PT1000, NTC10K et NTC40 sur le même système.</p>
+  <p>Le type de sonde peut être surchargé <strong>par canal</strong> via le champ <code>"probe"</code> dans la définition du canal. Cela permet de mélanger PT100, PT1000, NTC10K et NTC10K_3977 sur le même système.</p>
+
+<div class="warn">
+  <span class="ci">⚠</span>
+  <p><strong>« NTC40 » n'est pas un type implémenté.</strong> Le code (<code>voltage_to_celsius</code>, dans <code>rpi_server/server.py</code> et <code>core/plc_engine.py</code>) ne reconnaît que <code>PT100</code>, <code>PT1000</code>, <code>NTC10K</code> et <code>NTC10K_3977</code> — tout autre texte dans <code>"probe"</code>/<code>"probe_type"</code>, y compris <code>"NTC40"</code>, tombe silencieusement dans le calcul PT100 (résistance linéaire R₀=100&nbsp;Ω) et donne une température fausse. Les clés <code>ntc_beta</code>/<code>ntc_r0</code> montrées dans d'anciens exemples ne sont lues par aucun des deux moteurs : β et R₀ sont fixés dans le code pour chaque type (3950/10000 pour <code>NTC10K</code>, 3977/10000 pour <code>NTC10K_3977</code>), pas configurables par ce biais. « NTC40 » semble être le nom commercial de la carte/sonde physique, mais le calcul réellement exécuté utilise la formule <code>NTC10K</code> (R₀=10&nbsp;kΩ) — c'est d'ailleurs ce que votre <code>config.json</code> actuel utilise sur les 12 canaux. Si les sondes sont physiquement des 40&nbsp;kΩ, un vrai calcul <code>NTC10K</code> appliqué dessus donnerait une température décalée ; dites-moi si c'est le cas, j'ajouterai un type <code>NTC40</code> réel (R₀=40000) au moteur plutôt que de simplement corriger la doc.</p>
+</div>
 </div>
 
 <h4>Expansion analogique — jusqu'à 3 cartes ADS1115 (12 canaux)</h4>
@@ -2054,13 +1736,92 @@ T_celsius = T_kelvin - 273.15
 
 <h3>Déploiement manuel (ligne de commande)</h3>
 <pre><code><span class="comment"># Copier le dossier rpi_server sur le RPi</span>
-rsync -av rpi_server/ <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="fa8a93bacbc3c8d4cbccc2d4cbd4cbcaca">[email&#160;protected]</a>:~/rpi_server/
+rsync -av rpi_server/ pi@IP-RPi:~/rpi_server/
 
 <span class="comment"># Copier un programme spécifique</span>
-scp mon_programme.json <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="601009205159524e5156584e514e515050">[email&#160;protected]</a>:~/rpi_server/programme.json
+scp mon_programme.json pi@IP-RPi:~/rpi_server/programme.json
 
 <span class="comment"># Redémarrer le service</span>
-ssh <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="37475e77060e051906010f190619060707">[email&#160;protected]</a> "sudo systemctl restart rpi-plc"</code></pre>
+ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
+
+<h3 id="tailscale-headscale">🔒 Tailscale / Headscale — Accès distant automatique</h3>
+<p>
+  Depuis l'onglet <strong>Avancé</strong> de la fenêtre de déploiement, le bloc
+  <strong>🔒 Tailscale / Headscale</strong> permet de connecter automatiquement le RPi à un
+  tailnet Headscale auto-hébergé à chaque déploiement — plus besoin de rediriger de port sur la box
+  ni de dépendre d'un outil tiers (RustDesk, etc.) pour y accéder à distance.
+</p>
+
+<div class="note"><div class="ci">ℹ</div><p>
+  Headscale est une implémentation open source et auto-hébergeable du serveur de contrôle
+  Tailscale (control-plane), compatible avec le client officiel Tailscale. Sa mise en place
+  côté serveur (YunoHost, Docker…) est indépendante de Studio et n'est pas couverte ici.
+</p></div>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Deux clés, deux usages</h4>
+<table>
+  <tr><th></th><th>Clé API (<code>apikeys</code>)</th><th>Clé de pré-auth (<code>preauthkeys</code>)</th></tr>
+  <tr>
+    <td><strong>Rôle</strong></td>
+    <td>Piloter Headscale via son API (créer des utilisateurs, des clés, lister les machines…)</td>
+    <td>Enregistrer un seul appareil sur le tailnet</td>
+  </tr>
+  <tr>
+    <td><strong>Qui l'utilise</strong></td>
+    <td>Studio, Headplane, tout script d'automatisation</td>
+    <td><code>tailscale up --authkey=…</code>, exécuté sur l'appareil à enregistrer</td>
+  </tr>
+  <tr>
+    <td><strong>Saisie dans Studio</strong></td>
+    <td>Une seule fois, dans le champ <code>Clé API Headscale</code></td>
+    <td>Jamais — générée et utilisée automatiquement par Studio à chaque déploiement</td>
+  </tr>
+</table>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Configuration, étape par étape</h4>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Générer une clé API Headscale</strong> Sur le serveur hébergeant Headscale : <code>sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys create"</code> (ou l'équivalent non-YunoHost : <code>headscale apikeys create</code>). La clé n'est affichée qu'une seule fois — la copier immédiatement.</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Ouvrir le bloc dans Studio</strong> Fenêtre de déploiement → onglet <strong>Avancé</strong> → <strong>🔒 Tailscale / Headscale</strong>.</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Renseigner les 4 champs</strong> Cocher la case d'activation, puis renseigner l'URL Headscale, l'utilisateur Headscale et coller la clé API (bouton 👁 pour vérifier la saisie).</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Déployer normalement</strong> La connexion au tailnet se fait automatiquement après le déploiement du programme PLC — voir le détail ci-dessous.</div></div>
+</div>
+
+<table>
+  <tr><th>Champ</th><th>Valeur</th></tr>
+  <tr><td><code>URL Headscale</code></td><td>Ex. <code>https://headscale.mondomaine.fr</code></td></tr>
+  <tr><td><code>Utilisateur Headscale</code></td><td>Utilisateur créé côté serveur via <code>headscale users create</code></td></tr>
+  <tr><td><code>Clé API Headscale</code></td><td>Clé générée à l'étape 1 — mémorisée dans le projet, à ne renseigner qu'une fois</td></tr>
+</table>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Ce qui se passe automatiquement au déploiement</h4>
+<ol style="margin:0 0 16px;padding-left:22px;">
+  <li>Résolution de l'utilisateur Headscale en ID numérique via l'API</li>
+  <li>Génération d'une clé de pré-authentification fraîche (24h, réutilisable)</li>
+  <li>Connexion SSH au RPi, vérification si Tailscale est déjà installé</li>
+  <li>Installation du client Tailscale si nécessaire (<code>curl install.sh</code>)</li>
+  <li><code>tailscale up --login-server=… --authkey=…</code> exécuté sur le RPi</li>
+  <li>Affichage de l'IP Tailscale obtenue dans le journal de déploiement (préfixe <code>[TS]</code>)</li>
+</ol>
+
+<pre><code><span class="comment"># Extrait du journal de déploiement en cas de succès</span>
+[TS] ✅ RPi joignable en permanence sur : 100.64.12.3 (port 5000)</code></pre>
+
+<p>Une fois connecté, la synoptic reste joignable depuis n'importe où, sans redirection de port :</p>
+<pre><code>http://100.64.12.3:5000/synoptic</code></pre>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">Gérer les clés API côté serveur</h4>
+<pre><code><span class="comment"># Lister les clés existantes</span>
+sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys list"
+
+<span class="comment"># Révoquer une clé perdue ou compromise (voir la colonne Prefix de la commande list)</span>
+sudo yunohost app shell headscale &lt;&lt;&lt; "./headscale apikeys expire --prefix &lt;PREFIX&gt;"</code></pre>
+
+<div class="warning">
+  <strong>⚠ Sécurité :</strong> une clé API donne un contrôle large sur Headscale (utilisateurs, clés,
+  machines). La traiter comme un mot de passe root — éviter de committer un projet
+  <code>.plcproj</code> la contenant dans un dépôt git, et préférer une expiration de 90 jours
+  plutôt qu'une validité illimitée.
+</div>
 
 <h3 id="server">Serveur autonome — server.py</h3>
 <p>Le serveur tourne sur le RPi et réunit deux fonctions : le <strong>moteur PLC</strong> et l'<strong>interface web</strong>.</p>
@@ -2135,6 +1896,72 @@ journalctl -u rpi-plc -n 50       <span class="comment"># 50 dernières lignes</
 <div class="note">
   <span class="ci">ℹ</span>
   <p><code>CAP_SYS_RAWIO</code> est nécessaire pour que gpiod v2 accède à <code>/dev/gpiochip0</code> sans droits root. Si <code>setup_autonomy.sh</code> a été utilisé, tout est configuré automatiquement. En cas d'installation manuelle, vérifier que l'utilisateur est dans le groupe <code>gpio</code> (<code>sudo usermod -aG gpio pi</code>) et que le fichier service contient bien ce paramètre.</p>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="tests"><span class="icon">🧪</span> Tests automatisés — parité studio/RPi</h2>
+
+<p class="section-intro">
+  Le programme compilé s'exécute sur <strong>deux moteurs Python indépendants</strong> : <code>core/plc_engine.py</code> côté studio (simulation, PC) et <code>rpi_server/server.py</code> côté Raspberry Pi (exécution réelle). Rien ne garantit automatiquement qu'ils se comportent de façon identique sur les 89&nbsp;types de blocs — le dossier <code>tests/</code> à la racine du projet contient les scripts qui le vérifient.
+</p>
+
+<h3 id="test-parity">tests/parity_fuzz.py — comparaison studio ↔ RPi</h3>
+<p>Génère des variantes aléatoires de blocs, les exécute sur les deux moteurs pendant plusieurs cycles, et compare registres RF, bits M, GPIO et variables nommées. À lancer après toute modification de l'un des deux moteurs.</p>
+
+<pre><code><span class="comment"># Depuis la racine du projet — mode recommandé : limité aux combinaisons</span>
+<span class="comment"># réellement produites par l'éditeur (le plus représentatif d'un vrai projet)</span>
+python3 tests/parity_fuzz.py --editor-keys tests/editor_keys.json --ignore-named</code></pre>
+
+<table>
+  <tr><th>Option</th><th>Effet</th></tr>
+  <tr><td><code>--n N</code></td><td>Nombre de variantes aléatoires par type de bloc (défaut 24)</td></tr>
+  <tr><td><code>--cycles N</code></td><td>Nombre de cycles simulés par variante (défaut 6)</td></tr>
+  <tr><td><code>--seed N</code></td><td>Graine aléatoire, pour reproduire exactement un résultat</td></tr>
+  <tr><td><code>--types t1,t2</code></td><td>Limiter à certains types de blocs (ex. <code>--types ctd,counter,compare</code>)</td></tr>
+  <tr><td><code>--detail N</code></td><td>Nombre d'exemples d'écarts affichés par type (0 = juste le compte)</td></tr>
+  <tr><td><code>--editor-keys F</code></td><td>Limiter aux clés/valeurs du JSON <code>F</code> (voir <code>tests/editor_keys.json</code>)</td></tr>
+  <tr><td><code>--ignore-named</code></td><td>Ignorer les variables AV/DV nommées (stockage différent studio/RPi, sans rapport avec un vrai écart)</td></tr>
+  <tr><td><code>--raw</code></td><td>Fuzz complet, sans se limiter aux clés/valeurs générées par l'éditeur</td></tr>
+  <tr><td><code>--studio PATH</code> / <code>--rpi PATH</code></td><td>Chemins alternatifs des deux moteurs à comparer</td></tr>
+</table>
+
+<div class="tip">
+  <span class="ci">💡</span>
+  <p><code>--studio</code> et <code>--rpi</code> peuvent aussi servir à comparer <strong>deux versions de <code>server.py</code> entre elles</strong> (test de non-régression), en passant un ancien <code>server.py</code> dans <code>--studio</code> :</p>
+  <pre style="margin-top:8px"><code>python3 tests/parity_fuzz.py --studio ancien/server.py --rpi rpi_server/server.py --n 40</code></pre>
+</div>
+
+<p>Code retour <code>0</code> si aucun écart en dehors du matériel/horloge (<code>sensor</code>, <code>ds_in</code>, <code>localtime</code>, <code>input</code>, <code>output</code>, <code>contactor</code>), <code>1</code> sinon. En cas d'écart, la sortie liste le bloc généré et les valeurs qui divergent :</p>
+
+<pre><code>== compare : 2/24 variantes divergent
+   bloc : {"type": "compare", "ref_a": "M1", "op": "eq"}
+      cycle 0: M[M5] studio=True rpi=False</code></pre>
+
+<h3 id="test-isolation">tests/test_block_isolation.py — isolation des erreurs</h3>
+<p>Vérifie qu'un bloc qui plante n'empêche pas l'exécution des blocs suivants du même cycle (fait tourner une vraie boucle de scan avec un bloc volontairement cassé suivi d'une bobine).</p>
+<pre><code>python3 tests/test_block_isolation.py rpi_server/server.py</code></pre>
+<p>Code retour <code>0</code> = isolation correcte, <code>1</code> sinon. Prend le chemin d'un <code>server.py</code> en argument, pour tester une autre version.</p>
+
+<h3 id="test-deployer">tests/test_deployer_md5.py — vérification du déployeur</h3>
+<p>Sans argument : simule un RPi avec un dossier local. Teste la lecture des md5, un fichier absent, un fichier de <strong>même taille mais de contenu différent</strong> (le cas que la comparaison par taille seule ne détecte pas), un chemin avec espace/apostrophe, et la détection par <code>smart_check</code>.</p>
+<pre><code>python3 tests/test_deployer_md5.py</code></pre>
+
+<h3>Avant un déploiement</h3>
+<p>Enchaîner les trois tests après une modification du moteur ou du déployeur :</p>
+<pre><code>python3 tests/parity_fuzz.py --editor-keys tests/editor_keys.json --ignore-named \
+  &amp;&amp; python3 tests/test_block_isolation.py rpi_server/server.py \
+  &amp;&amp; python3 tests/test_deployer_md5.py \
+  &amp;&amp; echo "TOUT EST OK"</code></pre>
+
+<div class="note">
+  <span class="ci">ℹ</span>
+  <p>Aucune dépendance externe à installer : ces tests tournent en simulation pure. L'absence de <code>paho-mqtt</code> ou <code>RPi.GPIO</code> n'empêche pas <code>rpi_server/server.py</code> de se charger (fonctionnalités correspondantes simplement désactivées).</p>
+</div>
+
+<div class="warn">
+  <span class="ci">⚠</span>
+  <p><strong>Si <code>ui/block_editor.py</code> change</strong>, régénérer <code>tests/editor_keys.json</code> avant de se fier à <code>--editor-keys</code> — sinon il reflète l'ancien éditeur et peut masquer un vrai écart. La comparaison <code>--raw</code> (sans <code>--editor-keys</code>) reste valable dans tous les cas, mais elle inclut des combinaisons que l'éditeur ne produit jamais et peut donc signaler des écarts qui n'affectent aucun projet réel.</p>
 </div>
 
 
@@ -2327,6 +2154,7 @@ sudo systemctl restart rpi-plc</code></pre>
   <li><strong>Export CSV</strong> : bouton ⬇ CSV télécharge le fichier horodaté</li>
   <li><strong>12 mini-graphes temps réel</strong> : toutes les sondes en un coup d'œil (2 minutes glissantes)</li>
 </ul>
+<div class="note"><div class="ci">ℹ</div><p>Cet onglet n'historise que les <strong>sondes analogiques ANA0–ANA11</strong> (table <code>history</code>, rétention 30 jours). Pour historiser n'importe quel autre registre RF/AV/mémoire (ex. niveau de batterie), utiliser le widget synoptique <strong>Courbe historisée</strong> — table séparée <code>history_var</code>, rétention 1 an, voir <a href="#syn-widgets">Les 14 widgets PLC</a>.</p></div>
 
 <h3 id="commandes">Onglet 🎛 Commandes</h3>
 <p>Contrôle interactif complet :</p>
@@ -2438,6 +2266,7 @@ sudo systemctl restart rpi-plc</code></pre>
   <tr><td>RF13</td><td>Heure courante (sortie LOCALTIME.HOUR)</td></tr>
   <tr><td>RF14</td><td>Jour du mois (sortie LOCALTIME.MDAY)</td></tr>
   <tr><td>RF15</td><td>Jour de la semaine (sortie LOCALTIME.WDAY)</td></tr>
+  <tr><td>RF16 et au-delà</td><td>Libres — le registre de sortie d'un bloc DS_IN (sondes DS18B20) n'est pas limité à une plage réservée, contrairement à RF0–RF11 pour les sondes ANA ; choisir n'importe quel RF non utilisé (ex. RF100)</td></tr>
 </table>
 
 <h3>Bits mémoire M0–M31</h3>
@@ -2457,7 +2286,8 @@ sudo systemctl restart rpi-plc</code></pre>
 <h3>Exemple 1 — Régulation de température simple</h3>
 <p>Maintenir une température à 60°C avec hystérésis de 2°C :</p>
 <pre><code><span class="comment">// Page 1 — Lecture sonde et comparaison</span>
-SENSOR(ref=ANA0) → RF0    <span class="comment">// Sonde 1 → RF0</span>
+SENSOR(ref=ANA0) → RF0    <span class="comment">// Sonde 1 (NTC, pont diviseur) → RF0</span>
+DS_IN(ref=DS0) → RF100    <span class="comment">// Sonde 1-Wire DS18B20 → RF100 (config.json → analog.ds18b20)</span>
 COMPARE_F(RF0, seuil=60, hyst=2, op=lt) → M0   <span class="comment">// T < 60°C ?</span>
 
 <span class="comment">// Page 2 — Activation relais</span>
@@ -2603,6 +2433,21 @@ RUNTIMCNT → STARTS=RF10, TOTAL=RF11, RUNTIME=RF12</code></pre>
     <td>Ancienne version de <code>fbd_canvas.html</code> sans reconnexion des fils externes</td>
     <td>Mettre à jour <code>ui/fbd_canvas.html</code>. Utiliser <kbd>Ctrl+Z</kbd> pour annuler le dégroupement raté, puis redégrouper avec la version corrigée.</td>
   </tr>
+  <tr>
+    <td>Étape Tailscale en erreur 401 / clé API refusée</td>
+    <td>Clé API invalide, mal copiée ou expirée</td>
+    <td>Régénérer une clé avec <code>headscale apikeys create</code> et la remplacer dans <a href="#tailscale-headscale">le bloc Tailscale / Headscale</a> de Studio.</td>
+  </tr>
+  <tr>
+    <td>« Utilisateur Headscale introuvable » au déploiement</td>
+    <td>Le nom saisi dans Studio ne correspond à aucun utilisateur Headscale</td>
+    <td>Vérifier la liste côté serveur : <code>headscale users list</code>. Corriger le champ <code>Utilisateur Headscale</code> dans Studio.</td>
+  </tr>
+  <tr>
+    <td>Le RPi n'apparaît pas dans Headplane après déploiement</td>
+    <td>Service Headscale arrêté, ou RPi sans accès réseau sortant vers l'URL Headscale</td>
+    <td>Vérifier <code>sudo systemctl status headscale</code> côté serveur, et <code>sudo tailscale status</code> sur le RPi. Le journal de déploiement (préfixe <code>[TS]</code>) indique la cause précise.</td>
+  </tr>
 </table>
 
 <h3>Commandes de diagnostic utiles</h3>
@@ -2634,11 +2479,17 @@ time.sleep(0.01)
 raw = bus.read_i2c_block_data(addr, 0x00, 2)
 v = ((raw[0]<<8)|raw[1]) * 4.096 / 32768
 print(f'Tension: {v:.4f}V')
-# Conversion NTC40 — pont diviseur R_ref=10kΩ, R0=40kΩ, β=3950
+# Conversion NTC10K — pont diviseur R_ref=10kΩ, R0=10kΩ, β=3950 (formule réellement utilisée par server.py)
+import math
 rx = v * 10000 / (3.3 - v)
-t  = (rx - 100) / (100 * 0.00385)
-print(f'Temperature NTC40: {t:.2f}°C')
-"</code></pre>
+B, R0, T0 = 3950.0, 10000.0, 298.15
+t  = (1.0 / ((1/T0) + (1/B) * math.log(rx/R0))) - 273.15
+print(f'Temperature NTC10K: {t:.2f}°C')
+"
+
+<span class="comment"># Trouver le serial d'une sonde DS18B20 (1-Wire)</span>
+ls /sys/bus/w1/devices/ | grep 28-
+cat /sys/bus/w1/devices/28-xxxxxxxxxxxx/w1_slave</code></pre>
 
 <hr>
 
@@ -2940,7 +2791,7 @@ sudo tailscale up
 </table>
 
 <!-- ─── WIDGETS PLC ─── -->
-<h3 id="syn-widgets">Les 13 widgets PLC — Référence détaillée</h3>
+<h3 id="syn-widgets">Les 14 widgets PLC — Référence détaillée</h3>
 
 <h4>📊 Mesures</h4>
 
@@ -3004,6 +2855,22 @@ sudo tailscale up
       <strong>Cas d'usage :</strong> suivi température départ chaudière, tendance extérieure.
     </div>
     <div class="block-ports"><span class="port-in">ANA / RF</span></div>
+  </div>
+  <div class="block-card" style="border-color:#bc8cff40;">
+    <div class="block-card-header"><span class="block-badge" style="color:#bc8cff;border-color:#bc8cff40">🗄📈 Courbe historisée</span></div>
+    <div class="block-card-desc">
+      <strong>Rôle :</strong> comme Courbe tendance, mais persistante — lit l'historique stocké en base SQLite côté serveur au lieu du buffer mémoire navigateur. Survit aux rechargements de page et aux redémarrages du Raspberry Pi.<br><br>
+      <strong>Propriétés :</strong><br>
+      • <em>Référence</em> : n'importe quel RF / AV / mémoire — c'est ce choix qui détermine ce qui est historisé, aucune configuration séparée à faire<br>
+      • <em>Fenêtre (h)</em> : plage affichée, 24h par défaut<br>
+      • <em>Couleur</em> / <em>Fond</em><br>
+      • Axe temporel avec repères "-Nh" → "maintenant"<br><br>
+      <strong>Fonctionnement :</strong> le moteur PLC scanne <code>synoptic.json</code> toutes les 60 s, détecte automatiquement les références utilisées par tous les widgets de ce type (toutes pages confondues), et échantillonne ces références toutes les <strong>5 minutes</strong> dans une table SQLite dédiée (<code>history_var</code>), conservée <strong>1 an</strong>. Le widget interroge <code>GET /api/history/&lt;ref&gt;?hours=N</code> côté navigateur toutes les 30 s.<br><br>
+      <strong>Export :</strong> <code>GET /api/history/&lt;ref&gt;/csv?hours=N</code> pour téléchargement.<br>
+      <strong>Taille conseillée :</strong> 260 × 110 px minimum.<br>
+      <strong>Cas d'usage :</strong> niveau de batterie sur 24h, suivi long terme d'une consigne, historique d'un compteur d'énergie.
+    </div>
+    <div class="block-ports"><span class="port-in">RF / AV / M</span></div>
   </div>
   <div class="block-card">
     <div class="block-card-header"><span class="block-badge" style="color:#e6edf3;border-color:#30363d">123 Valeur numérique</span></div>
@@ -3171,10 +3038,10 @@ sudo tailscale up
 <div class="note"><div class="ci">ℹ</div><p>Tous les symboles P&amp;ID sont des SVG vectoriels : ils restent nets à toutes les tailles. Redimensionner librement sans perte de qualité.</p></div>
 
 <!-- ─── SYMBOLES ANIMÉS ─── -->
-<h3 id="syn-anim">Symboles animés — 6 équipements (nouveauté v2)</h3>
+<h3 id="syn-anim">Symboles animés — 7 équipements (nouveauté v2)</h3>
 
 <div class="section-intro">
-  Les symboles animés sont des widgets SVG inline avec animations CSS. Ils réagissent en temps réel à l'état d'une variable PLC : <strong>animation active quand ON, symbole gris figé quand OFF</strong>. Visibles uniquement en mode Opérateur (en mode Édition, un placeholder gris les représente).
+  Les symboles animés sont des widgets SVG inline avec animations CSS. Ils réagissent en temps réel à l'état d'une variable PLC : <strong>animation active quand ON, symbole gris figé quand OFF</strong>. Visibles uniquement en mode Opérateur (en mode Édition, un placeholder gris les représente). <em>Exception : Batterie (niveau) lit une valeur numérique 0–100 plutôt qu'un simple ON/OFF — voir sa fiche ci-dessous.</em>
 </div>
 
 <p>Disponibles dans l'onglet 🏭 → groupe <strong>⚡ Animés</strong> en bas de la palette :</p>
@@ -3239,6 +3106,17 @@ sudo tailscale up
       <strong>Variable :</strong> bit M (débit actif, pompe en marche).
     </div>
     <div class="block-ports"><span class="port-in">M / GPIO</span></div>
+  </div>
+  <div class="block-card" style="border-color:#3fb95040;">
+    <div class="block-card-header"><span class="block-badge" style="color:#3fb950;border-color:#3fb95040">🔋 Batterie (niveau)</span></div>
+    <div class="block-card-desc">
+      <strong>⚠ Cas particulier :</strong> contrairement aux 6 autres symboles animés ci-dessus, ce widget n'est pas piloté par un booléen ON/OFF mais lit <strong>directement la valeur numérique 0–100</strong> de la référence liée — c'est un niveau de batterie, pas un équipement marche/arrêt.<br><br>
+      <strong>Affichage :</strong> jauge remplie proportionnellement, couleur automatique selon seuil (vert ≥40%, orange 15–40%, rouge &lt;15% avec contour clignotant). Détection automatique de l'état de charge par la <strong>pente</strong> de la valeur (pas besoin d'un second registre) : un éclair animé apparaît quand le niveau monte.<br><br>
+      <strong>Propriété :</strong> <em>Variable ON/OFF</em> (champ "Saisie libre") → en réalité la référence RF/AV à lire pour le niveau (ex. sortie <code>OA1</code> d'un PyBlock de calcul SOC, ou registre alimenté directement par un bloc MQTT si un BMS/Venus OS publie déjà un SOC précis).<br>
+      <strong>Taille conseillée :</strong> 100 × 60 px minimum.<br>
+      <strong>Cas d'usage :</strong> batterie de stockage solaire, onduleur, pack Li-ion/LiFePO4.
+    </div>
+    <div class="block-ports"><span class="port-in">RF / AV</span></div>
   </div>
 </div>
 
@@ -3577,168 +3455,6 @@ else:
 </div>
 
 
-
-<!-- ════════════════════════════════════════════════════════════ -->
-<h2 id="recettes"><span class="icon">📋</span> Recettes complètes — Cas d'usage pas à pas</h2>
-
-<div class="section-intro">
-  Ces exemples montrent comment câbler plusieurs blocs ensemble pour réaliser des automatismes
-  courants. Chaque recette indique les blocs utilisés, le câblage FBD et le comportement attendu.
-</div>
-
-<!-- ── Recette 1 ── -->
-<h3 id="recette-thermostat">🌡 Recette 1 — Thermostat différentiel (2 sondes)</h3>
-<p>
-  Cas typique : chauffage solaire — la pompe de circulation démarre si la sonde capteur (Sonde1)
-  est plus chaude que la sonde ballon (Sonde2) d'au moins <strong>5 °C</strong>,
-  et s'arrête quand l'écart descend sous <strong>2 °C</strong>.
-</p>
-<h4>Blocs utilisés</h4>
-<p>2× SENSOR, 1× SUB, 1× COMPARE_F (avec hystérésis), 1× OUTPUT</p>
-<h4>Câblage FBD</h4>
-<div class="code-block">SENSOR(ANA4, Capteur solaire) ─────┐
-                                   ├→ SUB.IN1
-SENSOR(ANA5, Ballon)          ─────┘  SUB.IN2
-
-SUB.OUT → COMPARE_F.IN
-  SP (setpoint)  = 3.5 °C  (centre de la plage)
-  hystérésis     = 1.5 °C  (→ ON à 5°C, OFF à 2°C)
-  opération      = &gt;
-
-COMPARE_F.GT → OUTPUT(K1 — Pompe circulation)</div>
-<div class="tip">
-  <strong>Alternative PYBLOCK</strong> si vous avez besoin de logique plus complexe (délai de
-  protection pompe, compteur de cycles...) :
-</div>
-<div class="code-block"># A1 = T_capteur, A2 = T_ballon
-SEUIL_ON  = 5.0   # démarrage pompe si ΔT > 5°C
-SEUIL_OFF = 2.0   # arrêt pompe si ΔT < 2°C
-delta = A1 - A2
-if delta &gt; SEUIL_ON:
-    state['pompe'] = True
-elif delta &lt; SEUIL_OFF:
-    state['pompe'] = False
-od1 = state.get('pompe', False)</div>
-
-<!-- ── Recette 2 ── -->
-<h3 id="recette-chaudiere">🔥 Recette 2 — Séquence démarrage chaudière avec sécurités</h3>
-<p>
-  Démarrage de la chaudière uniquement si : pressostat OK <strong>ET</strong> niveau eau OK
-  <strong>ET</strong> pas de défaut en cours. Temporisation 10 s avant mise en chauffe
-  (pré-purge brûleur). Mémorisation du défaut jusqu'à acquittement.
-</p>
-<h4>Blocs utilisés</h4>
-<p>INPUT ×4, AND ×2, NOT, TON, SET, RESET, OUTPUT ×2</p>
-<h4>Câblage FBD</h4>
-<div class="code-block">INPUT(Pressostat_OK)  ─┐
-INPUT(Niveau_OK)      ─┤→ AND1.OUT ─┐
-INPUT(M_Defaut) → NOT ─┘            ├→ AND2.OUT → TON.IN
-INPUT(Demande_chauffe)              ─┘    PT = 10 000 ms
-
-TON.Q → OUTPUT(Brûleur_ON)
-TON.Q → OUTPUT(Ventilateur)
-
-# Gestion défaut
-INPUT(Capteur_défaut)    → SET.S   → M_Defaut
-INPUT(BP_Acquittement)   → RESET.R → M_Defaut</div>
-<div class="warning">
-  <strong>⚠</strong> Toujours utiliser un bit mémoire <code>Mx</code> pour les défauts mémorisés,
-  pas directement un GPIO de sortie — les GPIO sont remis à zéro à chaque cycle si non pilotés.
-</div>
-
-<!-- ── Recette 3 ── -->
-<h3 id="recette-plancher">🏠 Recette 3 — Plancher chauffant multi-zones (PID + loi d'eau)</h3>
-<p>
-  3 zones indépendantes avec vannes motorisées. La consigne de chaque zone est calculée par
-  une loi d'eau depuis la température extérieure. Chaque zone a son propre régulateur PID.
-</p>
-<h4>Page 1 — Loi d'eau commune</h4>
-<div class="code-block">SENSOR(ANA0, T_ext) → PYBLOCK(loi_eau)
-  # code pyblock
-  T_ext = A1
-  T_dep = max(25, min(55, 45 - 1.2 * T_ext))  # loi d'eau simple
-  OA1 = T_dep  # consigne départ commune → RF0
-
-RF0 → CONST_PAGE_OUT(cons_depart)  # passe à la page 2</div>
-<h4>Page 2 — Zones 1/2/3 (même câblage répété)</h4>
-<div class="code-block">PAGE_IN(cons_depart) → RF0
-SENSOR(ANA1, T_zone1) → PID_Z1.PV
-RF0 (cons_depart)     → PID_Z1.SP
-INPUT(Marche_Z1)      → PID_Z1.EN
-PID_Z1.OUT → SCALE(0–100 → 0–255) → RF1 → PWM_vanne_Z1</div>
-
-<!-- ── Recette 4 ── -->
-<h3 id="recette-compteur">⏱ Recette 4 — Compteur horaire avec maintenance et remise à zéro</h3>
-<p>
-  Compter les heures de marche d'une pompe, afficher dans le synoptique, déclencher
-  une alarme maintenance à 500 h, reset par bouton opérateur.
-</p>
-<h4>Option PYBLOCK (recommandée pour la persistance)</h4>
-<div class="code-block"># Nb entrées : d1=marche pompe, d2=reset opérateur
-# Nb sorties  : OA1=heures cumulées, od1=alarme maintenance
-SEUIL_MAINTENANCE = 500.0  # heures
-
-if d2:  # reset opérateur
-    state['h'] = 0.0
-    state['alarme_ack'] = False
-elif d1:
-    state.setdefault('h', 0.0)
-    state['h'] += dt / 3600.0
-
-heures = state.get('h', 0.0)
-write_register("RF12", heures)   # → widget Valeur numérique synoptique
-OA1 = heures
-od1 = heures &gt;= SEUIL_MAINTENANCE
-
-# Câbler od1 → OUTPUT(Voyant_maintenance) + OUTPUT(Buzzer via TON 500ms)</div>
-
-<!-- ── Recette 5 ── -->
-<h3 id="recette-telegram">📱 Recette 5 — Alerte Telegram sur défaut température</h3>
-<p>
-  Envoyer une alerte Telegram si une sonde dépasse 85 °C, avec délai de confirmation
-  30 s pour éviter les fausses alarmes. Une seule notification par événement (pas de spam).
-</p>
-<div class="code-block"># PYBLOCK — A1 = température sonde, od1 = sortie alarme confirmée
-SEUIL_ALARME = 85.0   # °C
-DELAI_CONF   = 30.0   # secondes de confirmation
-
-if A1 &gt; SEUIL_ALARME:
-    state.setdefault('timer', 0.0)
-    state['timer'] += dt
-    if state['timer'] &gt;= DELAI_CONF and not state.get('notif_envoyee'):
-        state['notif_envoyee'] = True
-        od1 = True  # déclenche OUTPUT → bit M15
-else:
-    state['timer'] = 0.0
-    state['notif_envoyee'] = False
-    od1 = False</div>
-<div class="tip">
-  Configurer dans <strong>Raspberry Pi → Telegram</strong> : cocher <em>Notifier sur M15=1</em>.
-  Le bot Telegram envoie automatiquement le message dès que M15 passe à 1.
-</div>
-
-<!-- ── Recette 6 ── -->
-<h3 id="recette-pyblock-vs-carithm">⚡ Recette 6 — PyBlock vs CArithm : quand utiliser lequel ?</h3>
-<table class="ref-table">
-  <thead><tr><th>Besoin</th><th>Recommandé</th><th>Raison</th></tr></thead>
-  <tbody>
-    <tr><td>Calcul arithmétique pur (loi d'eau, PID custom, offset)</td><td><strong>CArithm</strong></td><td>Syntaxe C plus proche d'un automate industriel, légèrement plus rapide</td></tr>
-    <tr><td>Logique avec mémoire entre cycles (filtres, intégrateurs, compteurs)</td><td><strong>PyBlock</strong></td><td>Dictionnaire <code>state</code> persistant</td></tr>
-    <tr><td>Statistiques sur plusieurs sondes (moyenne, écart-type)</td><td><strong>PyBlock</strong></td><td>Module <code>statistics</code> disponible directement</td></tr>
-    <tr><td>Algorithme en plusieurs étapes avec conditions imbriquées</td><td><strong>PyBlock</strong></td><td>Python natif, indentation, listes, f-strings</td></tr>
-    <tr><td>Débogage en simulation avec print()</td><td><strong>PyBlock</strong></td><td><code>print()</code> redirigé vers le journal PLC</td></tr>
-    <tr><td>Code compatible Proview CArit</td><td><strong>CArithm</strong></td><td>Syntaxe identique ou très proche</td></tr>
-    <tr><td>Accès direct aux registres RF/M sans câblage</td><td><strong>PyBlock</strong></td><td><code>read_analog("RF5")</code>, <code>write_signal("M3", True)</code></td></tr>
-  </tbody>
-</table>
-
-<div class="tip" style="margin-top:16px;">
-  <strong>🔑 Règle d'or :</strong> si votre code tient en 5 lignes sans état persistant →
-  <strong>CArithm</strong>. Dès que vous avez besoin de mémoriser quelque chose entre deux cycles →
-  <strong>PyBlock + state{}</strong>.
-</div>
-
-
 <h2 id="raccourcis-globaux"><span class="icon">⌨</span> Raccourcis clavier — Référence complète</h2>
 
 <h3>Application Qt — fenêtre principale</h3>
@@ -3917,7 +3633,7 @@ else:
 
 
 <footer>
-  <p>RPi-PLC Studio — Documentation Utilisateur — Version 3.1</p>
+  <p>RPi-PLC Studio — Documentation Utilisateur — Version 3.0</p>
   <p>Matériel : Raspberry Pi 3/4/5 · ADS1115 × 1–3 · NTC40 × 4–12 · Relais × jusqu'à 24</p>
   <p>Logiciel : Python 3 · PyQt5 · Flask · SQLite · SocketIO · Chart.js · HTML5 Canvas</p>
   <p>Modules : auth · telegram_bot · recipes · backup_manager · calibration · report_generator</p>
@@ -3931,16 +3647,4 @@ else:
 <script>
 // Navigation active sur scroll
 const sections = document.querySelectorAll('h2[id], h3[id]');
-const navLinks = document.querySelectorAll('nav a[href^="#"]');
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      const id = entry.target.id;
-      navLinks.forEach(a => {
-        a.classList.toggle('active', a.getAttribute('href') === '#'+id);
-      });
-    }
-  });
-}, { rootMargin: '-10% 0px -85% 0px' });
-sections.forEach(s => observer.observe(s));
-</script>
+const n
