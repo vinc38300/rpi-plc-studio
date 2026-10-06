@@ -30,10 +30,6 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("PyQt5").setLevel(logging.WARNING)
 log = logging.getLogger("main")
 
-# HTTP/HTTPS automatique vers le RPi (serveur en HTTPS auto-signé) — doit précéder tout appel réseau
-from core import net as _net
-_net.install()
-
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QIcon

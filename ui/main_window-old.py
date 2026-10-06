@@ -1082,7 +1082,7 @@ class MainWindow(QMainWindow):
 
     def _start_rpi_monitor(self):
         """Démarre le monitoring en direct depuis le RPi."""
-        from PyQt5.QtWidgets import QInputDialog, QLineEdit
+        from PyQt5.QtWidgets import QInputDialog
 
         # Récupérer l'URL du RPi depuis le projet
         rpi_cfg  = self.project.data.get("rpi", {}) if self.project else {}
@@ -1109,32 +1109,10 @@ class MainWindow(QMainWindow):
             self.sim_label.setStyleSheet("color: #8b949e; font-size:11px;")
 
         # Créer et connecter le moniteur
-        _sec = rpi_cfg.get("security", {}) or {}
-        _user, _pwd = _sec.get("username", ""), _sec.get("password", "")
-        if not _user or getattr(self, "_rpi_auth_bad", False):
-            # Pas d'identifiants dans le projet, ou refusés au dernier essai : les (re)demander
-            self._rpi_auth_bad = False
-            _user, ok = QInputDialog.getText(
-                self, "Moniteur RPi en direct",
-                "Utilisateur du RPi (laisser vide si pas d'authentification) :",
-                text=_user or "admin")
-            if not ok:
-                return
-            _user = _user.strip()
-            if _user:
-                _pwd, ok = QInputDialog.getText(
-                    self, "Moniteur RPi en direct",
-                    f"Mot de passe de « {_user} » :", QLineEdit.Password)
-                if not ok:
-                    return
-                if self.project:   # mémorisé dans le projet, comme le déploiement
-                    self.project.data.setdefault("rpi", {}).setdefault("security", {}).update(
-                        {"username": _user, "password": _pwd})
-        self._rpi_monitor = RpiMonitor(url, parent=self, username=_user, password=_pwd)
+        self._rpi_monitor = RpiMonitor(url, parent=self)
         self._rpi_monitor.state_received.connect(self._on_plc_update)
         self._rpi_monitor.connected.connect(self._on_rpi_monitor_connected)
         self._rpi_monitor.disconnected.connect(self._on_rpi_monitor_disconnected)
-        self._rpi_monitor.auth_failed.connect(lambda _m: setattr(self, "_rpi_auth_bad", True))
         self._rpi_monitor.start_monitoring()
 
         self.log_terminal.append_log(f"[MONITOR] Démarrage surveillance {url}")

@@ -6,14 +6,12 @@
   "auto_start": true,
   "security": {
     "enabled": false,
-    "username": "admin",
-    "password": "plc1234"
+    "username": "vincent",
+    "password": "20100"
   },
   "telegram": {
-    "enabled": true,
-    "chat_ids": [
-      "8851072293"
-    ],
+    "enabled": false,
+    "chat_ids": [],
     "alarm_high": 90.0,
     "alarm_low": 2.0,
     "alarm_cooldown_s": 600,
@@ -21,8 +19,7 @@
     "relay_cooldown_s": 30,
     "notify_plc": true,
     "report_enabled": true,
-    "report_hour": 8,
-    "token": "**********************"
+    "report_hour": 8
   },
   "analog": {
     "enabled": true,

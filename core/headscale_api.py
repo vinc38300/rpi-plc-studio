@@ -37,12 +37,29 @@ def _request(base_url: str, api_key: str, path: str, method: str = "GET", body: 
 
 
 def get_user_id(base_url: str, api_key: str, username: str) -> str:
-    """Résout le nom d'utilisateur Headscale en ID numérique (requis par l'API >=0.26)."""
-    data = _request(base_url, api_key, f"/api/v1/user?name={username}")
+    """Résout un utilisateur Headscale en ID numérique (requis par l'API >=0.26).
+
+    `username` peut être le nom Headscale, l'e-mail, le nom affiché (utilisateurs
+    OIDC) ou directement l'ID numérique. Si un seul utilisateur existe et que
+    rien ne correspond, il est utilisé.
+    """
+    data = _request(base_url, api_key, "/api/v1/user")
     users = data.get("users", [])
-    if not users:
-        raise HeadscaleAPIError(f"Utilisateur Headscale « {username} » introuvable")
-    return str(users[0]["id"])
+    wanted = (username or "").strip().lower()
+
+    def _keys(u):
+        return {str(u.get(k, "")).strip().lower()
+                for k in ("id", "name", "email", "displayName", "display_name")
+                if u.get(k) not in (None, "")}
+
+    for u in users:
+        if wanted and wanted in _keys(u):
+            return str(u["id"])
+    if len(users) == 1:
+        return str(users[0]["id"])
+    dispo = ", ".join(f"{u.get('name')} (id {u.get('id')})" for u in users) or "aucun"
+    raise HeadscaleAPIError(
+        f"Utilisateur Headscale « {username} » introuvable. Utilisateurs disponibles : {dispo}")
 
 
 def create_preauth_key(base_url: str, api_key: str, username: str,
