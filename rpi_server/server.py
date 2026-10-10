@@ -3331,7 +3331,6 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
                 return jsonify({"ok": False, "error": str(e)})
         return jsonify({"ok": False, "error": "GPIO non disponible"})
 
-    @app.route("/api/gpio/status")
     @app.route("/api/gpio/force_clear", methods=["POST"])
     def api_gpio_force_clear():
         """Libère tous les forçages manuels GPIO et DV."""
@@ -3348,6 +3347,7 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
             "dv_forced":   dict(engine._dv_force)
         })
 
+    @app.route("/api/gpio/status")
     def api_gpio_status():
         """Lit l'état réel de tous les GPIO via gpiod."""
         result = {}
@@ -4033,6 +4033,16 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         if p.exists():
             return jsonify(json.loads(p.read_text()))
         return jsonify({"widgets": [], "background": "#0d1117", "grid": 20})
+
+    @app.route("/api/gpio/config", methods=["GET"])
+    def api_gpio_config():
+        """Noms et modes des GPIO, pour que les menus du synoptique (navigateur)
+        affichent les mêmes noms que le studio (ex. « K4 Réhausse Chaudière »)."""
+        return jsonify({
+            str(pin): {"name": cfg.get("name", f"GPIO{pin}"),
+                       "mode": cfg.get("mode", "output")}
+            for pin, cfg in engine.gpio.items()
+        })
 
     @app.route("/api/synoptic", methods=["POST"])
     def api_synoptic_save():

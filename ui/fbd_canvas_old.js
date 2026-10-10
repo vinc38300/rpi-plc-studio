@@ -1543,7 +1543,6 @@ function render(){
   if(!pg())return;
   ctx.save();ctx.translate(vp.x,vp.y);ctx.scale(vp.scale,vp.scale);
   pg().wires.forEach(w=>drawWire(w,w===selW));
-  _drawChainWires();
   if(wireFrom){
     ctx.strokeStyle='#f0883e';ctx.lineWidth=2/vp.scale;
     ctx.setLineDash([5/vp.scale,4/vp.scale]);
@@ -1553,7 +1552,6 @@ function render(){
     ctx.stroke();ctx.setLineDash([]);
   }
   pg().blocks.forEach(b=>drawBlock(b,b===selB||multiSel.has(b)));
-  _drawConnLinks();
   drawRubber();
   ctx.restore();
 }
@@ -2607,10 +2605,6 @@ document.addEventListener('keydown',e=>{
     selB=null; selW=null; showEmptyProps(); render();
   }
   if(e.key==='f'||e.key==='F')fitView();
-  if((e.key==='j'||e.key==='J')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){jumpNextPeer(e.shiftKey?-1:1);}
-  if((e.key==='r'||e.key==='R')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){e.preventDefault();openRFFinder(_rfOfBlock(selB));}
-  if((e.key==='t'||e.key==='T')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){e.preventDefault();toggleChain();}
-  if(e.key==='Escape'&&_chainOn){closeChain();}
   if(e.key==='ArrowLeft'&&e.altKey){e.preventDefault();if(cur>0)goPage(cur-1);}
   if(e.key==='ArrowRight'&&e.altKey){e.preventDefault();if(cur<pages.length-1)goPage(cur+1);}
   if(e.ctrlKey&&(e.key==='z'||e.key==='Z')){e.preventDefault();undo();}
@@ -2700,19 +2694,16 @@ function showBlockProps(b){
     h+=pNum('num','Numéro',b.params.num||1,1,999);
     h+=pTxt('label','Étiquette',b.params.label||'C1');
     const avail=findConnPeers(b);
-    h+=`<hr class="psep"><span class="pl">Connecteurs jumelés (touche J = suivant, Maj+J = précédent)</span>`;
+    h+=`<hr class="psep"><span class="pl">Connecteurs jumelés</span>`;
     if(!avail.length){
-      h+=`<div style="color:var(--fbd-text3);font-size:9px">Aucun autre #${b.params.num}.</div>`;
+      h+=`<div style="color:var(--fbd-text3);font-size:9px">Aucun #${b.params.num}.</div>`;
     } else {
-      h+=`<div style="display:flex;gap:6px;margin:4px 0">
-        <button class="pb" onclick="jumpNextPeer(-1)">◀ Précédent</button>
-        <button class="pb" onclick="jumpNextPeer(1)">Suivant ▶</button></div>`;
       avail.forEach(c=>{
         const typeColor=c.btype==='CONN_TX'?'#f0883e':c.btype==='CONN_RX'?'#39d3b0':'#58a6ff';
         const typeLabel=c.btype==='CONN_TX'?'TX':c.btype==='CONN_RX'?'RX':'⇄';
-        h+=`<div class="conn-row" onclick="goToBlock(${c.pageIdx},'${c.bid}')">
+        h+=`<div class="conn-row" onclick="goPage(${c.pageIdx})">
           <span>#${c.num} ${c.label} <span style="font-size:8px;color:${typeColor}">[${typeLabel}]</span></span>
-          <span class="conn-chip" style="background:#1a2f45;color:#58a6ff">${c.here?'cette page':c.pageName}</span>
+          <span class="conn-chip" style="background:#1a2f45;color:#58a6ff">${c.pageName}</span>
           <span class="conn-jump">→</span></div>`;
       });
     }
@@ -3645,403 +3636,13 @@ function findConnPeers(b){
   const num=b.params.num;
   const res=[];
   pages.forEach((pg,i)=>{
+    if(i===cur)return;
     pg.blocks.forEach(ob=>{
-      if(ob.id===b.id && i===cur)return;
       if((ob.type==='CONN'||ob.type==='CONN_TX'||ob.type==='CONN_RX')&&ob.params.num===num)
-        res.push({num,label:ob.params.label||'',pageName:pg.name,pageIdx:i,bid:ob.id,btype:ob.type,here:i===cur});
+        res.push({num,label:ob.params.label||'',pageName:pg.name,pageIdx:i,bid:ob.id,btype:ob.type});
     });
   });
   return res;
-}
-
-// ── Suivi des liaisons CONN : aller au jumeau, surbrillance ───────────────
-let _flash=null;
-function goToBlock(pageIdx,bid){
-  if(pageIdx!==cur) goPage(pageIdx);
-  const p=pages[cur]; if(!p)return;
-  const b=p.blocks.find(x=>x.id===bid); if(!b)return;
-  multiSel.clear(); selB=b; selW=null;
-  if(vp.scale<0.6) vp.scale=0.6;
-  vp.x=cvs.width/2-(b.x+b.w/2)*vp.scale;
-  vp.y=cvs.height/2-(b.y+b.h/2)*vp.scale;
-  _flash={pageId:p.id,bid:b.id,until:performance.now()+2500};
-  showBlockProps(b); drawGrid(); render();
-}
-function jumpNextPeer(dir){
-  const s=selB; if(!s||!_isConnBlk(s))return;
-  const num=s.params.num, all=[];
-  pages.forEach((pg_,i)=>pg_.blocks.forEach(o=>{
-    if(_isConnBlk(o)&&o.params.num===num) all.push({i,bid:o.id});
-  }));
-  if(all.length<2)return;
-  const k=all.findIndex(a=>a.i===cur&&a.bid===s.id);
-  const n=all[(k+dir+all.length)%all.length];
-  goToBlock(n.i,n.bid);
-}
-// ── Recherche d'un registre RF : qui l'écrit, qui le lit (lecture seule) ──
-let _rfFind=null;   // {rf, hits:[{pageIdx,pageName,bid,btype,key,role}]}
-const _RF_OUT_KEY=/^(reg_out|reg_hour|reg_wday|reg_starts|reg_total|reg_runtime|cv_ref|clip_ref|dead_ref|max_ref|done_ref|fault_ref|et_ref|o[ad]\d+_ref)$/;
-function _normRF(v){
-  v=String(v||'').trim().toUpperCase();
-  if(/^\d+$/.test(v)) v='RF'+v;
-  return /^RF\d+$/.test(v)?v:'';
-}
-function _rfRole(b,key){
-  if(key==='code') return 'cité dans le code';
-  if(_isConnBlk(b) && key==='reg_out') return 'relais CONN';
-  return _RF_OUT_KEY.test(key)?'écrit (source)':'lit (destination)';
-}
-function _rfScan(rf){
-  const hits=[]; const re=new RegExp('\\b'+rf+'\\b');
-  pages.forEach((pg_,i)=>pg_.blocks.forEach(b=>{
-    const pr=b.params||{};
-    Object.keys(pr).forEach(k=>{
-      const v=pr[k];
-      if(typeof v!=='string') return;
-      if(k==='code'){ if(re.test(v)) hits.push({pageIdx:i,pageName:pg_.name,bid:b.id,btype:b.type,key:k,role:_rfRole(b,k)}); }
-      else if(v.trim().toUpperCase()===rf) hits.push({pageIdx:i,pageName:pg_.name,bid:b.id,btype:b.type,key:k,role:_rfRole(b,k)});
-    });
-  }));
-  const ord={'écrit (source)':0,'relais CONN':1,'lit (destination)':2,'cité dans le code':3};
-  hits.sort((a,b)=>(ord[a.role]-ord[b.role])||(a.pageIdx-b.pageIdx));
-  return hits;
-}
-function _rfOfBlock(b){
-  if(!b||!b.params) return '';
-  const pr=b.params;
-  if(typeof pr.reg_out==='string'&&_normRF(pr.reg_out)) return _normRF(pr.reg_out);
-  for(const k of Object.keys(pr)){ if(typeof pr[k]==='string'&&_normRF(pr[k])&&k!=='code') return _normRF(pr[k]); }
-  return '';
-}
-function openRFFinder(prefill){
-  let box=document.getElementById('rf-finder');
-  if(!box){
-    box=document.createElement('div'); box.id='rf-finder';
-    box.style.cssText='position:fixed;left:12px;bottom:12px;width:330px;max-height:55vh;display:flex;flex-direction:column;'+
-      'background:var(--fbd-bg2);color:var(--fbd-text);border:1px solid var(--fbd-border2);border-radius:8px;'+
-      'box-shadow:0 6px 24px #0008;font:11px "JetBrains Mono",monospace;z-index:9000';
-    box.innerHTML=`<div style="display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--fbd-border)">
-        <b style="color:var(--fbd-accent);white-space:nowrap;flex:none">Chercher RF</b>
-        <input id="rf-find-in" class="pi" placeholder="ex : 12 ou RF12" autocomplete="off" spellcheck="false" style="flex:1 1 auto;width:auto;min-width:0">
-        <button class="pb" id="rf-find-x" title="Fermer (Échap)" style="flex:none;width:auto;margin:0;padding:3px 8px">✕</button></div>
-      <div id="rf-find-sum" style="padding:6px 8px;color:var(--fbd-text2)"></div>
-      <div id="rf-find-list" style="overflow:auto;padding:0 4px 6px"></div>`;
-    document.body.appendChild(box);
-    const inp=box.querySelector('#rf-find-in');
-    inp.addEventListener('input',()=>_rfRun(inp.value));
-    inp.addEventListener('keydown',e=>{
-      e.stopPropagation();
-      if(e.key==='Escape') closeRFFinder();
-      if(e.key==='Enter'&&_rfFind&&_rfFind.hits.length){ _rfStep(e.shiftKey?-1:1); }
-    });
-    box.querySelector('#rf-find-x').onclick=closeRFFinder;
-  }
-  const inp=box.querySelector('#rf-find-in');
-  if(prefill!==undefined&&prefill!==null&&prefill!=='') inp.value=prefill;
-  _rfRun(inp.value); setTimeout(()=>{inp.focus();inp.select();},0);
-}
-function closeRFFinder(){
-  const box=document.getElementById('rf-finder'); if(box) box.remove();
-  _rfFind=null; render();
-}
-function _rfRun(txt){
-  const rf=_normRF(txt);
-  const sum=document.getElementById('rf-find-sum'), list=document.getElementById('rf-find-list');
-  if(!sum||!list) return;
-  if(!rf){ _rfFind=null; sum.textContent='Saisis un numéro de registre (RF…).'; list.innerHTML=''; render(); return; }
-  _rfFind={rf,hits:_rfScan(rf)};
-  const n=_rfFind.hits.length;
-  sum.textContent=n?`${rf} : ${n} occurrence(s) — Entrée = suivant, Maj+Entrée = précédent`:`${rf} : aucune occurrence`;
-  const col={'écrit (source)':'#3fb950','relais CONN':'#58a6ff','lit (destination)':'#f0883e','cité dans le code':'#bc8cff'};
-  list.innerHTML=_rfFind.hits.map((h,i)=>
-    `<div class="conn-row" data-i="${i}" style="cursor:pointer">
-      <span>${h.btype} <span style="color:var(--fbd-text3)">${h.bid}</span></span>
-      <span class="conn-chip" style="background:#1a2f45;color:${col[h.role]}">${h.role}</span>
-      <span style="color:var(--fbd-text3);font-size:9px">${h.pageName}</span></div>`).join('');
-  list.querySelectorAll('.conn-row').forEach(el=>el.onclick=()=>{
-    _rfFind.idx=+el.dataset.i; const h=_rfFind.hits[_rfFind.idx]; goToBlock(h.pageIdx,h.bid);
-  });
-  render();
-}
-function _rfStep(dir){
-  if(!_rfFind||!_rfFind.hits.length) return;
-  const n=_rfFind.hits.length;
-  _rfFind.idx=((_rfFind.idx==null?(dir>0?-1:0):_rfFind.idx)+dir+n)%n;
-  const h=_rfFind.hits[_rfFind.idx]; goToBlock(h.pageIdx,h.bid);
-}
-function _drawRFHits(){
-  if(!_rfFind||!pg()) return;
-  const p=pg(), pi=pages.indexOf(p);
-  const col={'écrit (source)':'#3fb950','relais CONN':'#58a6ff','lit (destination)':'#f0883e','cité dans le code':'#bc8cff'};
-  _rfFind.hits.forEach(h=>{
-    if(h.pageIdx!==pi) return;
-    const o=p.blocks.find(x=>x.id===h.bid); if(!o) return;
-    ctx.save(); ctx.strokeStyle=col[h.role]; ctx.lineWidth=2.5/vp.scale;
-    ctx.strokeRect(o.x-5/vp.scale,o.y-5/vp.scale,o.w+10/vp.scale,o.h+10/vp.scale);
-    ctx.restore();
-  });
-}
-
-// ── Chaîne amont / aval d'un bloc (lecture seule) ─────────────────────────
-// T : ancre la chaîne sur le bloc sélectionné. Suit les fils, traverse les
-// CONN (jumeaux de même numéro, d'une page à l'autre) et les GROUP (entre par
-// le port GROUP_IN / sort par le port GROUP_OUT correspondant, à tous les
-// niveaux d'imbrication). Ne modifie rien dans le programme.
-let _chainOn=false, _chain=null;
-const _CH_UP='#d946ef', _CH_DOWN='#fb923c';
-const _grpParseCache=new Map();
-
-// Contenu d'un bloc GROUP : page interne vivante si le groupe est ouvert,
-// sinon le JSON sauvegardé dans le bloc.
-function _grpInner(blk){
-  const live=pages.find(p=>p.id===_groupPageId(blk.id));
-  if(live) return {blocks:live.blocks,wires:live.wires};
-  const str=blk.params&&blk.params._inner_blocks; if(!str) return null;
-  let r=_grpParseCache.get(str);
-  if(!r){
-    try{ r=JSON.parse(str); }catch(e){ r={blocks:[],wires:[]}; }
-    _grpParseCache.set(str,r);
-    if(_grpParseCache.size>60) _grpParseCache.delete(_grpParseCache.keys().next().value);
-  }
-  return {blocks:r.blocks||[],wires:r.wires||[]};
-}
-// Contextes : une page de premier niveau, ou l'intérieur d'un GROUP.
-function _chainBuild(){
-  const byKey=new Map(), tops=[];
-  const mk=(key,name,blocks,wires,parent,topId,path)=>({key,name,blocks,wires,parent,topId,path,kids:new Map()});
-  const addCtx=c=>{
-    byKey.set(c.key,c);
-    c.blocks.forEach(b=>{
-      if(b.type!=='GROUP') return;
-      const inn=_grpInner(b); if(!inn) return;
-      const kc=mk(c.key+'/'+b.id,'Groupe '+((b.params&&b.params.name)||b.id),inn.blocks,inn.wires,{ctx:c,blk:b},c.topId,[...c.path,b.id]);
-      c.kids.set(b.id,kc); addCtx(kc);
-    });
-  };
-  pages.forEach(p=>{
-    if(String(p.id).startsWith('__grp_')) return;
-    const c=mk('T'+p.id,p.name,p.blocks,p.wires,null,p.id,[]); tops.push(c); addCtx(c);
-  });
-  return {tops,byKey};
-}
-function _chainSig(all){
-  let s=pages.length+'|';
-  all.byKey.forEach((c,k)=>{ s+=k+':'+c.blocks.length+':'+c.wires.length+';'; });
-  return s;
-}
-function _chainCurKey(all){
-  const p=pg(); if(!p) return null;
-  if(String(p.id).startsWith('__grp_')){
-    const gid=String(p.id).slice(6);
-    for(const [k,c] of all.byKey){ if(c.parent&&c.parent.blk.id===gid) return k; }
-    return null;
-  }
-  return 'T'+p.id;
-}
-function _chainHasIn(c,b){ return c.wires.some(w=>w.dst.bid===b.id); }
-function _chainPeers(all,c,b){
-  const out=[]; if(!_isConnBlk(b)) return out;
-  const num=String(b.params.num||'');
-  const scope=c.parent?[c]:all.tops;
-  scope.forEach(cc=>cc.blocks.forEach(o=>{
-    if(_isConnBlk(o)&&!(cc===c&&o.id===b.id)&&String(o.params.num||'')===num) out.push([cc,o]);
-  }));
-  return out;
-}
-function _chainWalk(all,aCtx,anchor,dir){
-  const nodes=new Map(), wset=new Set();
-  const nk=(c,b)=>c.key+'|'+b.id;
-  const seen=new Set([nk(aCtx,anchor)]);
-  const q=[[aCtx,anchor]];
-  while(q.length){
-    const [c,b]=q.shift(), next=[];
-    const isAnchor=(c===aCtx&&b.id===anchor.id);
-    const isPassage=(b.type==='GROUP'&&c.kids.has(b.id)&&!isAnchor);
-    if(!isPassage){
-      // o atteint via le fil w : si c'est un GROUP ouvert, on entre par son port
-      const emit=(cc,o,port)=>{
-        next.push([cc,o]);
-        if(o.type==='GROUP'&&cc.kids.has(o.id)){
-          const kc=cc.kids.get(o.id), t=dir>0?'GROUP_IN':'GROUP_OUT';
-          const e=kc.blocks.find(x=>x.type===t&&((x.params&&x.params.label)||x.id)===port);
-          if(e) next.push([kc,e]);
-        }
-      };
-      c.wires.forEach(w=>{
-        if(dir>0&&w.src.bid===b.id){ const o=c.blocks.find(x=>x.id===w.dst.bid); if(o){wset.add(w);emit(c,o,w.dst.port);} }
-        if(dir<0&&w.dst.bid===b.id){ const o=c.blocks.find(x=>x.id===w.src.bid); if(o){wset.add(w);emit(c,o,w.src.port);} }
-      });
-      // Sortie d'un groupe : on repart du bloc GROUP dans le contexte parent
-      if(c.parent){
-        const label=(b.params&&b.params.label)||b.id, pc=c.parent.ctx, gid=c.parent.blk.id;
-        if(dir>0&&b.type==='GROUP_OUT'){
-          pc.wires.forEach(w=>{ if(w.src.bid===gid&&w.src.port===label){ const o=pc.blocks.find(x=>x.id===w.dst.bid); if(o){wset.add(w);emit(pc,o,w.dst.port);} } });
-        }
-        if(dir<0&&b.type==='GROUP_IN'){
-          pc.wires.forEach(w=>{ if(w.dst.bid===gid&&w.dst.port===label){ const o=pc.blocks.find(x=>x.id===w.src.bid); if(o){wset.add(w);emit(pc,o,w.src.port);} } });
-        }
-      }
-      // CONN : sauter vers les jumeaux de même numéro
-      if(_isConnBlk(b)){
-        const hasIn=_chainHasIn(c,b);
-        if(dir>0&&(b.type==='CONN_TX'||hasIn))
-          _chainPeers(all,c,b).forEach(([cc,o])=>{ if(o.type!=='CONN_TX'&&(o.type==='CONN_RX'||!_chainHasIn(cc,o))) next.push([cc,o]); });
-        if(dir<0&&(b.type==='CONN_RX'||!hasIn))
-          _chainPeers(all,c,b).forEach(([cc,o])=>{ if(o.type==='CONN_TX'||_chainHasIn(cc,o)) next.push([cc,o]); });
-      }
-    }
-    next.forEach(([cc,o])=>{
-      const k=nk(cc,o); if(seen.has(k)) return;
-      seen.add(k);
-      nodes.set(k,{ctx:cc,b:o,leaf:false,passage:o.type==='GROUP'&&cc.kids.has(o.id)});
-      q.push([cc,o]);
-    });
-    if(!isAnchor&&!isPassage&&!next.length){ const n=nodes.get(nk(c,b)); if(n) n.leaf=true; }
-  }
-  return {nodes,wset};
-}
-function _chainCompute(all,key,anchorId){
-  const c=all.byKey.get(key); if(!c) return null;
-  const anchor=c.blocks.find(x=>x.id===anchorId); if(!anchor) return null;
-  const up=_chainWalk(all,c,anchor,-1), down=_chainWalk(all,c,anchor,1);
-  return {key,anchor:anchorId,sig:_chainSig(all),all,up,down,rows:[]};
-}
-function toggleChain(){
-  if(_chainOn){ closeChain(); return; }
-  _chainOn=true; _chain=null;
-  if(!selB){ _chainPanel('Sélectionne d\'abord un bloc, puis appuie sur T.'); return; }
-  _chainAnchor();
-}
-function _chainAnchor(){
-  if(!selB){ _chainOn=true; _chainPanel('Sélectionne un bloc, puis clique « Ré-ancrer ».'); return; }
-  const all=_chainBuild(), key=_chainCurKey(all);
-  _chainOn=true;
-  _chain=key?_chainCompute(all,key,selB.id):null;
-  _chainPanel(_chain?'':'Bloc introuvable dans le programme.'); render();
-}
-function closeChain(){
-  _chainOn=false; _chain=null;
-  const box=document.getElementById('chain-panel'); if(box) box.remove();
-  render();
-}
-// Aller à un bloc de la chaîne, y compris dans un groupe (ouvre les groupes)
-function _chainGoN(i){
-  const n=_chain&&_chain.rows[i]; if(!n) return;
-  const all=_chainBuild(), ctx=all.byKey.get(n.ctx.key); if(!ctx) return;
-  if(_chainCurKey(all)!==ctx.key){
-    if(groupStack.length) exitAllGroups();
-    const ti=pages.findIndex(p=>p.id===ctx.topId); if(ti<0) return;
-    goPage(ti);
-    for(const gid of ctx.path){
-      const g=pg().blocks.find(x=>x.id===gid); if(!g) return;
-      enterGroup(g);
-    }
-  }
-  goToBlock(cur,n.b.id);
-}
-function _chainPanel(msg){
-  let box=document.getElementById('chain-panel');
-  if(!box){
-    box=document.createElement('div'); box.id='chain-panel';
-    box.style.cssText='position:fixed;left:356px;bottom:12px;width:340px;max-height:60vh;display:flex;flex-direction:column;'+
-      'background:var(--fbd-bg2);color:var(--fbd-text);border:1px solid var(--fbd-border2);border-radius:8px;'+
-      'box-shadow:0 6px 24px #0008;font:11px "JetBrains Mono",monospace;z-index:9000';
-    document.body.appendChild(box);
-  }
-  let body='';
-  if(_chain){
-    _chain.rows=[];
-    const row=(n,col)=>{
-      const i=_chain.rows.push(n)-1;
-      return `<div class="conn-row" style="cursor:pointer" onclick="_chainGoN(${i})">
-        <span>${n.b.type} <span style="color:var(--fbd-text3)">${n.b.id}</span></span>
-        <span class="conn-chip" style="background:#1a2f45;color:${col}">${_rfOfBlock(n.b)||''}</span>
-        <span style="color:var(--fbd-text3);font-size:9px">${n.ctx.name}</span></div>`;
-    };
-    const c=_chain.all.byKey.get(_chain.key);
-    const a=c&&c.blocks.find(x=>x.id===_chain.anchor);
-    const upAll=[..._chain.up.nodes.values()], downAll=[..._chain.down.nodes.values()];
-    const upLeaves=upAll.filter(n=>n.leaf), downLeaves=downAll.filter(n=>n.leaf);
-    body=`<div style="padding:6px 8px;color:var(--fbd-text2)">Ancre : <b>${a?a.type+' '+a.id:'?'}</b> —
-        <span style="color:${_CH_UP}">${upAll.length} en amont</span> ·
-        <span style="color:${_CH_DOWN}">${downAll.length} en aval</span></div>
-      <div style="overflow:auto;padding:0 4px 6px">
-      <div style="padding:4px 4px;color:${_CH_UP}"><b>Origines</b> (bouts de chaîne en amont)</div>
-      ${upLeaves.length?upLeaves.map(n=>row(n,_CH_UP)).join(''):'<div style="padding:2px 6px;color:var(--fbd-text3)">Aucune (le bloc n\'a pas d\'entrée câblée).</div>'}
-      <div style="padding:8px 4px 4px;color:${_CH_DOWN}"><b>Aboutissements</b> (bouts de chaîne en aval)</div>
-      ${downLeaves.length?downLeaves.map(n=>row(n,_CH_DOWN)).join(''):'<div style="padding:2px 6px;color:var(--fbd-text3)">Aucun (la sortie n\'est pas câblée).</div>'}
-      <div style="padding:6px 4px;color:var(--fbd-text3);font-size:9px">Un clic sur un bloc situé dans un groupe ouvre ce groupe.</div>
-      </div>`;
-  } else {
-    body=`<div style="padding:10px 8px;color:var(--fbd-text2)">${msg||''}</div>`;
-  }
-  box.innerHTML=`<div style="display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--fbd-border)">
-      <b style="color:var(--fbd-accent);flex:1">Chaîne amont / aval</b>
-      <button class="pb" onclick="_chainAnchor()" title="Recalculer depuis le bloc sélectionné" style="flex:none;width:auto;margin:0;padding:3px 8px;white-space:nowrap">⚓ Ré-ancrer</button>
-      <button class="pb" onclick="closeChain()" title="Fermer (T ou Échap)" style="flex:none;width:auto;margin:0;padding:3px 8px">✕</button></div>${body}`;
-}
-function _drawChainWires(){
-  if(!_chainOn||!_chain) return;
-  const all=_chainBuild();
-  if(_chain.sig!==_chainSig(all)){
-    const c=_chainCompute(all,_chain.key,_chain.anchor);
-    if(!c){ closeChain(); return; }
-    _chain=c; setTimeout(_chainPanel,0);
-  }
-  const p=pg(); if(!p) return;
-  const draw=(wset,col)=>p.wires.forEach(w=>{
-    if(!wset.has(w)) return;
-    if(!('sx'in w)) recalcW(w);
-    ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=.9; ctx.lineWidth=4/vp.scale; ctx.setLineDash([]);
-    ctx.beginPath(); ctx.moveTo(w.sx,w.sy); bez(ctx,w.sx,w.sy,w.dx,w.dy); ctx.stroke(); ctx.restore();
-  });
-  draw(_chain.up.wset,_CH_UP); draw(_chain.down.wset,_CH_DOWN);
-}
-function _drawChainBlocks(){
-  if(!_chainOn||!_chain) return;
-  const p=pg(); if(!p) return;
-  const key=_chainCurKey(_chain.all);
-  const ring=(o,col,w)=>{ ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=w/vp.scale;
-    ctx.strokeRect(o.x-5/vp.scale,o.y-5/vp.scale,o.w+10/vp.scale,o.h+10/vp.scale); ctx.restore(); };
-  const onPage=n=>n.ctx.key===key&&p.blocks.includes(n.b);
-  _chain.up.nodes.forEach(n=>{ if(onPage(n)) ring(n.b,_CH_UP,n.leaf?3.5:2); });
-  _chain.down.nodes.forEach(n=>{ if(onPage(n)) ring(n.b,_CH_DOWN,n.leaf?3.5:2); });
-  if(_chain.key===key){ const a=p.blocks.find(x=>x.id===_chain.anchor); if(a) ring(a,'#ffffff',3); }
-}
-
-function _drawConnLinks(){
-  const p=pg(); if(!p)return;
-  _drawChainBlocks();
-  _drawRFHits();
-  const s=selB;
-  if(s && _isConnBlk(s)){
-    const num=s.params.num;
-    p.blocks.forEach(o=>{
-      if(o===s||!_isConnBlk(o)||o.params.num!==num)return;
-      ctx.save();
-      ctx.strokeStyle='#00eaff';ctx.lineWidth=2/vp.scale;
-      ctx.setLineDash([6/vp.scale,4/vp.scale]);
-      ctx.strokeRect(o.x-4/vp.scale,o.y-4/vp.scale,o.w+8/vp.scale,o.h+8/vp.scale);
-      ctx.globalAlpha=.55;ctx.beginPath();
-      ctx.moveTo(s.x+s.w/2,s.y+s.h/2);ctx.lineTo(o.x+o.w/2,o.y+o.h/2);ctx.stroke();
-      ctx.restore();
-    });
-  }
-  if(_flash){
-    const now=performance.now();
-    if(now>=_flash.until){_flash=null;return;}
-    if(_flash.pageId===p.id){
-      const o=p.blocks.find(x=>x.id===_flash.bid);
-      if(o){
-        const pulse=.5+.5*Math.sin(now/120);
-        ctx.save();ctx.strokeStyle='#ffd33d';ctx.globalAlpha=.4+.6*pulse;
-        ctx.lineWidth=(3+2*pulse)/vp.scale;
-        ctx.strokeRect(o.x-6/vp.scale,o.y-6/vp.scale,o.w+12/vp.scale,o.h+12/vp.scale);
-        ctx.restore();
-      }
-    }
-    requestAnimationFrame(render);
-  }
 }
 
 // ════════════════════════════════════════════════════════════

@@ -248,6 +248,7 @@ footer {
   <a href="#apercu">Aperçu général</a>
   <a href="#archi">Architecture du projet</a>
   <a href="#install">Installation</a>
+  <a href="#install-deb" class="sub">Paquets .deb (PC et RPi)</a>
 
   <div class="nav-section">Interface PC</div>
   <a href="#interface-pc">Fenêtre principale</a>
@@ -255,6 +256,11 @@ footer {
   <a href="#palette">Palette de blocs</a>
   <a href="#pages">Navigation multi-pages</a>
   <a href="#props">Panneau propriétés</a>
+  <a href="#fbd-outils">Outils d'analyse du schéma</a>
+  <a href="#fbd-outils" class="sub">Recherche de blocs (Ctrl+F)</a>
+  <a href="#fbd-outils-rf" class="sub">Recherche de registre RF (R)</a>
+  <a href="#fbd-outils-chaine" class="sub">Chaîne amont / aval (T)</a>
+  <a href="#fbd-outils-conn" class="sub">Connecteurs jumelés (J)</a>
 
   <div class="nav-section">Bibliothèque de blocs</div>
   <a href="#blocs-es">E/S — Entrées / Sorties</a>
@@ -289,9 +295,11 @@ footer {
 
   <div class="nav-section">Interface PC</div>
   <a href="#gpio-config-dialog">Configurateur GPIO</a>
+  <a href="#analog-config-dialog">Configurateur Analogique</a>
 
   <div class="nav-section">Déploiement RPi</div>
   <a href="#deploy">Déploiement SSH</a>
+  <a href="#rpi-monitor">Moniteur RPi en direct</a>
   <a href="#tailscale-headscale">Tailscale / Headscale</a>
   <a href="#server">Serveur autonome</a>
   <a href="#setup-autonomy">setup_autonomy.sh</a>
@@ -371,11 +379,12 @@ footer {
         <li><a href="#props">Panneau propriétés</a></li>
       </ul>
     </li>
-    <li><a href="#blocs-es">Bibliothèque de blocs (56 blocs)</a></li>
+    <li><a href="#blocs-es">Bibliothèque de blocs (86 blocs)</a></li>
     <li><a href="#blocs-group">Blocs Groupes — Encapsulation &amp; bibliothèque</a></li>
     <li><a href="#carithm">Bloc CArithm — Code C embarqué</a></li>
     <li><a href="#carte-io">Matériel — Carte E/S NTC40</a></li>
     <li><a href="#deploy">Déploiement sur Raspberry Pi</a></li>
+    <li><a href="#tests">🧪 Tests automatisés — parité studio/RPi</a></li>
     <li><a href="#scada-intro">Interface SCADA distante</a></li>
     <li><a href="#api">Référence API REST</a></li>
     <li><a href="#exemples">Exemples de programmes</a></li>
@@ -436,46 +445,64 @@ footer {
 <h2 id="archi"><span class="icon">🏗</span> Architecture du projet</h2>
 
 <pre><code>rpi-plc-studio/
-├── <span class="val">main.py</span>                    <span class="comment"># Point d'entrée — lance l'interface PyQt5</span>
-├── <span class="val">install.sh</span>                 <span class="comment"># Script d'installation des dépendances PC</span>
+├── <span class="val">main.py</span>                     <span class="comment"># Point d'entrée — lance l'interface PyQt5</span>
+├── <span class="val">install.sh</span>                  <span class="comment"># Installation des dépendances PC (poste de travail)</span>
+├── <span class="val">install-studio.sh</span>           <span class="comment"># Installation via le paquet .deb (rpi-plc-studio)</span>
 ├── core/
-│   ├── <span class="val">plc_engine.py</span>          <span class="comment"># Moteur PLC PC : scan, blocs, analogique, PID</span>
-│   ├── <span class="val">deployer.py</span>            <span class="comment"># Déploiement SSH vers le RPi</span>
-│   └── <span class="val">project.py</span>             <span class="comment"># Gestion des fichiers projet (.json)</span>
+│   ├── <span class="val">plc_engine.py</span>           <span class="comment"># Moteur PLC PC : scan, 89 types de blocs, analogique, PID</span>
+│   ├── <span class="val">deployer.py</span>             <span class="comment"># Déploiement SSH vers le RPi — vérification md5 du contenu</span>
+│   ├── <span class="val">project.py</span>              <span class="comment"># Gestion des fichiers projet (.plcproj)</span>
+│   └── <span class="val">headscale_api.py</span>        <span class="comment"># Client REST Headscale — voir § Tailscale / Headscale</span>
 ├── ui/
-│   ├── <span class="val">main_window.py</span>         <span class="comment"># Fenêtre principale PyQt5</span>
-│   ├── <span class="val">block_editor.py</span>        <span class="comment"># Widget QWebEngineView + PyBridge</span>
-│   ├── <span class="val">fbd_canvas.html</span>        <span class="comment"># Canvas HTML5/Canvas — éditeur FBD complet</span>
-│   ├── <span class="val">gpio_panel.py</span>          <span class="comment"># Panneau GPIO temps réel</span>
-│   └── <span class="val">deploy_dialog.py</span>       <span class="comment"># Fenêtre de déploiement SSH</span>
-├── resources/
-│   └── <span class="val">style.qss</span>              <span class="comment"># Thème sombre de l'application</span>
-└── rpi_server/                    <span class="comment"># Tout ce qui tourne SUR le RPi</span>
-    ├── <span class="val">server.py</span>              <span class="comment"># Serveur Flask + moteur PLC 51 blocs</span>
-    ├── <span class="val">auth.py</span>                <span class="comment"># Authentification, sessions, HTTPS auto-signé</span>
-    ├── <span class="val">telegram_bot.py</span>        <span class="comment"># Bot Telegram — alertes et commandes</span>
-    ├── <span class="val">recipes.py</span>             <span class="comment"># Gestionnaire de recettes/profils</span>
-    ├── <span class="val">backup_manager.py</span>      <span class="comment"># Sauvegardes versionnées (20 versions)</span>
-    ├── <span class="val">calibration.py</span>         <span class="comment"># Calibration offset/gain par sonde</span>
-    ├── <span class="val">report_generator.py</span>    <span class="comment"># Rapports HTML/CSV avec sparklines</span>
-    ├── <span class="val">config.json</span>            <span class="comment"># Configuration matérielle + sécurité + Telegram</span>
-    ├── <span class="val">programme.json</span>         <span class="comment"># Programme PLC actif</span>
-    ├── <span class="val">calibration.json</span>       <span class="comment"># Calibrations des sondes (généré)</span>
-    ├── <span class="val">recipes.json</span>           <span class="comment"># Recettes de consignes (généré)</span>
-    ├── <span class="val">synoptic.json</span>          <span class="comment"># Synoptique personnalisé (généré)</span>
-    ├── <span class="val">history.db</span>             <span class="comment"># SQLite — historique 30 jours</span>
-    ├── backups/                   <span class="comment"># Sauvegardes versionnées auto</span>
+│   ├── <span class="val">main_window.py</span>          <span class="comment"># Fenêtre principale PyQt5</span>
+│   ├── <span class="val">block_editor.py</span>         <span class="comment"># Widget QWebEngineView + pont Python ↔ JS (compile le programme)</span>
+│   ├── <span class="val">fbd_canvas.html</span>         <span class="comment"># Coquille HTML de l'éditeur FBD</span>
+│   ├── <span class="val">fbd_canvas.js</span>           <span class="comment"># Éditeur FBD complet — palette, canvas, compilateur de fils</span>
+│   ├── <span class="val">gpio_panel.py</span>           <span class="comment"># Panneau GPIO temps réel</span>
+│   ├── <span class="val">gpio_config_dialog.py</span>   <span class="comment"># Éditeur de configuration GPIO — voir § Configurateur GPIO</span>
+│   ├── <span class="val">analog_config_dialog.py</span> <span class="comment"># Éditeur des sondes analogiques (types, canaux ADS1115)</span>
+│   ├── <span class="val">deploy_dialog.py</span>        <span class="comment"># Fenêtre de déploiement SSH — Analyser / Programme seul / Déployer</span>
+│   ├── <span class="val">synoptic_window.py</span>      <span class="comment"># Fenêtre dédiée à l'éditeur de synoptique</span>
+│   ├── <span class="val">synoptic_editor.py</span>      <span class="comment"># Éditeur de synoptique embarqué (QWebEngineView)</span>
+│   ├── <span class="val">synoptic_canvas.html</span>    <span class="comment"># Coquille HTML de l'éditeur de synoptique</span>
+│   ├── <span class="val">synoptic_canvas.js</span>      <span class="comment"># Moteur JS du synoptique — identique à rpi_server/static/synoptic_canvas.js</span>
+│   ├── <span class="val">synoptic_viewer.py</span>      <span class="comment"># Visionneuse plein écran du synoptique RPi</span>
+│   ├── <span class="val">regulech_view.py</span>        <span class="comment"># Vue embarquée du synoptique de régulation thermique</span>
+│   └── <span class="val">rpi_monitor.py</span>          <span class="comment"># Moniteur RPi en direct (polling de l'état)</span>
+├── resources/                  <span class="comment"># Copies packagées dans le .deb studio</span>
+│   ├── <span class="val">style.qss</span>, <span class="val">theme_dark.qss</span>, <span class="val">theme_light.qss</span>   <span class="comment"># Thèmes de l'application</span>
+│   ├── <span class="val">plc_engine.py</span>           <span class="comment"># Copie de core/plc_engine.py — doit rester identique</span>
+│   └── <span class="val">rpi-plc-studio-doc.html</span>, <span class="val">doc-blocs-metier.html</span>, <span class="val">blocs-primitifs-doc.html</span>, <span class="val">rpi-plc-studio-icon.svg</span>
+├── tests/                      <span class="comment"># Bancs de test studio ↔ RPi — voir § Tests automatisés</span>
+│   ├── <span class="val">parity_fuzz.py</span>, <span class="val">editor_keys.json</span>
+│   └── <span class="val">test_block_isolation.py</span>, <span class="val">test_deployer_md5.py</span>
+└── rpi_server/                 <span class="comment"># Tout ce qui tourne SUR le Raspberry Pi</span>
+    ├── <span class="val">server.py</span>               <span class="comment"># Serveur Flask + moteur PLC (89 types de blocs)</span>
+    ├── <span class="val">auth.py</span>                 <span class="comment"># Authentification, sessions, HTTPS auto-signé</span>
+    ├── <span class="val">telegram_bot.py</span>         <span class="comment"># Bot Telegram — alertes et commandes</span>
+    ├── <span class="val">mqtt_bridge.py</span>          <span class="comment"># Pont MQTT — utilisé par le bloc MQTT</span>
+    ├── <span class="val">recipes.py</span>              <span class="comment"># Gestionnaire de recettes/profils</span>
+    ├── <span class="val">backup_manager.py</span>       <span class="comment"># Sauvegardes versionnées (20 versions)</span>
+    ├── <span class="val">calibration.py</span>          <span class="comment"># Calibration offset/gain par sonde</span>
+    ├── <span class="val">report_generator.py</span>     <span class="comment"># Rapports HTML/CSV avec sparklines</span>
+    ├── <span class="val">testeur_plc.html</span>        <span class="comment"># Page de test manuel (supervision autonome)</span>
+    ├── <span class="val">config.json</span>             <span class="comment"># Configuration matérielle + sécurité + Telegram</span>
+    ├── <span class="val">programme.json</span>          <span class="comment"># Programme PLC actif</span>
+    ├── <span class="val">calibration.json</span>        <span class="comment"># Calibrations des sondes (généré)</span>
+    ├── <span class="val">recipes.json</span>            <span class="comment"># Recettes de consignes (généré)</span>
+    ├── <span class="val">synoptic.json</span>           <span class="comment"># Synoptique personnalisé (généré)</span>
+    ├── <span class="val">history.db</span>              <span class="comment"># SQLite — historique 30 jours</span>
+    ├── <span class="val">backups/</span>                <span class="comment"># Sauvegardes versionnées auto</span>
+    ├── <span class="val">rpi-plc.service</span>         <span class="comment"># Unité systemd</span>
+    ├── <span class="val">setup_autonomy.sh</span>       <span class="comment"># Script d'installation complet (groupes, I²C/SPI, service)</span>
     ├── static/
-    │   ├── <span class="val">sw.js</span>              <span class="comment"># Service Worker PWA</span>
-    │   ├── <span class="val">manifest.json</span>      <span class="comment"># Manifest PWA</span>
-    │   ├── <span class="val">icon-192.png</span>       <span class="comment"># Icônes installation mobile</span>
-    │   └── <span class="val">icon-512.png</span>
-    ├── <span class="val">rpi-plc.service</span>        <span class="comment"># Unité systemd</span>
-    ├── <span class="val">setup_autonomy.sh</span>      <span class="comment"># Script installation complet</span>
+    │   ├── <span class="val">sw.js</span>, <span class="val">manifest.json</span>, <span class="val">icon-192.png</span>, <span class="val">icon-512.png</span>   <span class="comment"># PWA</span>
+    │   └── <span class="val">synoptic_canvas.js</span>  <span class="comment"># Moteur JS du synoptique — identique à ui/synoptic_canvas.js</span>
     └── templates/
-        ├── <span class="val">index.html</span>         <span class="comment"># Interface monitoring (port 5000/)</span>
-        ├── <span class="val">scada.html</span>         <span class="comment"># SCADA 11 onglets (port 5000/scada)</span>
-        └── <span class="val">synoptic.html</span>      <span class="comment"># Éditeur synoptique (port 5000/synoptic)</span></code></pre>
+        ├── <span class="val">index.html</span>          <span class="comment"># Interface monitoring (port 5000/)</span>
+        ├── <span class="val">scada.html</span>          <span class="comment"># SCADA 11 onglets (port 5000/scada)</span>
+        ├── <span class="val">synoptic.html</span>       <span class="comment"># Éditeur synoptique (port 5000/synoptic)</span>
+        └── <span class="val">synoptic_mobile.html</span> <span class="comment"># Version mobile du synoptique</span></code></pre>
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
@@ -513,6 +540,26 @@ sudo i2cdetect -y 1
 <span class="comment"># Doit afficher : 48, 49, 4a</span></code></pre>
 
 <div class="tip"><div class="ci">✅</div><p><strong>Vérification rapide :</strong> Si <code>i2cdetect</code> affiche bien 0x48, 0x49 et 0x4A, les 3 ADS1115 sont correctement câblés et l'I²C est actif.</p></div>
+
+
+<h3 id="install-deb">Installation par paquets .deb (recommandé)</h3>
+<p>Deux paquets Debian sont fournis : l'un pour le <strong>PC</strong> (Studio), l'autre pour le <strong>Raspberry Pi</strong> (serveur autonome). Ils s'installent indépendamment.</p>
+<table>
+  <tr><th>Paquet</th><th>Cible</th><th>Installation</th><th>Contenu</th></tr>
+  <tr><td><code>rpi-plc-studio_3.5-16.deb</code></td><td>PC Linux (Kubuntu / Ubuntu / Debian)</td><td><code>sudo apt install ./rpi-plc-studio_3.5-16.deb</code></td><td>Application dans <code>/opt/rpi-plc-studio</code>, lanceur <code>rpi-plc-studio</code>, entrée de menu <em>Électronique</em>, association des fichiers <code>.plcproj</code></td></tr>
+  <tr><td><code>rpi-plc_3.5-11-serveur.deb</code></td><td>Raspberry Pi (Bookworm / Bullseye, 32 ou 64 bits)</td><td><code>sudo apt install ./rpi-plc_3.5-11-serveur.deb</code></td><td>Serveur dans <code>/opt/rpi-plc</code>, service systemd <code>rpi-plc</code>, données dans <code>~/rpi-plc-data</code></td></tr>
+</table>
+
+<h3>Ce que fait l'installation</h3>
+<ul>
+  <li><strong>Studio :</strong> installe les dépendances manquantes (PyQt5, QtWebEngine, paramiko, requests) puis crée <code>~/.rpi-plc-studio</code> (journaux). Les projets restent dans <code>~/rpi-plc-studio/</code>.</li>
+  <li><strong>Serveur :</strong> crée <code>~/rpi-plc-data</code> avec un <code>config.json</code> par défaut (copié depuis <code>/etc/rpi-plc/config.json.default</code> seulement s'il n'existe pas : une mise à jour ne l'écrase jamais), active l'I²C, ajoute l'utilisateur aux groupes <code>gpio</code>, <code>spi</code>, <code>i2c</code>, génère et démarre le service systemd (<code>StartLimitIntervalSec</code> et <code>StartLimitBurst</code> sont dans la section <code>[Unit]</code>, seule section où systemd les prend en compte).</li>
+  <li>Interface web du serveur : <code>http://&lt;IP-du-RPi&gt;:5000</code> · journaux : <code>journalctl -u rpi-plc -f</code>.</li>
+</ul>
+
+<div class="tip"><div class="ci">⚠</div><p><strong>Dépendances du serveur :</strong> <code>openssl</code> est requis (le certificat HTTPS auto-signé est généré avec cette commande). <code>python3-rpi.gpio</code> (ou <code>python3-rpi-lgpio</code> sur Raspberry Pi 5) est recommandé : sans lui, <code>server.py</code> démarre en <strong>simulation</strong> et le postinst l'indique.</p></div>
+
+<div class="tip"><div class="ci">🔐</div><p><strong>Aucun secret dans les paquets :</strong> le <code>config.json</code> embarqué ne contient ni jeton Telegram, ni identifiants personnels (identifiants par défaut uniquement). Les réglages réels sont conservés dans le projet et sur le RPi.</p></div>
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
@@ -561,6 +608,56 @@ sudo i2cdetect -y 1
 </table>
 
 <!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="analog-config-dialog"><span class="icon">🌡</span> Configurateur Analogique</h2>
+
+<p class="section-intro">
+  Le configurateur analogique (<strong>Raspberry Pi → 🌡 Configurer les sondes…</strong>, raccourci <code>Ctrl+T</code>) permet de définir le type de chaque sonde raccordée aux 3 cartes ADS1115, et de déclarer les sondes DS18B20 (1-Wire), sans éditer <code>config.json</code> à la main. La configuration est sauvegardée dans le projet <code>.plcproj</code> (champ <code>plc.analog_config</code>) et poussée vers le canvas FBD, le synoptique et le <code>config.json</code> du serveur lors du déploiement.
+</p>
+
+<h3>Paramètres globaux du pont diviseur</h3>
+<table>
+  <tr><th>Champ</th><th>Valeurs</th><th>Description</th></tr>
+  <tr><td><code>r_ref_ohm</code></td><td>100 – 100 000 Ω (défaut 10 000)</td><td>Résistance de référence du pont diviseur, commune aux 12 canaux ADS1115.</td></tr>
+  <tr><td><code>vcc</code></td><td>1,8 – 5,0 V (défaut 3,3)</td><td>Tension d'alimentation du pont, commune aux 12 canaux.</td></tr>
+</table>
+
+<h3>Sondes ADS1115 (ANA0–ANA11)</h3>
+<p>Les 12 canaux sont fixes (<code>ANA0</code>…<code>ANA11</code>, répartis sur 3 cartes ADS1115) ; seuls le nom et le type de sonde sont éditables par ligne :</p>
+<table>
+  <tr><th>Champ</th><th>Valeurs</th><th>Description</th></tr>
+  <tr><td><code>Nom</code></td><td>Texte libre</td><td>Libellé affiché dans le SCADA et les blocs FBD (ex : <em>Ballon ECS</em>).</td></tr>
+  <tr><td><code>Type de sonde</code></td><td><code>PT100</code>, <code>PT1000</code>, <code>NTC10K</code>, <code>NTC10K_3977</code></td><td>Voir § <a href="#carte-io">Types de sondes supportés</a>. Peut différer d'un canal à l'autre.</td></tr>
+</table>
+
+<h3>Sondes DS18B20 (1-Wire)</h3>
+<p>Liste à taille variable, distincte des 12 canaux ADS1115 — bouton <strong>+ Ajouter une sonde DS18B20</strong> pour en déclarer une nouvelle, <strong>✕</strong> pour en retirer une :</p>
+<table>
+  <tr><th>Champ</th><th>Valeurs</th><th>Description</th></tr>
+  <tr><td><code>id</code></td><td>Texte libre (ex : <code>DS0</code>)</td><td>Référence utilisée par le bloc <code>DS_IN(ref=...)</code> dans le canvas FBD.</td></tr>
+  <tr><td><code>Nom</code></td><td>Texte libre</td><td>Libellé affiché dans le SCADA (ex : <em>Sonde extérieure</em>).</td></tr>
+  <tr><td><code>serial</code></td><td><code>28-xxxxxxxxxxxx</code>, ou vide</td><td>Numéro de série 1-Wire. Laissé vide, la sonde est assignée par ordre de découverte sur le bus (voir § <a href="#carte-io">Carte E/S</a> et § Dépannage pour la commande de recherche du serial).</td></tr>
+</table>
+
+<h3>Workflow typique</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Ouvrir le configurateur</strong> via <em>Raspberry Pi → 🌡 Configurer les sondes…</em> (Ctrl+T).</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Choisir le type de sonde</strong> pour chaque canal ADS1115 utilisé, et ajuster <code>r_ref_ohm</code>/<code>vcc</code> si le pont diffère du standard (10 kΩ / 3,3 V).</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Déclarer les sondes DS18B20</strong> le cas échéant : <em>+ Ajouter une sonde DS18B20</em>, renseigner l'<code>id</code>, le nom, et le <code>serial</code> si plusieurs sondes 1-Wire coexistent sur le bus.</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Valider</strong> — la config est sauvegardée dans <code>plc.analog_config</code> du projet <code>.plcproj</code>.</div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-body"><strong>Déployer</strong> via <em>🚀 Déployer</em> — le <code>config.json</code> du serveur RPi est mis à jour avec les sections <code>"analog"</code> (<code>ads</code>, <code>ds18b20</code>) correspondantes.</div></div>
+</div>
+
+<div class="tip">
+  <span class="ci">💡</span>
+  <p>Le type de sonde choisi ici est immédiatement reflété dans les blocs <code>ANA_IN</code>, <code>PT_IN</code>, <code>SENSOR</code> et <code>DS_IN</code> du canvas FBD : les références <code>ANA0</code>…<code>ANA11</code> et <code>DS0</code>, <code>DS1</code>… affichées dans ces blocs proviennent de ce configurateur, pas d'une saisie libre.</p>
+</div>
+
+<div class="note">
+  <span class="ci">ℹ</span>
+  <p>Contrairement au GPIO (pin fixe, mode/pull configurables), les 12 canaux ADS1115 sont des emplacements fixes (<code>ANA0</code>…<code>ANA11</code>) : seuls le nom et le type de sonde changent. Les sondes DS18B20 sont à l'inverse une liste libre, sans limite de nombre liée au matériel (seule la bande passante du bus 1-Wire la limite en pratique).</p>
+</div>
+
+
 <h2 id="gpio-config-dialog"><span class="icon">📌</span> Configurateur GPIO</h2>
 
 <p class="section-intro">
@@ -577,6 +674,17 @@ sudo i2cdetect -y 1
   <tr><td><code>Pull</code></td><td>up / down / off</td><td>Résistance de tirage interne (pour les entrées uniquement).</td></tr>
   <tr><td><code>Actif bas</code></td><td>☑ / ☐</td><td>Si coché, la logique est inversée : GPIO à 0 V = sortie active (typique des relais opto-couplés).</td></tr>
 </table>
+
+<h3>Source de vérité et synchronisation</h3>
+<p>Le <strong>projet ouvert fait foi</strong> : le configurateur démarre toujours à partir de la configuration GPIO enregistrée dans le projet (<code>plc.gpio_config</code>). Le <code>config.json</code> local de l'application ne sert que de repli quand le projet n'en contient pas.</p>
+<p>À chaque ouverture de projet et à chaque validation du configurateur, la même configuration est appliquée partout :</p>
+<ul>
+  <li>le <code>config.json</code> local (lu par le déploiement) ;</li>
+  <li>les menus de l'éditeur FBD (noms des broches dans les listes <em>GPIO sortie</em> / <em>GPIO entrée</em>) ;</li>
+  <li>le synoptique ;</li>
+  <li>le RPi, au déploiement (la configuration GPIO du projet est prioritaire sur celle déjà présente sur le RPi).</li>
+</ul>
+<div class="tip"><div class="ci">💡</div><p>Quand Studio est installé par paquet <code>.deb</code>, son dossier <code>/opt/rpi-plc-studio</code> n'est pas modifiable par l'utilisateur : l'écriture du <code>config.json</code> local est alors ignorée sans erreur, et le projet reste la référence. Rien à faire de votre côté.</p></div>
 
 <h3>Broches réservées et avertissements</h3>
 <table>
@@ -613,7 +721,7 @@ sudo i2cdetect -y 1
   L'éditeur est un canvas HTML5 embarqué dans un widget QWebEngineView. Il gère la création de blocs, le traçage de fils, la navigation multi-pages, et communique avec le moteur PLC via un pont Python ↔ JavaScript (PyBridge).
 </div>
 
-<h3>Navigation dans le canvas</h3>
+<h3 id="canvas">Navigation dans le canvas</h3>
 <table>
   <tr><th>Action</th><th>Geste / Touche</th></tr>
   <tr><td>Déplacer la vue</td><td>Clic droit + glisser, ou Espace + glisser</td></tr>
@@ -653,7 +761,7 @@ sudo i2cdetect -y 1
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="palette"><span class="icon">📦</span> Palette de blocs</h2>
 
-<p>La palette à gauche du canvas liste les <strong>56 blocs disponibles</strong> en 12 catégories. Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
+<p>La palette à gauche du canvas liste les <strong>86 blocs disponibles</strong> en 15 catégories (E/S, Logique, Bobines, Temps, Compteurs, Comparaison, Analogique, Calcul, Arithmétique, Variables, Actionneurs, Métier, Connecteurs, Groupes, Cartouche). Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
 
 <h3>Pour ajouter un bloc</h3>
 <ul>
@@ -744,6 +852,9 @@ sudo i2cdetect -y 1
     <div class="block-ports"><span class="port-in">IN</span><span class="port-out">OUT</span></div>
   </div>
 </div>
+
+<h3>Navigation entre connecteurs jumelés</h3>
+<p>Quand un connecteur (<code>CONN</code>, <code>CONN_TX</code>, <code>CONN_RX</code>) est sélectionné, le panneau propriétés liste tous les autres connecteurs de même numéro, avec la page où ils se trouvent et leur rôle (<span style="color:#f0883e">TX</span> émetteur, <span style="color:#39d3b0">RX</span> récepteur, <span style="color:#58a6ff">⇄</span> bidirectionnel). Un clic sur une ligne ouvre la page concernée, centre la vue sur le bloc et le sélectionne. Le détail des raccourcis est dans <a href="#fbd-outils-conn">Outils d'analyse du schéma</a>.</p>
 
 
 <!-- ════════════════════════════════════════════════════════════ -->
@@ -1584,30 +1695,28 @@ T_celsius = T_kelvin - 273.15
     <span class="key">"sample_rate"</span>: <span class="val">860</span>,          <span class="comment">// Fréquence d'échantillonnage ADS1115 (8/16/32/64/128/250/475/860 SPS)</span>
     <span class="key">"r_ref_ohm"</span>:  <span class="val">10000</span>,        <span class="comment">// Résistance de référence du pont diviseur (Ω)</span>
     <span class="key">"vcc"</span>:        <span class="val">3.3</span>,          <span class="comment">// Tension d'alimentation du pont (V)</span>
-    <span class="key">"probe_type"</span>: <span class="str">"NTC40"</span>,      <span class="comment">// Type de sonde par défaut : "PT100", "PT1000", "NTC10K", "NTC40"</span>
-    <span class="key">"ntc_beta"</span>:   <span class="val">3950</span>,         <span class="comment">// Coefficient β de la NTC (K) — utilisé si probe_type="NTC40" ou "NTC10K"</span>
-    <span class="key">"ntc_r0"</span>:    <span class="val">40000</span>,        <span class="comment">// Résistance nominale NTC à 25°C (Ω) — 40 000 Ω pour NTC40</span>
+    <span class="key">"probe_type"</span>: <span class="str">"NTC10K"</span>,     <span class="comment">// Type de sonde par défaut : "PT100", "PT1000", "NTC10K", "NTC10K_3977"</span>
     <span class="key">"ads"</span>: [
       {
         <span class="key">"id"</span>: <span class="str">"ADS0"</span>, <span class="key">"address"</span>: <span class="str">"0x48"</span>,
         <span class="key">"channels"</span>: [
-          { <span class="key">"id"</span>: <span class="str">"ANA0"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 1"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
-          { <span class="key">"id"</span>: <span class="str">"ANA1"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 2"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
-          { <span class="key">"id"</span>: <span class="str">"ANA2"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 3"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
-          { <span class="key">"id"</span>: <span class="str">"ANA3"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 4"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> }
+          { <span class="key">"id"</span>: <span class="str">"ANA0"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 1"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA1"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 2"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA2"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 3"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA3"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 4"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> }
         ]
       },
       {
         <span class="key">"id"</span>: <span class="str">"ADS1"</span>, <span class="key">"address"</span>: <span class="str">"0x49"</span>,
         <span class="key">"channels"</span>: [
-          { <span class="key">"id"</span>: <span class="str">"ANA4"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 5"</span>, <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA4"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 5"</span>, <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
           <span class="comment">// ... ANA5, ANA6, ANA7</span>
         ]
       },
       {
         <span class="key">"id"</span>: <span class="str">"ADS2"</span>, <span class="key">"address"</span>: <span class="str">"0x4A"</span>,
         <span class="key">"channels"</span>: [
-          { <span class="key">"id"</span>: <span class="str">"ANA8"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 9"</span>,  <span class="key">"probe"</span>: <span class="str">"NTC40"</span> },
+          { <span class="key">"id"</span>: <span class="str">"ANA8"</span>, <span class="key">"name"</span>: <span class="str">"Sonde 9"</span>,  <span class="key">"probe"</span>: <span class="str">"NTC10K"</span> },
           <span class="comment">// ... ANA9, ANA10, ANA11</span>
         ]
       }
@@ -1627,13 +1736,18 @@ T_celsius = T_kelvin - 273.15
   <tr><th>probe_type</th><th>Méthode de calcul</th><th>Paramètres requis</th></tr>
   <tr><td><code>PT100</code></td><td>Table de résistance Callendar-Van Dusen, R₀=100 Ω</td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
   <tr><td><code>PT1000</code></td><td>Même algorithme, R₀=1000 Ω</td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
-  <tr><td><code>NTC10K</code></td><td>Steinhart-Hart β : R₀=10 kΩ à 25°C</td><td><code>ntc_beta</code>, <code>ntc_r0</code>, <code>r_ref_ohm</code>, <code>vcc</code></td></tr>
-  <tr><td><code>NTC40</code></td><td>Steinhart-Hart β : R₀=40 kΩ à 25°C — <strong>sonde utilisée sur cette carte</strong></td><td><code>ntc_beta</code>=3950, <code>ntc_r0</code>=40000, <code>r_ref_ohm</code>, <code>vcc</code></td></tr>
+  <tr><td><code>NTC10K</code></td><td>Steinhart-Hart β : R₀=10 kΩ à 25°C, β=3950 — <strong>type par défaut, utilisé sur cette carte</strong></td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
+  <tr><td><code>NTC10K_3977</code></td><td>Même pont, β=3977 (variante précision pour certains lots de sondes 10 kΩ)</td><td><code>r_ref_ohm</code>, <code>vcc</code></td></tr>
 </table>
 
 <div class="note">
   <span class="ci">ℹ</span>
-  <p>Le type de sonde peut être surchargé <strong>par canal</strong> via le champ <code>"probe"</code> dans la définition du canal. Cela permet de mélanger PT100, PT1000, NTC10K et NTC40 sur le même système.</p>
+  <p>Le type de sonde peut être surchargé <strong>par canal</strong> via le champ <code>"probe"</code> dans la définition du canal. Cela permet de mélanger PT100, PT1000, NTC10K et NTC10K_3977 sur le même système.</p>
+
+<div class="warn">
+  <span class="ci">⚠</span>
+  <p><strong>« NTC40 » n'est pas un type implémenté.</strong> Le code (<code>voltage_to_celsius</code>, dans <code>rpi_server/server.py</code> et <code>core/plc_engine.py</code>) ne reconnaît que <code>PT100</code>, <code>PT1000</code>, <code>NTC10K</code> et <code>NTC10K_3977</code> — tout autre texte dans <code>"probe"</code>/<code>"probe_type"</code>, y compris <code>"NTC40"</code>, tombe silencieusement dans le calcul PT100 (résistance linéaire R₀=100&nbsp;Ω) et donne une température fausse. Les clés <code>ntc_beta</code>/<code>ntc_r0</code> montrées dans d'anciens exemples ne sont lues par aucun des deux moteurs : β et R₀ sont fixés dans le code pour chaque type (3950/10000 pour <code>NTC10K</code>, 3977/10000 pour <code>NTC10K_3977</code>), pas configurables par ce biais. « NTC40 » semble être le nom commercial de la carte/sonde physique, mais le calcul réellement exécuté utilise la formule <code>NTC10K</code> (R₀=10&nbsp;kΩ) — c'est d'ailleurs ce que votre <code>config.json</code> actuel utilise sur les 12 canaux. Si les sondes sont physiquement des 40&nbsp;kΩ, un vrai calcul <code>NTC10K</code> appliqué dessus donnerait une température décalée ; dites-moi si c'est le cas, j'ajouterai un type <code>NTC40</code> réel (R₀=40000) au moteur plutôt que de simplement corriger la doc.</p>
+</div>
 </div>
 
 <h4>Expansion analogique — jusqu'à 3 cartes ADS1115 (12 canaux)</h4>
@@ -1670,6 +1784,22 @@ scp mon_programme.json pi@IP-RPi:~/rpi_server/programme.json
 
 <span class="comment"># Redémarrer le service</span>
 ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
+
+<h3 id="rpi-monitor">📡 Moniteur RPi en direct</h3>
+<p>Le menu <strong>Raspberry Pi → Démarrer moniteur RPi en direct</strong> (<kbd>F9</kbd>) interroge l'état du serveur 5 fois par seconde (<code>/api/state</code>, toutes les 200 ms) et affiche en direct les entrées, sorties, sondes et registres du RPi dans le Studio.</p>
+<ul>
+  <li><strong>HTTP et HTTPS :</strong> le schéma est détecté et mémorisé ; avec le certificat auto-signé du serveur, le certificat n'est ignoré que pour les hôtes du réseau local ou du VPN (Tailscale / Headscale).</li>
+  <li><strong>Authentification :</strong> si la sécurité est activée sur le RPi (<code>security.enabled</code>), le moniteur ouvre une session (<code>POST /api/login</code>, cookie <code>plc_session</code>) puis la renouvelle tout seul si elle expire. Sans identifiants dans le projet, ou s'ils ont été refusés, Studio les redemande (utilisateur puis mot de passe) et les mémorise dans le projet, comme pour le déploiement. Laisser l'utilisateur vide pour un RPi sans authentification.</li>
+  <li><strong>Identifiants refusés :</strong> le moniteur s'arrête et le dit (relancer avec <kbd>F9</kbd>). Il ne réessaie pas en boucle, pour ne pas déclencher le blocage anti-bruteforce du serveur (5 échecs en 5 minutes).</li>
+  <li><strong>Délai :</strong> 4 s par requête, pour tolérer la négociation TLS et les liaisons VPN lentes.</li>
+</ul>
+<table>
+  <tr><th>Message</th><th>Cause probable</th></tr>
+  <tr><td>Authentification requise par le RPi : aucun identifiant fourni</td><td>Sécurité activée sur le RPi, projet sans identifiants — saisir utilisateur et mot de passe quand Studio les demande</td></tr>
+  <tr><td>Login refusé : identifiants incorrects</td><td>Utilisateur / mot de passe différents de ceux de <code>security</code> dans le <code>config.json</code> du RPi</td></tr>
+  <tr><td>Login refusé : trop de tentatives (blocage 5 min côté RPi)</td><td>Trop d'échecs successifs — attendre 5 minutes</td></tr>
+  <tr><td>Réponse non-JSON reçue…</td><td>L'adresse répond mais ce n'est pas le serveur PLC (mauvais port, proxy, page de login)</td></tr>
+</table>
 
 <h3 id="tailscale-headscale">🔒 Tailscale / Headscale — Accès distant automatique</h3>
 <p>
@@ -1716,9 +1846,11 @@ ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
 <table>
   <tr><th>Champ</th><th>Valeur</th></tr>
   <tr><td><code>URL Headscale</code></td><td>Ex. <code>https://headscale.mondomaine.fr</code></td></tr>
-  <tr><td><code>Utilisateur Headscale</code></td><td>Utilisateur créé côté serveur via <code>headscale users create</code></td></tr>
+  <tr><td><code>Utilisateur Headscale</code></td><td>Utilisateur Headscale : son nom, son identifiant numérique, ou — pour un utilisateur <strong>OIDC</strong> — son e-mail ou son nom affiché</td></tr>
   <tr><td><code>Clé API Headscale</code></td><td>Clé générée à l'étape 1 — mémorisée dans le projet, à ne renseigner qu'une fois</td></tr>
 </table>
+
+<div class="tip"><div class="ci">💡</div><p><strong>Utilisateurs OIDC :</strong> avec une connexion OIDC (Authelia, Keycloak, YunoHost SSO…), Headscale enregistre l'utilisateur sous un nom technique souvent différent de celui qu'on connaît. Studio compare donc votre saisie, sans tenir compte des majuscules, à l'<strong>identifiant</strong>, au <strong>nom</strong>, à l'<strong>e-mail</strong> et au <strong>nom affiché</strong>. S'il n'existe qu'<strong>un seul</strong> utilisateur et que rien ne correspond, celui-ci est utilisé. Sinon l'erreur affiche la liste des utilisateurs disponibles, avec leur identifiant : il suffit d'en recopier un.</p></div>
 
 <h4 style="margin:20px 0 10px;font-size:1.05em;">Ce qui se passe automatiquement au déploiement</h4>
 <ol style="margin:0 0 16px;padding-left:22px;">
@@ -1823,6 +1955,72 @@ journalctl -u rpi-plc -n 50       <span class="comment"># 50 dernières lignes</
 <div class="note">
   <span class="ci">ℹ</span>
   <p><code>CAP_SYS_RAWIO</code> est nécessaire pour que gpiod v2 accède à <code>/dev/gpiochip0</code> sans droits root. Si <code>setup_autonomy.sh</code> a été utilisé, tout est configuré automatiquement. En cas d'installation manuelle, vérifier que l'utilisateur est dans le groupe <code>gpio</code> (<code>sudo usermod -aG gpio pi</code>) et que le fichier service contient bien ce paramètre.</p>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="tests"><span class="icon">🧪</span> Tests automatisés — parité studio/RPi</h2>
+
+<p class="section-intro">
+  Le programme compilé s'exécute sur <strong>deux moteurs Python indépendants</strong> : <code>core/plc_engine.py</code> côté studio (simulation, PC) et <code>rpi_server/server.py</code> côté Raspberry Pi (exécution réelle). Rien ne garantit automatiquement qu'ils se comportent de façon identique sur les 89&nbsp;types de blocs — le dossier <code>tests/</code> à la racine du projet contient les scripts qui le vérifient.
+</p>
+
+<h3 id="test-parity">tests/parity_fuzz.py — comparaison studio ↔ RPi</h3>
+<p>Génère des variantes aléatoires de blocs, les exécute sur les deux moteurs pendant plusieurs cycles, et compare registres RF, bits M, GPIO et variables nommées. À lancer après toute modification de l'un des deux moteurs.</p>
+
+<pre><code><span class="comment"># Depuis la racine du projet — mode recommandé : limité aux combinaisons</span>
+<span class="comment"># réellement produites par l'éditeur (le plus représentatif d'un vrai projet)</span>
+python3 tests/parity_fuzz.py --editor-keys tests/editor_keys.json --ignore-named</code></pre>
+
+<table>
+  <tr><th>Option</th><th>Effet</th></tr>
+  <tr><td><code>--n N</code></td><td>Nombre de variantes aléatoires par type de bloc (défaut 24)</td></tr>
+  <tr><td><code>--cycles N</code></td><td>Nombre de cycles simulés par variante (défaut 6)</td></tr>
+  <tr><td><code>--seed N</code></td><td>Graine aléatoire, pour reproduire exactement un résultat</td></tr>
+  <tr><td><code>--types t1,t2</code></td><td>Limiter à certains types de blocs (ex. <code>--types ctd,counter,compare</code>)</td></tr>
+  <tr><td><code>--detail N</code></td><td>Nombre d'exemples d'écarts affichés par type (0 = juste le compte)</td></tr>
+  <tr><td><code>--editor-keys F</code></td><td>Limiter aux clés/valeurs du JSON <code>F</code> (voir <code>tests/editor_keys.json</code>)</td></tr>
+  <tr><td><code>--ignore-named</code></td><td>Ignorer les variables AV/DV nommées (stockage différent studio/RPi, sans rapport avec un vrai écart)</td></tr>
+  <tr><td><code>--raw</code></td><td>Fuzz complet, sans se limiter aux clés/valeurs générées par l'éditeur</td></tr>
+  <tr><td><code>--studio PATH</code> / <code>--rpi PATH</code></td><td>Chemins alternatifs des deux moteurs à comparer</td></tr>
+</table>
+
+<div class="tip">
+  <span class="ci">💡</span>
+  <p><code>--studio</code> et <code>--rpi</code> peuvent aussi servir à comparer <strong>deux versions de <code>server.py</code> entre elles</strong> (test de non-régression), en passant un ancien <code>server.py</code> dans <code>--studio</code> :</p>
+  <pre style="margin-top:8px"><code>python3 tests/parity_fuzz.py --studio ancien/server.py --rpi rpi_server/server.py --n 40</code></pre>
+</div>
+
+<p>Code retour <code>0</code> si aucun écart en dehors du matériel/horloge (<code>sensor</code>, <code>ds_in</code>, <code>localtime</code>, <code>input</code>, <code>output</code>, <code>contactor</code>), <code>1</code> sinon. En cas d'écart, la sortie liste le bloc généré et les valeurs qui divergent :</p>
+
+<pre><code>== compare : 2/24 variantes divergent
+   bloc : {"type": "compare", "ref_a": "M1", "op": "eq"}
+      cycle 0: M[M5] studio=True rpi=False</code></pre>
+
+<h3 id="test-isolation">tests/test_block_isolation.py — isolation des erreurs</h3>
+<p>Vérifie qu'un bloc qui plante n'empêche pas l'exécution des blocs suivants du même cycle (fait tourner une vraie boucle de scan avec un bloc volontairement cassé suivi d'une bobine).</p>
+<pre><code>python3 tests/test_block_isolation.py rpi_server/server.py</code></pre>
+<p>Code retour <code>0</code> = isolation correcte, <code>1</code> sinon. Prend le chemin d'un <code>server.py</code> en argument, pour tester une autre version.</p>
+
+<h3 id="test-deployer">tests/test_deployer_md5.py — vérification du déployeur</h3>
+<p>Sans argument : simule un RPi avec un dossier local. Teste la lecture des md5, un fichier absent, un fichier de <strong>même taille mais de contenu différent</strong> (le cas que la comparaison par taille seule ne détecte pas), un chemin avec espace/apostrophe, et la détection par <code>smart_check</code>.</p>
+<pre><code>python3 tests/test_deployer_md5.py</code></pre>
+
+<h3>Avant un déploiement</h3>
+<p>Enchaîner les trois tests après une modification du moteur ou du déployeur :</p>
+<pre><code>python3 tests/parity_fuzz.py --editor-keys tests/editor_keys.json --ignore-named \
+  &amp;&amp; python3 tests/test_block_isolation.py rpi_server/server.py \
+  &amp;&amp; python3 tests/test_deployer_md5.py \
+  &amp;&amp; echo "TOUT EST OK"</code></pre>
+
+<div class="note">
+  <span class="ci">ℹ</span>
+  <p>Aucune dépendance externe à installer : ces tests tournent en simulation pure. L'absence de <code>paho-mqtt</code> ou <code>RPi.GPIO</code> n'empêche pas <code>rpi_server/server.py</code> de se charger (fonctionnalités correspondantes simplement désactivées).</p>
+</div>
+
+<div class="warn">
+  <span class="ci">⚠</span>
+  <p><strong>Si <code>ui/block_editor.py</code> change</strong>, régénérer <code>tests/editor_keys.json</code> avant de se fier à <code>--editor-keys</code> — sinon il reflète l'ancien éditeur et peut masquer un vrai écart. La comparaison <code>--raw</code> (sans <code>--editor-keys</code>) reste valable dans tous les cas, mais elle inclut des combinaisons que l'éditeur ne produit jamais et peut donc signaler des écarts qui n'affectent aucun projet réel.</p>
 </div>
 
 
@@ -2302,7 +2500,7 @@ RUNTIMCNT → STARTS=RF10, TOTAL=RF11, RUNTIME=RF12</code></pre>
   <tr>
     <td>« Utilisateur Headscale introuvable » au déploiement</td>
     <td>Le nom saisi dans Studio ne correspond à aucun utilisateur Headscale</td>
-    <td>Vérifier la liste côté serveur : <code>headscale users list</code>. Corriger le champ <code>Utilisateur Headscale</code> dans Studio.</td>
+    <td>Le message liste les utilisateurs disponibles : recopier le nom, l'e-mail ou l'identifiant d'un d'eux dans le champ <code>Utilisateur Headscale</code> (ou <code>headscale users list</code> côté serveur).</td>
   </tr>
   <tr>
     <td>Le RPi n'apparaît pas dans Headplane après déploiement</td>
@@ -2340,11 +2538,17 @@ time.sleep(0.01)
 raw = bus.read_i2c_block_data(addr, 0x00, 2)
 v = ((raw[0]<<8)|raw[1]) * 4.096 / 32768
 print(f'Tension: {v:.4f}V')
-# Conversion NTC40 — pont diviseur R_ref=10kΩ, R0=40kΩ, β=3950
+# Conversion NTC10K — pont diviseur R_ref=10kΩ, R0=10kΩ, β=3950 (formule réellement utilisée par server.py)
+import math
 rx = v * 10000 / (3.3 - v)
-t  = (rx - 100) / (100 * 0.00385)
-print(f'Temperature NTC40: {t:.2f}°C')
-"</code></pre>
+B, R0, T0 = 3950.0, 10000.0, 298.15
+t  = (1.0 / ((1/T0) + (1/B) * math.log(rx/R0))) - 273.15
+print(f'Temperature NTC10K: {t:.2f}°C')
+"
+
+<span class="comment"># Trouver le serial d'une sonde DS18B20 (1-Wire)</span>
+ls /sys/bus/w1/devices/ | grep 28-
+cat /sys/bus/w1/devices/28-xxxxxxxxxxxx/w1_slave</code></pre>
 
 <hr>
 
@@ -2596,6 +2800,12 @@ sudo tailscale up
 </div>
 
 <!-- ─── SIDEBAR ONGLETÉE ─── -->
+<h3 id="syn-web-edition">Synoptique dans le navigateur — mode édition et noms de GPIO</h3>
+<ul>
+  <li><strong>Canvas complet en édition :</strong> en mode édition (sidebar visible), la page n'est plus zoomée pour tenir dans la fenêtre. Le canvas couvre <strong>tout</strong> le synoptique (images et fonds compris) avec des barres de défilement si la page dépasse l'écran, et les coordonnées de la souris restent exactes. Le zoom d'ajustement reste réservé au mode opérateur.</li>
+  <li><strong>Mêmes noms de GPIO que dans Studio :</strong> les listes de broches des widgets affichent les noms configurés (ex. « K4 Réhausse Chaudière ») au lieu de « GPIO 13 ». Ils sont lus au chargement via <code>GET /api/gpio/config</code>.</li>
+</ul>
+
 <h3 id="syn-sidebar">La sidebar ongletée (nouveauté v2)</h3>
 <p>La palette latérale gauche est divisée en <strong>3 onglets cliquables</strong> :</p>
 <table>
@@ -3323,6 +3533,7 @@ else:
   <tr><td><kbd>Ctrl+N</kbd></td><td>Nouveau projet</td></tr>
   <tr><td><kbd>Ctrl+O</kbd></td><td>Ouvrir un projet</td></tr>
   <tr><td><kbd>Ctrl+G</kbd></td><td>Ouvrir le Configurateur GPIO (menu Raspberry Pi)</td></tr>
+  <tr><td><kbd>F9</kbd></td><td>Démarrer le moniteur RPi en direct (menu Raspberry Pi) — voir <a href="#rpi-monitor">Moniteur RPi</a></td></tr>
 </table>
 
 <h3>Canvas FBD — blocs et fils</h3>
@@ -3334,6 +3545,10 @@ else:
   <tr><td><kbd>Ctrl+Z</kbd></td><td>Annuler (undo, 40 niveaux)</td></tr>
   <tr><td><kbd>Ctrl+Y</kbd> ou <kbd>Ctrl+Maj+Z</kbd></td><td>Rétablir (redo)</td></tr>
   <tr><td><kbd>Ctrl+A</kbd></td><td>Tout sélectionner (multi-sélection)</td></tr>
+  <tr><td><kbd>Ctrl+F</kbd> / <kbd>F3</kbd></td><td>Recherche de blocs / résultat suivant</td></tr>
+  <tr><td><kbd>R</kbd></td><td>Chercher un registre RF (qui l'écrit, qui le lit)</td></tr>
+  <tr><td><kbd>T</kbd></td><td>Chaîne amont / aval du bloc sélectionné</td></tr>
+  <tr><td><kbd>J</kbd> / <kbd>Maj+J</kbd></td><td>Connecteur jumeau suivant / précédent</td></tr>
   <tr><td>Clic droit sur le canvas</td><td>Menu contextuel (ajouter bloc, coller, etc.)</td></tr>
   <tr><td>Molette souris</td><td>Zoom avant / arrière</td></tr>
   <tr><td>Clic molette + glisser</td><td>Panoramique (pan)</td></tr>
@@ -3370,6 +3585,47 @@ else:
 </table>
 
 <!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="fbd-outils"><span class="icon">🔎</span> Outils d'analyse du schéma FBD</h2>
+
+<p class="section-intro">Quatre outils en <strong>lecture seule</strong> aident à s'y retrouver dans un gros programme (plusieurs pages, connecteurs, groupes imbriqués, registres RF). Ils ne modifient jamais le programme.</p>
+
+<table>
+  <tr><th>Outil</th><th>Raccourci</th><th>À quoi ça sert</th></tr>
+  <tr><td>Recherche de blocs</td><td><kbd>Ctrl+F</kbd>, <kbd>F3</kbd></td><td>Retrouver un bloc par nom, type, identifiant, nom de variable ou texte de code</td></tr>
+  <tr><td>Recherche de registre RF</td><td><kbd>R</kbd></td><td>Savoir qui écrit et qui lit un registre</td></tr>
+  <tr><td>Chaîne amont / aval</td><td><kbd>T</kbd></td><td>Remonter aux origines d'un signal et suivre jusqu'où il va</td></tr>
+  <tr><td>Connecteurs jumelés</td><td><kbd>J</kbd> / <kbd>Maj+J</kbd></td><td>Sauter d'un connecteur à son jumeau, d'une page à l'autre</td></tr>
+</table>
+
+<h3>Recherche de blocs — Ctrl+F</h3>
+<p><kbd>Ctrl+F</kbd> ouvre la barre de recherche. La recherche porte sur <strong>toutes les pages</strong> : nom du bloc, type, identifiant, nom de variable (<code>varname</code>), nom de signal et contenu du code (PYBLOCK / CArithm). Le premier résultat est sélectionné et centré ; <kbd>F3</kbd> passe au suivant (en boucle) et le compteur affiche <code>2/7</code>. « 0 résultat » apparaît en rouge si rien ne correspond.</p>
+
+<h3 id="fbd-outils-rf">Recherche de registre RF — R</h3>
+<p>Appuyer sur <kbd>R</kbd> ouvre le panneau <strong>Chercher RF</strong>, pré-rempli avec le registre du bloc sélectionné. Saisir <code>12</code> ou <code>RF12</code>. Le panneau liste chaque occurrence, classée par rôle :</p>
+<table>
+  <tr><th>Rôle</th><th>Couleur</th><th>Signification</th></tr>
+  <tr><td>écrit (source)</td><td style="color:#3fb950">vert</td><td>Le bloc produit la valeur (<code>reg_out</code>, <code>oa1_ref</code>, <code>od1_ref</code>, <code>cv_ref</code>…)</td></tr>
+  <tr><td>relais CONN</td><td style="color:#58a6ff">bleu</td><td>Le registre transite par un connecteur</td></tr>
+  <tr><td>lit (destination)</td><td style="color:#f0883e">orange</td><td>Le bloc consomme la valeur (<code>reg_a</code>, <code>a1_ref</code>, <code>d1_ref</code>…)</td></tr>
+  <tr><td>cité dans le code</td><td style="color:#bc8cff">violet</td><td>Le numéro apparaît dans le code d'un PYBLOCK / CArithm</td></tr>
+</table>
+<p>Les blocs concernés de la page affichée sont entourés de la couleur de leur rôle. <kbd>Entrée</kbd> passe à l'occurrence suivante, <kbd>Maj+Entrée</kbd> à la précédente, un clic sur une ligne y saute (même sur une autre page), <kbd>Échap</kbd> ferme le panneau.</p>
+<div class="tip"><div class="ci">💡</div><p>Typiquement : « qui écrit RF247 ? » ou « ce registre est-il lu quelque part ? » avant de supprimer un bloc. Un registre écrit mais jamais lu (ou l'inverse) se voit immédiatement.</p></div>
+
+<h3 id="fbd-outils-chaine">Chaîne amont / aval — T</h3>
+<p>Sélectionner un bloc puis appuyer sur <kbd>T</kbd> : le panneau <strong>Chaîne amont / aval</strong> s'ouvre et les fils concernés sont surlignés sur le canvas.</p>
+<ul>
+  <li><span style="color:#d946ef"><strong>Magenta</strong></span> : tout ce qui alimente le bloc (amont). <strong>Origines</strong> = les bouts de chaîne, c'est-à-dire les blocs sans entrée câblée (sondes, variables, constantes).</li>
+  <li><span style="color:#fb923c"><strong>Orange</strong></span> : tout ce que le bloc alimente (aval). <strong>Aboutissements</strong> = les bouts de chaîne (sorties, relais, afficheurs).</li>
+  <li>Le bloc d'ancrage est entouré de blanc ; les bouts de chaîne ont un contour plus épais.</li>
+</ul>
+<p>La chaîne <strong>traverse</strong> les connecteurs jumeaux (d'une page à l'autre) et les groupes (elle entre par le port <code>GROUP_IN</code> et sort par le <code>GROUP_OUT</code> correspondant, à tous les niveaux d'imbrication). Un clic sur un bloc de la liste ouvre sa page, et son groupe s'il est dedans. <strong>⚓ Ré-ancrer</strong> recalcule depuis un autre bloc sélectionné ; le panneau se met à jour tout seul si le schéma change. <kbd>T</kbd> ou <kbd>Échap</kbd> ferme.</p>
+
+<h3 id="fbd-outils-conn">Connecteurs jumelés — J / Maj+J</h3>
+<p>Avec un connecteur sélectionné, <kbd>J</kbd> saute au connecteur suivant de même numéro, <kbd>Maj+J</kbd> au précédent. Le parcours est circulaire sur <strong>toutes les pages</strong> : la vue change de page, centre le bloc et le sélectionne. Les mêmes actions existent en boutons <strong>◀ Précédent / Suivant ▶</strong> dans le panneau propriétés. S'il n'y a pas d'autre connecteur de ce numéro, le panneau l'indique.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="validation"><span class="icon">✓</span> Validation du câblage FBD</h2>
 
 
@@ -3400,7 +3656,7 @@ else:
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="api-complete"><span class="icon">🔌</span> API REST — Référence complète</h2>
 
-<p class="section-intro">Toutes les routes Flask exposées par <code>server.py</code> sur le port 5000. Les requêtes retournent du JSON sauf indication contraire. En mode sécurisé, un cookie de session <code>session_token</code> est requis (obtenu via <code>POST /login</code>).</p>
+<p class="section-intro">Toutes les routes Flask exposées par <code>server.py</code> sur le port 5000. Les requêtes retournent du JSON sauf indication contraire. En mode sécurisé, un cookie de session <code>plc_session</code> est requis (obtenu via <code>POST /login</code> ou, pour les clients JSON comme le moniteur de Studio, <code>POST /api/login</code>).</p>
 
 <h3>État et contrôle PLC</h3>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/state</div><div class="endpoint-desc">État complet : gpio, memory, analog, registers, timers, counters, pids, cycle, error_count, on_rpi, ts</div></div></div>
@@ -3424,6 +3680,7 @@ else:
 <h3>GPIO — Lecture, Écriture, Scan, Test</h3>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/write</div><div class="endpoint-desc">Forcer un GPIO en sortie. Body : <code>{"pin":5,"value":true}</code>. Alias : <code>/api/gpio</code> (compatibilité synoptique)</div></div></div>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/status</div><div class="endpoint-desc">État de tous les GPIO configurés : mode, valeur, nom, active_low, pull</div></div></div>
+<div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/config</div><div class="endpoint-desc">Noms et modes des GPIO configurés : <code>{"13": {"name": "K4 Réhausse Chaudière", "mode": "output"}, …}</code>. Utilisé par le synoptique web pour afficher les mêmes libellés que Studio.</div></div></div>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/scan</div><div class="endpoint-desc">Lance un scan des GPIO (lecture entrées + actualisation sorties). Body : vide ou <code>{}</code></div></div></div>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/test</div><div class="endpoint-desc">Test d'une sortie GPIO (pulse ON/OFF). Body : <code>{"pin":5,"duration_ms":500}</code></div></div></div>
 
@@ -3475,7 +3732,8 @@ else:
 <h3>Authentification</h3>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/auth/status</div><div class="endpoint-desc">État de la sécurité : <code>{"enabled": false, "https": false, "username": "admin"}</code></div></div></div>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/auth/config</div><div class="endpoint-desc">Mettre à jour la configuration sécurité. Redémarrage du service requis pour appliquer. Body : <code>{"enabled":true,"https":false,"username":"admin","password":"newpass"}</code></div></div></div>
-<div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/login</div><div class="endpoint-desc">Authentification — retourne un cookie de session (TTL 8h). Body form : <code>username, password</code></div></div></div>
+<div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/login</div><div class="endpoint-desc">Authentification — retourne un cookie de session <code>plc_session</code> (TTL 8h). Body form : <code>username, password</code></div></div></div>
+<div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/login</div><div class="endpoint-desc">Même authentification, pour les clients JSON. Body : <code>{"username": "…", "password": "…"}</code>. Réponses : cookie <code>plc_session</code> si OK, <code>401</code> identifiants incorrects, <code>429</code> trop d'échecs (blocage 5 min).</div></div></div>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/logout</div><div class="endpoint-desc">Déconnexion — supprime la session en mémoire</div></div></div>
 
 <h3>Interfaces web</h3>

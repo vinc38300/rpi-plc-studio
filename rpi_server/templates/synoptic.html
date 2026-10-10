@@ -499,12 +499,26 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   function _fitToWidth(){
     if(typeof window.getSynopticBounds !== 'function') return;
 
-    // Ne pas re-fitter en mode édition (sidebar visible)
     var sb = document.getElementById('sidebar');
-    if(sb && !sb.classList.contains('hidden')) return;
-
     var bounds = window.getSynopticBounds();
     if(!bounds || bounds.xMax <= 0) return;
+
+    // Mode édition (sidebar visible) : pas de zoom (les coordonnées souris
+    // doivent rester exactes) ; le canvas couvre TOUT le synoptique, avec
+    // défilement dans le cadre si la page dépasse l'écran. Avant, le zoom du
+    // mode opérateur était conservé et le canvas recalé sur la taille de la
+    // fenêtre : le bas de la page (images, fonds) était coupé.
+    if(sb && !sb.classList.contains('hidden')){
+      wrap.style.zoom = 1;
+      var cw = Math.max(inner.clientWidth,  bounds.xMax + 40);
+      var ch = Math.max(inner.clientHeight, bounds.yMax + 40);
+      var eCvs = document.getElementById('syn-canvas');
+      var eHtml = document.getElementById('widgets-html');
+      if(eCvs){ eCvs.width = cw; eCvs.height = ch; }
+      if(eHtml){ eHtml.style.width = cw+'px'; eHtml.style.height = ch+'px'; }
+      if(window.renderAll) window.renderAll();
+      return;
+    }
 
     // ── 1. Caler le canvas exactement sur les bounds du contenu ────────────
     //    (évite que _resize() ait mis cvs.width = viewport et que le zoom
@@ -568,6 +582,14 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
       .catch(function(e){ console.error('[synoptic.html] Erreur chargement synoptique:', e); });
   }
 
+  // ── 2b. Noms des GPIO (mêmes libellés que le studio dans les menus) ──
+  function _loadGpioConfig(){
+    fetch('/api/gpio/config')
+      .then(function(r){ return r.json(); })
+      .then(function(cfg){ if(window.setGpioConfig) window.setGpioConfig(cfg); })
+      .catch(function(e){ console.warn('[synoptic.html] Config GPIO indisponible:', e); });
+  }
+
   // ── 3. État PLC initial ──────────────────────────────────────────
   function _loadInitialState(){
     fetch('/api/state')
@@ -598,6 +620,7 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
 
   // Lancer dans l'ordre après chargement complet du canvas JS
   _initOperator();
+  _loadGpioConfig();
   _loadSynoptic();
   _loadInitialState();
   _connectSocket();

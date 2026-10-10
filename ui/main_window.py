@@ -756,6 +756,8 @@ class MainWindow(QMainWindow):
         if _saved_gpio:
             self.engine.reload_gpio_config(_saved_gpio)
             self._reload_gpio_panel(_saved_gpio)
+            self.project.data.setdefault("plc", {})["gpio_config"] = _saved_gpio
+            self._sync_gpio_to_local_config(_saved_gpio)
         # Charger la config sondes sauvegardée dans le projet
         _saved_analog = proj.data.get("plc", {}).get("analog_config", {})
         if not _saved_analog:
@@ -1495,27 +1497,44 @@ class MainWindow(QMainWindow):
                 if _gpio2:
                     self.engine.reload_gpio_config(_gpio2)
                     self._reload_gpio_panel(_gpio2)
+                    self._sync_gpio_to_local_config(_gpio2)
                 _ana2 = proj2.data.get("plc", {}).get("analog_config", {})
                 if _ana2:
                     self.engine.reload_analog_config(_ana2)
                 _log(f"[DL] Projet ouvert : {proj2.name}")
 
     # ── Déploiement ───────────────────────────────────────────────────────────
+    def _sync_gpio_to_local_config(self, gpio: dict):
+        """Écrit la config GPIO du projet dans config.json local (déploiement,
+        canvas FBD et synoptique voient ainsi la même configuration)."""
+        import os, json
+        cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "..", "rpi_server", "config.json")
+        try:
+            try:
+                cfg = json.load(open(cfg_path, encoding="utf-8"))
+            except Exception:
+                cfg = {}
+            cfg["gpio"] = gpio
+            with open(cfg_path, "w", encoding="utf-8") as fw:
+                fw.write(json.dumps(cfg, indent=2, ensure_ascii=False))
+        except Exception:
+            pass
+        self._push_gpio_config_to_fbd(gpio)
+        self._push_gpio_config_to_synoptic(gpio)
+
     def _open_gpio_config(self):
         """Ouvre le dialogue de configuration GPIO."""
         from ui.gpio_config_dialog import GPIOConfigDialog
         import os, json
-        # Source unique : config.json RPi (référence principale)
-        cfg_path = os.path.join(os.path.dirname(__file__), "..", "rpi_server", "config.json")
-        current = {}
-        try:
-            rpi_cfg = json.load(open(cfg_path))
-            current = rpi_cfg.get("gpio", {})
-        except Exception:
-            pass
-        # Fallback projet si config.json vide
+        # Le projet ouvert fait foi ; config.json local n'est qu'un repli
+        current = dict(self.project.data.get("plc", {}).get("gpio_config", {}) or {})
         if not current:
-            current = self.project.data.get("plc", {}).get("gpio_config", {})
+            cfg_path = os.path.join(os.path.dirname(__file__), "..", "rpi_server", "config.json")
+            try:
+                current = json.load(open(cfg_path)).get("gpio", {})
+            except Exception:
+                current = {}
         dlg = GPIOConfigDialog(current, self)
         dlg.config_changed.connect(self._on_gpio_config_changed)
         dlg.exec_()

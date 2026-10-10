@@ -6,8 +6,8 @@
   "auto_start": true,
   "security": {
     "enabled": false,
-    "username": "vincent",
-    "password": "20100"
+    "username": "******",
+    "password": "*****"
   },
   "telegram": {
     "enabled": false,
@@ -137,13 +137,43 @@
       "mode": "output",
       "active_low": true
     },
+    "7": {
+      "name": "TOR 8 GPIO7",
+      "mode": "input",
+      "pull": "up"
+    },
+    "8": {
+      "name": "TOR 7 GPIO8",
+      "mode": "input",
+      "pull": "up"
+    },
+    "14": {
+      "name": "TOR 1 G14",
+      "mode": "input",
+      "pull": "up"
+    },
+    "15": {
+      "name": "TOR 2 GPIO15",
+      "mode": "input",
+      "pull": "up"
+    },
+    "18": {
+      "name": "TOR 3 GPIO18",
+      "mode": "input",
+      "pull": "up"
+    },
     "23": {
-      "name": "TS1",
+      "name": "TOR 4 TS1 G23",
       "mode": "input",
       "pull": "up"
     },
     "24": {
-      "name": "TA1",
+      "name": "TOR 5 TA1 G24",
+      "mode": "input",
+      "pull": "up"
+    },
+    "25": {
+      "name": "TOR 6 GPIO25",
       "mode": "input",
       "pull": "up"
     }
