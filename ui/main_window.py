@@ -518,7 +518,7 @@ class MainWindow(QMainWindow):
         sim_menu.addAction(self.act_stop)
 
         act_rpi = QAction("↗ Envoyer au RPI", self)
-        act_rpi.setShortcut("F7")
+        act_rpi.setShortcut("Shift+F7")
         act_rpi.triggered.connect(self._send_to_rpi)
         sim_menu.addAction(act_rpi)
 
@@ -529,7 +529,7 @@ class MainWindow(QMainWindow):
         rpi_menu.addAction("🌡 Configurer les sondes…", self._open_analog_config, "Ctrl+T")
         rpi_menu.addAction("Ouvrir interface web RPi", self._open_rpi_web)
         rpi_menu.addSeparator()
-        rpi_menu.addAction("📡 Démarrer moniteur RPi en direct", self._start_rpi_monitor, "F9")
+        rpi_menu.addAction("📡 Démarrer moniteur RPi en direct", self._start_rpi_monitor, "F10")
         rpi_menu.addAction("⏹ Arrêter moniteur RPi",            self._stop_rpi_monitor)
         rpi_menu.addSeparator()
         rpi_menu.addAction("📤 Envoyer un synoptique indépendant…", self._send_synoptic_to_rpi)
@@ -585,7 +585,7 @@ class MainWindow(QMainWindow):
             None,
             ("▶ START",     "F5",     self._start_sim),
             ("■ STOP",      "F6",     self._stop_sim),
-            ("↗ RPI",      "F7",     self._send_to_rpi),
+            ("↗ RPI",      "Shift+F7", self._send_to_rpi),
             None,
             ("⊡ Ajuster",  "F",      self._fit_view),
             None,

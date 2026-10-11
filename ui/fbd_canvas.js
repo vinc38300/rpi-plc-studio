@@ -748,10 +748,53 @@ function deleteFromLibrary(name){
   _showFbdToast('Groupe "' + name + '" supprimé de la bibliothèque');
 }
 
-function exportLibraryJSON(){
-  const blob=new Blob([JSON.stringify(_groupLibrary,null,2)],{type:'application/json'});
+// Enregistre un texte dans un fichier : boîte « Enregistrer sous » native via le pont Python
+// (QtWebEngine ignore sinon <a download>), repli navigateur si le pont est absent.
+function _saveTextFile(filename, text, okMsg){
+  if(window.pybridge && window.pybridge.save_text_file){
+    try{
+      window.pybridge.save_text_file(filename, text, function(path){
+        if(!path){ return; }                                   // annulé
+        if(String(path).indexOf('ERREUR')===0){ _showFbdToast('Export impossible : '+path); return; }
+        _showFbdToast((okMsg||'Exporté')+' → '+path);
+      });
+      return;
+    }catch(e){ console.error('[LIB] save_text_file', e); }
+  }
+  const blob=new Blob([text],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='rpi_plc_library.json'; a.click();
+  a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+function exportLibraryJSON(){
+  const n=Object.keys(_groupLibrary).length;
+  if(!n){ _showFbdToast('Bibliothèque vide : rien à exporter'); return; }
+  _saveTextFile('rpi_plc_library.json', JSON.stringify(_groupLibrary,null,2),
+                'Bibliothèque exportée ('+n+' groupe'+(n>1?'s':'')+')');
+}
+
+// Exporte UN seul groupe (clic droit → « Exporter ce groupe (.json) »), au format
+// bibliothèque : réimportable avec le bouton ⬆ de la bibliothèque dans un autre projet.
+function _groupAsLibraryEntry(name, grpBlock){
+  return {name:name,
+    ports_in:JSON.parse(JSON.stringify(grpBlock.params._port_ins||[])),
+    ports_outs:JSON.parse(JSON.stringify(grpBlock.params._port_outs||[])),
+    _inner_blocks:grpBlock.params._inner_blocks||'{}',
+    created:new Date().toISOString().slice(0,16)};
+}
+function exportGroupToFile(grpBlock){
+  if(!grpBlock||grpBlock.type!=='GROUP'){ _showFbdToast('Sélectionner un bloc GROUP'); return; }
+  const name=(grpBlock.params.name||'Groupe');
+  const lib={}; lib[name]=_groupAsLibraryEntry(name, grpBlock);
+  const safe=name.replace(/[^\w\-.àâäéèêëîïôöùûüç ]+/gi,'_').trim()||'groupe';
+  _saveTextFile(safe+'.json', JSON.stringify(lib,null,2), 'Groupe « '+name+' » exporté');
+}
+function exportLibraryEntry(name){
+  const tpl=_groupLibrary[name]; if(!tpl) return;
+  const lib={}; lib[name]=tpl;
+  const safe=name.replace(/[^\w\-.àâäéèêëîïôöùûüç ]+/gi,'_').trim()||'groupe';
+  _saveTextFile(safe+'.json', JSON.stringify(lib,null,2), 'Groupe « '+name+' » exporté');
 }
 
 function importLibraryJSON(){
@@ -791,9 +834,11 @@ function buildLibraryPanel(){
     return `<div class="pal-item" draggable="true" style="cursor:grab"
       ondragstart="event.dataTransfer.setData('lib-group',${JSON.stringify(n)});event.dataTransfer.effectAllowed='copy'">
       <span class="pal-badge" style="color:#bc8cff;border-color:#bc8cff50">GRP</span>
-      <span class="pal-desc" style="flex:1;font-size:10px">${n}<br>
+      <span class="pal-desc" style="flex:1;font-size:10px;min-width:0;overflow-wrap:anywhere" title="${n}">${n}<br>
         <span style="color:#484f58;font-size:9px">${nIn}E · ${nOut}S</span>
       </span>
+      <span class="lib-exp-btn" data-name="${n}" title="Exporter ce groupe (.json)"
+        style="color:#58a6ff;cursor:pointer;font-size:12px;padding:0 4px;flex-shrink:0">⬇</span>
       <span class="lib-del-btn" data-name="${n}" title="Supprimer"
         style="color:#f85149;cursor:pointer;font-size:12px;padding:0 4px;flex-shrink:0">✕</span>
     </div>`;
@@ -801,12 +846,16 @@ function buildLibraryPanel(){
   panel.querySelectorAll('.pal-item').forEach((row,i)=>{
     const n=keys[i];
     // Clic sur ✕ → supprimer ; clic ailleurs → importer
+    row.querySelector('.lib-exp-btn').addEventListener('click',e=>{
+      e.stopPropagation();
+      exportLibraryEntry(n);
+    });
     row.querySelector('.lib-del-btn').addEventListener('click',e=>{
       e.stopPropagation();
       deleteFromLibrary(n);
     });
     row.addEventListener('click',e=>{
-      if(e.target.classList.contains('lib-del-btn')) return;
+      if(e.target.classList.contains('lib-del-btn')||e.target.classList.contains('lib-exp-btn')) return;
       importGroupFromLibrary(n);
     });
   });
@@ -1069,7 +1118,7 @@ function buildPalette(){
       <span>Bibliothèque</span>
       <span style="display:flex;gap:6px;">
         <span onclick="importLibraryJSON()" title="Importer .json" style="cursor:pointer;color:#58a6ff;font-size:13px">⬆</span>
-        <span onclick="exportLibraryJSON()" title="Exporter .json" style="cursor:pointer;color:#58a6ff;font-size:13px">⬇</span>
+        <span onclick="exportLibraryJSON()" title="Exporter toute la bibliothèque (.json)" style="cursor:pointer;color:#58a6ff;font-size:13px">⬇</span>
       </span>
     </div>
     <div id="_lib_panel"></div>`;
@@ -2366,6 +2415,7 @@ cvs.addEventListener('contextmenu',e=>{
         {l:'⊞ Dégrouper',             a:ungroupSelected},
         {l:'──────────',              a:null},
         {l:'⬆ Exporter vers bibliothèque', a:()=>exportGroupToLibrary(bh)},
+        {l:'⬇ Exporter ce groupe (.json)',  a:()=>exportGroupToFile(bh)},
         {l:'──────────',              a:null},
         {l:'Copier',                  a:copyBlock},
         {l:'Supprimer',               a:()=>delBlock(bh)},

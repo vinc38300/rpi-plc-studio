@@ -256,6 +256,7 @@ footer {
   <a href="#palette">Palette de blocs</a>
   <a href="#pages">Navigation multi-pages</a>
   <a href="#props">Panneau propriétés</a>
+  <a href="#colonnes" class="sub">Redimensionner les colonnes</a>
   <a href="#fbd-outils">Outils d'analyse du schéma</a>
   <a href="#fbd-outils" class="sub">Recherche de blocs (Ctrl+F)</a>
   <a href="#fbd-outils-rf" class="sub">Recherche de registre RF (R)</a>
@@ -546,7 +547,7 @@ sudo i2cdetect -y 1
 <p>Deux paquets Debian sont fournis : l'un pour le <strong>PC</strong> (Studio), l'autre pour le <strong>Raspberry Pi</strong> (serveur autonome). Ils s'installent indépendamment.</p>
 <table>
   <tr><th>Paquet</th><th>Cible</th><th>Installation</th><th>Contenu</th></tr>
-  <tr><td><code>rpi-plc-studio_3.5-16.deb</code></td><td>PC Linux (Kubuntu / Ubuntu / Debian)</td><td><code>sudo apt install ./rpi-plc-studio_3.5-16.deb</code></td><td>Application dans <code>/opt/rpi-plc-studio</code>, lanceur <code>rpi-plc-studio</code>, entrée de menu <em>Électronique</em>, association des fichiers <code>.plcproj</code></td></tr>
+  <tr><td><code>rpi-plc-studio_3.5-19.deb</code></td><td>PC Linux (Kubuntu / Ubuntu / Debian)</td><td><code>sudo apt install ./rpi-plc-studio_3.5-19.deb</code></td><td>Application dans <code>/opt/rpi-plc-studio</code>, lanceur <code>rpi-plc-studio</code>, entrée de menu <em>Électronique</em>, association des fichiers <code>.plcproj</code></td></tr>
   <tr><td><code>rpi-plc_3.5-11-serveur.deb</code></td><td>Raspberry Pi (Bookworm / Bullseye, 32 ou 64 bits)</td><td><code>sudo apt install ./rpi-plc_3.5-11-serveur.deb</code></td><td>Serveur dans <code>/opt/rpi-plc</code>, service systemd <code>rpi-plc</code>, données dans <code>~/rpi-plc-data</code></td></tr>
 </table>
 
@@ -770,6 +771,15 @@ sudo i2cdetect -y 1
   <li><strong>Double-clic</strong> sur le canvas → menu de sélection du type de bloc</li>
 </ul>
 
+<h3 id="colonnes">Redimensionner les colonnes</h3>
+<p>Les trois colonnes de l'éditeur (<strong>palette</strong> à gauche, <strong>canvas</strong> au centre, <strong>propriétés</strong> à droite) sont séparées par des poignées : survoler la limite entre deux colonnes fait apparaître un trait bleu, puis il suffit de <strong>glisser</strong> pour élargir ou réduire la colonne. Le canvas s'adapte et se redessine tout seul.</p>
+<ul>
+  <li><strong>Double-clic</strong> sur une poignée : retour à la largeur d'origine de la colonne.</li>
+  <li>Les largeurs sont <strong>mémorisées</strong> et retrouvées au prochain lancement.</li>
+  <li>Bornes : palette de 120 à 520 px, propriétés de 160 à 560 px ; le canvas garde toujours au moins 280 px, même si la fenêtre est réduite.</li>
+  <li>Dans la <em>Bibliothèque</em> de la palette, les noms longs passent à la ligne et les boutons ⬇ (exporter) et ✕ (supprimer) restent toujours visibles ; le nom complet s'affiche aussi en info-bulle.</li>
+</ul>
+
 <h3 id="props">Panneau de propriétés</h3>
 <p>Cliquer sur un bloc ouvre ses propriétés dans le panneau droit. Les modifications sont <strong>appliquées en temps réel</strong> — pas besoin de valider.</p>
 
@@ -940,9 +950,12 @@ sudo i2cdetect -y 1
   <tr><td>Ajouter à la bibliothèque</td><td>Clic droit sur un bloc GROUP → <strong>Exporter vers bibliothèque</strong>, ou via le menu contextuel. Donner un nom.</td></tr>
   <tr><td>Utiliser un groupe de la bibliothèque</td><td>Clic sur son entrée dans la palette (section <em>Bibliothèque</em>), ou le glisser-déposer sur le canvas</td></tr>
   <tr><td>Supprimer de la bibliothèque</td><td>Cliquer le ✕ rouge à droite de l'entrée dans la palette</td></tr>
-  <tr><td>Exporter la bibliothèque</td><td>Icône ⬇ dans l'en-tête <em>Bibliothèque</em> → télécharge un fichier <code>.json</code></td></tr>
+  <tr><td>Exporter la bibliothèque</td><td>Icône ⬇ dans l'en-tête <em>Bibliothèque</em> → boîte « Enregistrer sous » puis fichier <code>.json</code> contenant tous les groupes</td></tr>
+  <tr><td>Exporter un seul groupe</td><td>Clic droit sur un bloc GROUP → <strong>⬇ Exporter ce groupe (.json)</strong>, ou icône ⬇ sur la ligne du groupe dans la bibliothèque. Le fichier est au même format que la bibliothèque : il se réimporte avec l'icône ⬆ dans n'importe quel autre projet.</td></tr>
   <tr><td>Importer une bibliothèque</td><td>Icône ⬆ → charge un fichier <code>.json</code> exporté précédemment (fusionne avec l'existant)</td></tr>
 </table>
+<div class="tip"><div class="ci">💡</div><p><strong>Export / import entre projets :</strong> les groupes de la bibliothèque sont enregistrés dans <code>~/.rpi-plc-studio/group_library.json</code> et sont donc visibles dans tous vos projets. Les fichiers <code>.json</code> exportés servent à les transmettre à une autre machine ou à les sauvegarder. <em>(Jusqu'à la version 3.5-17, l'icône ⬇ n'enregistrait rien : QtWebEngine abandonne les téléchargements sans gestionnaire. Corrigé en 3.5-18, y compris pour les autres exports du synoptique.)</em></p></div>
+
 
 <div class="tip">
   <span class="ci">💡</span>
@@ -1786,11 +1799,11 @@ scp mon_programme.json pi@IP-RPi:~/rpi_server/programme.json
 ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
 
 <h3 id="rpi-monitor">📡 Moniteur RPi en direct</h3>
-<p>Le menu <strong>Raspberry Pi → Démarrer moniteur RPi en direct</strong> (<kbd>F9</kbd>) interroge l'état du serveur 5 fois par seconde (<code>/api/state</code>, toutes les 200 ms) et affiche en direct les entrées, sorties, sondes et registres du RPi dans le Studio.</p>
+<p>Le menu <strong>Raspberry Pi → Démarrer moniteur RPi en direct</strong> (<kbd>F10</kbd>) interroge l'état du serveur 5 fois par seconde (<code>/api/state</code>, toutes les 200 ms) et affiche en direct les entrées, sorties, sondes et registres du RPi dans le Studio.</p>
 <ul>
   <li><strong>HTTP et HTTPS :</strong> le schéma est détecté et mémorisé ; avec le certificat auto-signé du serveur, le certificat n'est ignoré que pour les hôtes du réseau local ou du VPN (Tailscale / Headscale).</li>
   <li><strong>Authentification :</strong> si la sécurité est activée sur le RPi (<code>security.enabled</code>), le moniteur ouvre une session (<code>POST /api/login</code>, cookie <code>plc_session</code>) puis la renouvelle tout seul si elle expire. Sans identifiants dans le projet, ou s'ils ont été refusés, Studio les redemande (utilisateur puis mot de passe) et les mémorise dans le projet, comme pour le déploiement. Laisser l'utilisateur vide pour un RPi sans authentification.</li>
-  <li><strong>Identifiants refusés :</strong> le moniteur s'arrête et le dit (relancer avec <kbd>F9</kbd>). Il ne réessaie pas en boucle, pour ne pas déclencher le blocage anti-bruteforce du serveur (5 échecs en 5 minutes).</li>
+  <li><strong>Identifiants refusés :</strong> le moniteur s'arrête et le dit (relancer avec <kbd>F10</kbd>). Il ne réessaie pas en boucle, pour ne pas déclencher le blocage anti-bruteforce du serveur (5 échecs en 5 minutes).</li>
   <li><strong>Délai :</strong> 4 s par requête, pour tolérer la négociation TLS et les liaisons VPN lentes.</li>
 </ul>
 <table>
@@ -3528,12 +3541,14 @@ else:
   <tr><td><kbd>F5</kbd></td><td>Démarrer la simulation PLC</td></tr>
   <tr><td><kbd>F6</kbd></td><td>Arrêter la simulation PLC</td></tr>
   <tr><td><kbd>F7</kbd></td><td>Déployer vers le Raspberry Pi</td></tr>
+  <tr><td><kbd>Maj+F7</kbd></td><td>Envoyer au RPI (menu Simulation)</td></tr>
   <tr><td><kbd>F8</kbd></td><td>Ouvrir / fermer le synoptique</td></tr>
   <tr><td><kbd>Ctrl+S</kbd></td><td>Enregistrer le projet</td></tr>
   <tr><td><kbd>Ctrl+N</kbd></td><td>Nouveau projet</td></tr>
   <tr><td><kbd>Ctrl+O</kbd></td><td>Ouvrir un projet</td></tr>
   <tr><td><kbd>Ctrl+G</kbd></td><td>Ouvrir le Configurateur GPIO (menu Raspberry Pi)</td></tr>
-  <tr><td><kbd>F9</kbd></td><td>Démarrer le moniteur RPi en direct (menu Raspberry Pi) — voir <a href="#rpi-monitor">Moniteur RPi</a></td></tr>
+  <tr><td><kbd>F9</kbd></td><td>Ouvrir le synoptique Régulation (web)</td></tr>
+  <tr><td><kbd>F10</kbd></td><td>Démarrer le moniteur RPi en direct (menu Raspberry Pi) — voir <a href="#rpi-monitor">Moniteur RPi</a></td></tr>
 </table>
 
 <h3>Canvas FBD — blocs et fils</h3>

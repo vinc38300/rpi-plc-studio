@@ -89,7 +89,7 @@ class RpiMonitor(QThread):
             except AuthError as e:
                 # Réessayer ne ferait que déclencher le blocage anti-bruteforce du RPi
                 # (5 échecs / 5 min) : on s'arrête et on le dit.
-                msg = f"{e} — moniteur arrêté, relancez-le (F9) avec les bons identifiants"
+                msg = f"{e} — moniteur arrêté, relancez-le (F10) avec les bons identifiants"
                 self._running = False
                 self.disconnected.emit(msg)
                 self.auth_failed.emit(msg)

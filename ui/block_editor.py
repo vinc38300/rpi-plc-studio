@@ -23,6 +23,43 @@ except ImportError:
     HAS_WEBENGINE = False
 
 
+_DL_HANDLER_INSTALLED = False
+
+def _install_download_handler():
+    """QtWebEngine ABANDONNE en silence tout téléchargement (<a download>, Blob…) tant
+    qu'aucun slot n'accepte QWebEngineProfile.downloadRequested : les boutons « Exporter »
+    du canvas FBD / synoptique ne faisaient donc rien. On affiche une boîte
+    « Enregistrer sous » et on accepte le téléchargement. Installé une seule fois
+    (le profil par défaut est partagé par toutes les vues web de l'application)."""
+    global _DL_HANDLER_INSTALLED
+    if _DL_HANDLER_INSTALLED or not HAS_WEBENGINE:
+        return
+    try:
+        from PyQt5.QtWebEngineWidgets import QWebEngineProfile
+        from PyQt5.QtWidgets import QFileDialog, QApplication
+        import os
+
+        def _on_download(item):
+            try:
+                suggested = item.suggestedFileName()
+            except Exception:
+                suggested = os.path.basename(item.path())
+            start = os.path.join(os.path.expanduser('~'), suggested or 'export')
+            path, _ = QFileDialog.getSaveFileName(
+                QApplication.activeWindow(), "Enregistrer sous", start,
+                "Tous les fichiers (*)")
+            if not path:
+                item.cancel()
+                return
+            item.setPath(path)
+            item.accept()
+
+        QWebEngineProfile.defaultProfile().downloadRequested.connect(_on_download)
+        _DL_HANDLER_INSTALLED = True
+    except Exception as e:
+        print(f"[Export] gestionnaire de téléchargement non installé : {e}")
+
+
 class PyBridge(QObject):
     """Pont JS → Python exposé via QWebChannel sous le nom 'pybridge'."""
     diagram_changed  = pyqtSignal(str)
@@ -191,6 +228,30 @@ class PyBridge(QObject):
             "print": output_lines,
         })
 
+    @pyqtSlot(str, str, result=str)
+    def save_text_file(self, suggested_name: str, content: str) -> str:
+        """Boîte « Enregistrer sous » native puis écriture UTF-8.
+        Utilisé par les boutons d'export du canvas (bibliothèque de groupes, groupe seul).
+        Retourne le chemin écrit, '' si annulé, ou 'ERREUR: …' si l'écriture échoue."""
+        import os
+        from PyQt5.QtWidgets import QFileDialog, QApplication
+        name = os.path.basename(suggested_name or 'export.json') or 'export.json'
+        start = os.path.join(os.path.expanduser('~'), name)
+        path, _ = QFileDialog.getSaveFileName(
+            QApplication.activeWindow(), "Enregistrer sous", start,
+            "Fichier JSON (*.json);;Tous les fichiers (*)")
+        if not path:
+            return ''
+        if not os.path.splitext(path)[1]:
+            path += '.json'
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        except Exception as e:
+            print(f"[Export] Erreur écriture {path}: {e}")
+            return f"ERREUR: {e}"
+        return path
+
     @pyqtSlot(str)
     def save_group_library(self, json_str: str):
         """Sauvegarde la bibliothèque de groupes dans un fichier JSON."""
@@ -280,6 +341,7 @@ class BlockEditor(QWidget):
             profile.setPersistentCookiesPolicy(profile.AllowPersistentCookies)
         except Exception as _e:
             pass
+        _install_download_handler()
         self.bridge = PyBridge()
         self.channel = QWebChannel()
         self.channel.registerObject("pybridge", self.bridge)
