@@ -998,12 +998,13 @@ function renderAll(){
   if(editMode&&_multiSel.size>1){
     _multiSel.forEach(w=>{
       if(w===selected)return;
-      ctx.strokeStyle='#58a6ff90';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+      ctx.strokeStyle=w.locked?'#d29922b0':'#58a6ff90';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
       ctx.strokeRect(w.x-3,w.y-3,w.w+6,w.h+6);ctx.setLineDash([]);
     });
     // Badge count
     ctx.fillStyle='#58a6ff';ctx.font='bold 11px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
-    ctx.fillText(`${_multiSel.size} sélectionnés`,8,8);
+    const _nl=[..._multiSel].filter(w=>w.locked).length;
+    ctx.fillText(`${_multiSel.size} sélectionnés`+(_nl?` · ${_nl} verrouillé${_nl>1?'s':''} (Ctrl+L pour les déverrouiller)`:''),8,8);
   }
   // Rubber-band
   if(_rubber&&editMode){
@@ -1338,6 +1339,49 @@ function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.gl
 // (RF/AV/mémoire) est simplement la propriété varRef du widget : le moteur
 // PLC détecte automatiquement les widgets 'trend_db' présents dans
 // synoptic.json et historise leurs varRef toutes les 5 minutes côté serveur.
+// ── Échelles des courbes historisées ─────────────────────────────────────
+// Pas « joli » (1 / 2 / 2,5 / 5 × 10^n) pour que les graduations tombent sur des valeurs rondes.
+function _niceStep(range,maxTicks){
+  const raw=range/Math.max(1,maxTicks), mag=Math.pow(10,Math.floor(Math.log10(raw))), n=raw/mag;
+  return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag;
+}
+function _axisDec(step){ for(let d=0;d<=3;d++){ const s=step*Math.pow(10,d); if(Math.abs(s-Math.round(s))<1e-6) return d; } return 3; }
+function _fmtAxis(v,dec){
+  const a=Math.abs(v);
+  if(a>=10000) return (v/1000).toFixed(a>=100000?0:1).replace(/\.0$/,'')+'k';
+  return v.toFixed(dec);
+}
+const _p2=n=>String(n).padStart(2,'0');
+// Repères de temps (heure locale) alignés sur des heures / jours ronds, espacés d'au moins ~46 px.
+function _timeTicks(tMin,tNow,pxWidth){
+  const span=tNow-tMin||1, pxPerSec=pxWidth/span;
+  const steps=[1,2,3,6,12,24,48,72,120,168,240,360].map(h=>h*3600);
+  let step=steps[steps.length-1];
+  for(const s of steps){ if(s*pxPerSec>=46){ step=s; break; } }
+  const ticks=[], d=new Date(tMin*1000);
+  if(step<86400){
+    const h=step/3600; d.setMinutes(0,0,0);
+    while(d.getTime()/1000<tMin || d.getHours()%h!==0) d.setHours(d.getHours()+1);
+  } else {
+    d.setHours(0,0,0,0); while(d.getTime()/1000<tMin) d.setDate(d.getDate()+1);
+  }
+  const dayStep=Math.max(1,Math.round(step/86400));
+  for(let guard=0; d.getTime()/1000<=tNow && guard<200; guard++){
+    ticks.push({t:d.getTime()/1000, d:new Date(d.getTime())});
+    if(step<86400) d.setHours(d.getHours()+step/3600); else d.setDate(d.getDate()+dayStep);
+  }
+  return {ticks,step};
+}
+
+// ── Courbe historisée (BDD, persistante) ──────────────────────────────────
+// Contrairement à rTrend (buffer mémoire navigateur, perdu au reload), cette
+// version interroge /api/history/<ref> côté serveur — la donnée survit aux
+// rechargements de page et aux redémarrages du Raspberry Pi. Le ref suivi
+// (RF/AV/mémoire) est simplement la propriété varRef du widget : le moteur
+// PLC détecte automatiquement les widgets 'trend_db' présents dans
+// synoptic.json et historise leurs varRef toutes les 5 minutes côté serveur.
+// Échelles : axe des valeurs (graduations rondes + lignes de repère) et axe du temps
+// (heures / jours ronds). Échelle automatique par défaut ; w.yAuto===false => w.yMin / w.yMax.
 function rTrendDb(w){
   const c=w.color||'#58a6ff';
   ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;
@@ -1362,19 +1406,67 @@ function rTrendDb(w){
     return;
   }
   const tNow=Math.floor(now/1000),tMin=tNow-hours*3600;
-  const mn=Math.min(...buf.map(p=>p.v)),mx=Math.max(...buf.map(p=>p.v)),sp=(mx-mn)||1;
-  const px=ts=>w.x+5+((ts-tMin)/(tNow-tMin||1))*(w.w-10);
-  const py=v=>w.y+w.h-16-((v-mn)/sp)*(w.h-30);
+  let dmin=Infinity,dmax=-Infinity;
+  for(const p of buf){ if(p.v<dmin)dmin=p.v; if(p.v>dmax)dmax=p.v; }
+
+  // ── zone de tracé : marges pour l'axe des valeurs (gauche) et du temps (bas) ──
+  const T=w.y+22, Bt=w.y+w.h-15, plotH=Math.max(10,Bt-T);
+  // échelle des valeurs
+  let yLo,yHi,step;
+  if(w.yAuto===false && isFinite(w.yMin) && isFinite(w.yMax) && w.yMax>w.yMin){
+    yLo=w.yMin; yHi=w.yMax; step=_niceStep(yHi-yLo,Math.floor(plotH/24));
+  } else {
+    let span=dmax-dmin; if(span<1e-9){ const m=Math.max(1,Math.abs(dmax)*0.1); dmin-=m; dmax+=m; span=dmax-dmin; }
+    step=_niceStep(span*1.06,Math.max(2,Math.floor(plotH/24)));
+    let lo=dmin-span*0.03, hi=dmax+span*0.03;
+    if(dmin>=0 && lo<0) lo=0;          // une grandeur toujours positive ne descend pas sous 0
+    if(dmax<=0 && hi>0) hi=0;
+    yLo=Math.floor(lo/step)*step; yHi=Math.ceil(hi/step)*step;
+    if(yHi<=yLo) yHi=yLo+step;
+  }
+  const dec=_axisDec(step);
+  const yTicks=[]; for(let v=Math.ceil(yLo/step-1e-9)*step; v<=yHi+step*1e-6; v+=step) yTicks.push(Math.round(v/step)*step);
+  // largeur de l'axe d'après les libellés
+  ctx.font='9px sans-serif';
+  let axW=0; for(const v of yTicks) axW=Math.max(axW,ctx.measureText(_fmtAxis(v,dec)).width);
+  axW=Math.ceil(axW)+8;
+  const L=w.x+axW+3, R=w.x+w.w-6;
+  if(R-L<30){ axW=0; }
+  const px=ts=>L+((ts-tMin)/(tNow-tMin||1))*(R-L);
+  const py=v=>Bt-((v-yLo)/((yHi-yLo)||1))*plotH;
+
+  // ── grille + graduations des valeurs ──
+  ctx.lineWidth=1; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.font='9px sans-serif';
+  for(const v of yTicks){
+    const y=Math.round(py(v))+0.5;
+    ctx.strokeStyle='rgba(255,255,255,0.09)'; ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(R,y); ctx.stroke();
+    ctx.fillStyle='#8b949e'; ctx.fillText(_fmtAxis(v,dec),L-4,y);
+  }
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(L+0.5,T); ctx.lineTo(L+0.5,Bt+0.5); ctx.lineTo(R,Bt+0.5); ctx.stroke();
+
+  // ── graduations du temps ──
+  const tt=_timeTicks(tMin,tNow,R-L);
+  ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle='#6e7681';
+  let lastRight=-1e9;
+  for(const k of tt.ticks){
+    const x=Math.round(px(k.t))+0.5;
+    if(x<L||x>R) continue;
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.beginPath(); ctx.moveTo(x,T); ctx.lineTo(x,Bt); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(x,Bt); ctx.lineTo(x,Bt+3); ctx.stroke();
+    const dd=k.d, lbl=(tt.step>=86400||dd.getHours()===0)?`${_p2(dd.getDate())}/${_p2(dd.getMonth()+1)}`:`${_p2(dd.getHours())}h`;
+    const wl=ctx.measureText(lbl).width;
+    if(x-wl/2>lastRight+4 && x-wl/2>=w.x+1 && x+wl/2<=w.x+w.w-1){ ctx.fillText(lbl,x,w.y+w.h-2); lastRight=x+wl/2; }
+  }
+
+  // ── courbe (coupée à la zone de tracé) ──
+  ctx.save(); ctx.beginPath(); ctx.rect(L,T-2,R-L,plotH+4); ctx.clip();
   ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();
   buf.forEach((p,i)=>{const x=px(p.ts),y=py(p.v);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-  ctx.stroke();
+  ctx.stroke(); ctx.restore();
   const lp=buf[buf.length-1];
   ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(lp.ts),py(lp.v),3,0,Math.PI*2);ctx.fill();
   ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';
   ctx.fillText(lp.v.toFixed(1)+(w.unit||''),w.x+w.w-5,w.y+4);
-  ctx.fillStyle='#6e7681';ctx.font='9px sans-serif';ctx.textBaseline='bottom';
-  ctx.textAlign='left'; ctx.fillText(`-${hours}h`,w.x+5,w.y+w.h-3);
-  ctx.textAlign='right';ctx.fillText('maintenant',w.x+w.w-5,w.y+w.h-3);
 }
 function rVal(w,val){ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+w.w/2,w.y+4);ctx.fillStyle=w.color||'#e6edf3';ctx.font='bold 16px sans-serif';ctx.textBaseline='middle';const v=val!=null?(isNaN(parseFloat(val))?String(val):parseFloat(val).toFixed(w.decimals??1)+(w.unit||'')):'—';ctx.fillText(v,w.x+w.w/2,w.y+w.h/2+4);}
 function rAvDisplay(w,val){
@@ -3846,7 +3938,20 @@ cvs.addEventListener('drop',e=>{
 });
 
 // ═══════════════ SOURIS ═══════════════
-let _drag=null,_rsz=null,_rszDir=null,_rszOrig=null,_dox=0,_doy=0,_multiSel=new Set(),_rubber=null,_rubberStart=null,_dragGroup=false,_prevMx=0,_prevMy=0,_groupStartPos=null,_groupDragDx=0,_groupDragDy=0;
+let _drag=null,_rsz=null,_rszDir=null,_rszOrig=null,_dox=0,_doy=0,_multiSel=new Set(),_rubber=null,_rubberStart=null,_dragGroup=false,_prevMx=0,_prevMy=0,_groupStartPos=null,_groupDragDx=0,_groupDragDy=0,_rubberAdd=false,_rubberBase=new Set(),_shiftHit=null,_lockedHit=null,_rubberLocked=false;
+// Widget sous le curseur : un bloc non verrouillé est prioritaire (même s'il est sous un fond verrouillé) ;
+// un widget verrouillé n'est retenu que s'il n'y a rien d'autre dessous.
+function _hitAt(mx,my){
+  const inside=w=>mx>=w.x&&mx<=w.x+w.w&&my>=w.y&&my<=w.y+w.h;
+  const rev=[...widgets].reverse();
+  return rev.find(w=>!w.locked&&inside(w))||rev.find(inside)||null;
+}
+function _curSelSet(){const s=new Set(_multiSel);if(selected)s.add(selected);return s;}
+function _applySel(set){
+  if(set.size>1){_multiSel=set;selected=null;showProps(null);}
+  else if(set.size===1){selected=[...set][0];_multiSel=new Set();showProps(selected);}
+  else{_multiSel=new Set();selected=null;showProps(null);}
+}
 // ─── Rotation par poignée ───
 let _rot=null,_rotStartAngle=0,_rotOrigAngle=0;
 cvs.addEventListener('mousedown',e=>{
@@ -3881,20 +3986,25 @@ cvs.addEventListener('mousedown',e=>{
     }
   }
   // Détection clic : les éléments verrouillés sont sélectionnables (propriétés) mais non déplaçables
-  const hit=[...widgets].reverse().find(w=>mx>=w.x&&mx<=w.x+w.w&&my>=w.y&&my<=w.y+w.h);
-  if(hit){
+  const hit=_hitAt(mx,my);
+  if(e.shiftKey){
+    // Maj+glisser = rectangle de sélection additif, même au-dessus d'un widget ; Maj+clic = ajouter/retirer
+    _rubberAdd=true;_rubberLocked=!!(e.ctrlKey||e.metaKey);_rubberBase=_curSelSet();_shiftHit=hit||null;_lockedHit=null;
+    _rubberStart={x:mx,y:my};_rubber=null;renderAll();return;
+  }
+  if(hit&&(!hit.locked||e.ctrlKey||e.metaKey)){
     if(e.ctrlKey||e.metaKey){
       // Ctrl+clic : toggle multi-sélection (locked exclus du groupe)
-      if(!hit.locked){
+      {
         if(_multiSel.has(hit)) _multiSel.delete(hit);
-        else { _multiSel.add(hit); if(selected&&selected!==hit&&!selected.locked) _multiSel.add(selected); }
+        else { _multiSel.add(hit); if(selected&&selected!==hit) _multiSel.add(selected); }
       }
       selected=hit; showProps(hit); renderAll(); return;
     }
     // Clic sur un widget déjà dans le groupe → drag groupe
     if(!hit.locked&&_multiSel.size>0&&_multiSel.has(hit)){
       _drag=hit;_dragGroup=true;_prevMx=mx;_prevMy=my;
-      _groupStartPos=new Map([..._multiSel].map(w=>[w,[w.x,w.y]]));
+      _groupStartPos=new Map([..._multiSel].filter(w=>!w.locked).map(w=>[w,[w.x,w.y]]));
       _groupDragDx=0;_groupDragDy=0;
       renderAll();return;
     }
@@ -3904,15 +4014,21 @@ cvs.addEventListener('mousedown',e=>{
     if(!hit.locked){ _drag=hit;_dox=mx-hit.x;_doy=my-hit.y; }
     showProps(hit);renderAll();
   } else {
-    if(!e.ctrlKey&&!e.metaKey){ _multiSel.clear(); selected=null; showProps(null); }
+    _shiftHit=null;
+    // Fond verrouillé : glisser = rectangle de sélection ; clic simple (sans bouger) = sélection du fond (propriétés)
+    _lockedHit=(hit&&hit.locked)?hit:null;_rubberLocked=false;
+    if(!e.ctrlKey&&!e.metaKey){ _multiSel.clear(); selected=null; showProps(null); _rubberAdd=false; _rubberBase=new Set(); }
+    else { _rubberAdd=true; _rubberBase=_curSelSet(); }
     // Démarrer rubber-band
     _rubberStart={x:mx,y:my}; _rubber=null;
     renderAll();
   }
 });
-cvs.addEventListener('mousemove',e=>{
+const _onMove=e=>{
   if(!editMode)return;
-  const mx=e.offsetX,my=e.offsetY;
+  // hors du canvas (geste commencé dessus), on calcule la position à partir de la fenêtre
+  const _cr=(e.target===cvs)?null:cvs.getBoundingClientRect();
+  const mx=_cr?e.clientX-_cr.left:e.offsetX, my=_cr?e.clientY-_cr.top:e.offsetY;
   // ── Rotation en cours ──
   if(_rot){
     const cx=_rot.x+_rot.w/2, cy=_rot.y+_rot.h/2;
@@ -3941,10 +4057,9 @@ cvs.addEventListener('mousemove',e=>{
     if(_dragGroup&&_multiSel.size>0&&_groupStartPos){
       _groupDragDx+=mx-_prevMx; _groupDragDy+=my-_prevMy;
       _prevMx=mx; _prevMy=my;
-      _groupStartPos.forEach(([sx,sy],w)=>{
-        w.x=_snap(sx+_groupDragDx);
-        w.y=_snap(sy+_groupDragDy);
-      });
+      const _r0=_groupStartPos.get(_drag)||[_drag.x,_drag.y];
+      const _ddx=_snap(_r0[0]+_groupDragDx)-_r0[0], _ddy=_snap(_r0[1]+_groupDragDy)-_r0[1];
+      _groupStartPos.forEach(([sx,sy],w)=>{ w.x=sx+_ddx; w.y=sy+_ddy; });
     } else {
       _drag.x=_snap(mx-_dox);_drag.y=_snap(my-_doy);
       const xe=document.querySelector('[data-key="x"]'),ye=document.querySelector('[data-key="y"]');
@@ -3963,7 +4078,7 @@ cvs.addEventListener('mousemove',e=>{
   else if(_drag) cvs.style.cursor='grabbing';
   else if(_rubberStart) cvs.style.cursor='crosshair';
   else {
-    const hover=[...widgets].reverse().find(w=>mx>=w.x&&mx<=w.x+w.w&&my>=w.y&&my<=w.y+w.h);
+    const hover=_hitAt(mx,my);
   // Curseur sur les 4 coins (AVANT la détection hover — coins peuvent être hors du widget)
   if(selected&&_multiSel.size===0&&!_drag&&!_rsz&&!_rot){
     const s=selected, CS=16;
@@ -3976,7 +4091,7 @@ cvs.addEventListener('mousemove',e=>{
     else if(mx>=s.x+s.w-CS&&mx<=s.x+s.w+CS&&my>=s.y+s.h-CS&&my<=s.y+s.h+CS) {cvs.style.cursor='se-resize';}
     else {
       // Pas sur un coin — laisser le code hover gérer le curseur
-      const hover=[...widgets].reverse().find(w=>mx>=w.x&&mx<=w.x+w.w&&my>=w.y&&my<=w.y+w.h);
+      const hover=_hitAt(mx,my);
       if(hover){cvs.style.cursor=hover.locked?'pointer':((_multiSel.size>0&&_multiSel.has(hover))?'move':'grab');}
       else cvs.style.cursor='default';
     }
@@ -3988,25 +4103,35 @@ cvs.addEventListener('mousemove',e=>{
       cvs.style.cursor='default';
     }
   }
-});
-cvs.addEventListener('mouseup',e=>{
+};
+cvs.addEventListener('mousemove',_onMove);
+document.addEventListener('mousemove',e=>{ if(e.target!==cvs&&(_drag||_rsz||_rot||_rubberStart)) _onMove(e); });
+const _onUp=e=>{
   if(_rubber&&_rubberStart){
-    // Sélectionner les widgets dans le rectangle
+    // Sélectionner les widgets dans le rectangle (les verrouillés sont exclus ; Ctrl/Maj = on ajoute à la sélection)
     const {x,y,w,h}=_rubber;
-    _multiSel=new Set(widgets.filter(wg=>
-      wg.x+wg.w>x&&wg.x<x+w&&wg.y+wg.h>y&&wg.y<y+h
-    ));
-    if(_multiSel.size===1){selected=[..._multiSel][0];showProps(selected);_multiSel.clear();}
-    else if(_multiSel.size===0){selected=null;showProps(null);}
-    else{selected=null;showProps(null);}
+    const _set=new Set(widgets.filter(wg=>(_rubberLocked||!wg.locked)&&wg.x+wg.w>x&&wg.x<x+w&&wg.y+wg.h>y&&wg.y<y+h));
+    if(_rubberAdd)_rubberBase.forEach(wg=>_set.add(wg));
+    _applySel(_set);
     renderAll();
+  } else if(_rubberStart&&_shiftHit){
+    // Maj+clic simple : ajouter / retirer le widget de la sélection
+    const _set=_rubberBase;
+    if(_set.has(_shiftHit))_set.delete(_shiftHit);else _set.add(_shiftHit);
+    _applySel(_set);renderAll();
+  } else if(_rubberStart&&_lockedHit){
+    selected=_lockedHit;_multiSel=new Set();showProps(selected);renderAll();
   }
   // Toujours remettre à zéro rubber-band (même si simple clic sans mouvement)
-  _rubber=null;_rubberStart=null;
+  _rubber=null;_rubberStart=null;_shiftHit=null;_lockedHit=null;_rubberAdd=false;_rubberLocked=false;
   _drag=null;_rsz=null;_rszDir=null;_rszOrig=null;_dragGroup=false;_groupStartPos=null;_groupDragDx=0;_groupDragDy=0;
   _rot=null;_rotStartAngle=0;_rotOrigAngle=0;
   cvs.style.cursor='default';
-});
+};
+cvs.addEventListener('mouseup',_onUp);
+// Relâcher hors du canvas VALIDE le geste en cours (sélection rectangle, déplacement…) au lieu de l'annuler
+document.addEventListener('mouseup',e=>{ if(e.target!==cvs&&(_drag||_rsz||_rot||_rubberStart)) _onUp(e); });
+
 
 // ═══════════════ CLAVIER ═══════════════
 // ── Presse-papier interne synoptique ─────────────────────────────────────
@@ -4044,30 +4169,57 @@ function pasteSel(){
 document.addEventListener('keydown',e=>{
   const a=document.activeElement.tagName;if(['INPUT','TEXTAREA','SELECT'].includes(a))return;
   if((e.key==='Delete'||e.key==='Backspace')&&editMode&&!(selected&&selected.locked)){
-    if(_multiSel.size>1){widgets=widgets.filter(w=>!_multiSel.has(w));_multiSel.clear();selected=null;showProps(null);renderAll();_dirty=true;}
+    if(_multiSel.size>1){const _del=[..._multiSel].filter(w=>!w.locked);
+      if(!_del.length){toast('Widgets verrouillés : déverrouillez-les d\'abord (Ctrl+L)','info');}
+      else{widgets=widgets.filter(w=>!_del.includes(w));_applySel(new Set([..._multiSel].filter(w=>w.locked)));renderAll();_dirty=true;}}
     else if(selected){widgets=widgets.filter(w=>w!==selected);selected=null;showProps(null);renderAll();_dirty=true;}
   }
-  if(e.ctrlKey&&(e.key==='a'||e.key==='A')&&editMode){e.preventDefault();_multiSel=new Set(widgets.filter(w=>!w.locked));selected=null;showProps(null);renderAll();}
-  if(e.ctrlKey&&(e.key==='l'||e.key==='L')&&editMode){e.preventDefault();if(selected){selected.locked=!selected.locked;renderAll();_dirty=true;toast(selected.locked?'🔒 Verrouillé':'🔓 Déverrouillé','ok');}}
-  if(e.ctrlKey&&e.key==='d'&&selected&&editMode){e.preventDefault();dupSel();}
+  if(e.ctrlKey&&(e.key==='a'||e.key==='A')&&editMode){e.preventDefault();_multiSel=new Set(widgets.filter(w=>e.shiftKey||!w.locked));selected=null;showProps(null);renderAll();}
+  if(e.ctrlKey&&(e.key==='l'||e.key==='L')&&editMode){e.preventDefault();toggleLockSel();}
+  if(e.ctrlKey&&(e.key==='d'||e.key==='D')&&(selected||_multiSel.size>1)&&editMode){e.preventDefault();dupSel();}
   if(e.ctrlKey&&e.key==='s'){e.preventDefault();saveSynoptic();}
   if(e.ctrlKey&&(e.key==='c'||e.key==='C')&&editMode){e.preventDefault();copySel();}
   if(e.ctrlKey&&(e.key==='v'||e.key==='V')&&editMode){e.preventDefault();pasteSel();}
   if(editMode){let dx=0,dy=0;if(e.key==='ArrowLeft')dx=-GRID;if(e.key==='ArrowRight')dx=GRID;if(e.key==='ArrowUp')dy=-GRID;if(e.key==='ArrowDown')dy=GRID;if(dx||dy){
-    if(_multiSel.size>1){_multiSel.forEach(w=>{w.x+=dx;w.y+=dy;});}
-    else if(selected){selected.x+=dx;selected.y+=dy;}
+    if(_multiSel.size>1){_multiSel.forEach(w=>{if(!w.locked){w.x+=dx;w.y+=dy;}});}
+    else if(selected&&!selected.locked){selected.x+=dx;selected.y+=dy;}
     renderAll();_dirty=true;e.preventDefault();}}
 });
 
 // ═══════════════ OPÉRATIONS ═══════════════
-function dupSel(){if(!selected||!editMode)return;const c=JSON.parse(JSON.stringify(selected));c.id='W'+(idCounter++);c.x+=GRID;c.y+=GRID;widgets.push(c);selected=c;showProps(c);renderAll();_dirty=true;}
+function toggleLockSel(){
+  if(!editMode)return;
+  const t=_multiSel.size>1?[..._multiSel]:(selected?[selected]:[]);
+  if(!t.length)return;
+  const lock=!t.some(w=>w.locked);   // au moins un verrouillé -> on déverrouille tout ; sinon on verrouille tout
+  t.forEach(w=>{w.locked=lock;});
+  renderAll();_dirty=true;
+  toast(t.length>1?(lock?`🔒 ${t.length} widgets verrouillés`:`🔓 ${t.length} widgets déverrouillés`):(lock?'🔒 Verrouillé':'🔓 Déverrouillé'),'ok');
+}
+function dupSel(){
+  if(!editMode)return;
+  if(_multiSel.size>1){
+    const n=[..._multiSel].map(w=>{const c=JSON.parse(JSON.stringify(w));c.id='W'+(idCounter++);c.x+=GRID;c.y+=GRID;return c;});
+    n.forEach(c=>widgets.push(c));_multiSel=new Set(n);selected=null;showProps(null);renderAll();_dirty=true;return;
+  }
+  if(!selected)return;const c=JSON.parse(JSON.stringify(selected));c.id='W'+(idCounter++);c.x+=GRID;c.y+=GRID;widgets.push(c);selected=c;showProps(c);renderAll();_dirty=true;}
 function duplicateSelected(){dupSel();}
-function bringToFront(){if(!selected)return;widgets=widgets.filter(w=>w!==selected);widgets.push(selected);renderAll();}
-function sendToBack(){if(!selected)return;widgets=widgets.filter(w=>w!==selected);widgets.unshift(selected);renderAll();}
+function _grpMove(front){const s=_multiSel;const o=widgets.filter(w=>!s.has(w)),m=widgets.filter(w=>s.has(w));widgets=front?o.concat(m):m.concat(o);renderAll();_dirty=true;}
+function bringToFront(){if(_multiSel.size>1)return _grpMove(true);if(!selected)return;widgets=widgets.filter(w=>w!==selected);widgets.push(selected);renderAll();}
+function sendToBack(){if(_multiSel.size>1)return _grpMove(false);if(!selected)return;widgets=widgets.filter(w=>w!==selected);widgets.unshift(selected);renderAll();}
 function clearCanvas(){if(!confirm('Effacer tous les widgets ?'))return;widgets=[];selected=null;showProps(null);renderAll();_dirty=true;}
-function alignLeft(){if(!selected)return;const ref=selected.x;widgets.filter(w=>w!==selected).forEach(w=>{w.x=ref;});renderAll();_dirty=true;}
-function alignVCenter(){if(!selected)return;const cx=selected.x+selected.w/2;widgets.filter(w=>w!==selected).forEach(w=>{w.x=cx-w.w/2;});renderAll();_dirty=true;}
-function alignTop(){if(!selected)return;const ref=selected.y;widgets.filter(w=>w!==selected).forEach(w=>{w.y=ref;});renderAll();_dirty=true;}
+// ── Alignements / répartition sur une sélection multiple (≥2 widgets) ──
+function _grp(){const g=[..._multiSel].filter(w=>!w.locked);return g.length>1?g:null;}
+function _grpDone(){renderAll();_dirty=true;return true;}
+function _needGrp(){toast('Sélectionnez au moins 2 widgets (Ctrl+clic ou rectangle)','info');}
+function alignRight(){const g=_grp();if(!g)return _needGrp();const r=Math.max(...g.map(w=>w.x+w.w));g.forEach(w=>{w.x=Math.round(r-w.w);});_grpDone();}
+function alignBottom(){const g=_grp();if(!g)return _needGrp();const r=Math.max(...g.map(w=>w.y+w.h));g.forEach(w=>{w.y=Math.round(r-w.h);});_grpDone();}
+function alignHCenter(){const g=_grp();if(!g)return _needGrp();const c=(Math.min(...g.map(w=>w.y))+Math.max(...g.map(w=>w.y+w.h)))/2;g.forEach(w=>{w.y=Math.round(c-w.h/2);});_grpDone();}
+function distributeH(){const g=_grp();if(!g||g.length<3)return _needGrp();g.sort((a,b)=>a.x-b.x);const a0=g[0].x,b0=Math.max(...g.map(w=>w.x+w.w)),sw=g.reduce((s,w)=>s+w.w,0),gap=(b0-a0-sw)/(g.length-1);let p=a0;g.forEach(w=>{w.x=Math.round(p);p+=w.w+gap;});_grpDone();}
+function distributeV(){const g=_grp();if(!g||g.length<3)return _needGrp();g.sort((a,b)=>a.y-b.y);const a0=g[0].y,b0=Math.max(...g.map(w=>w.y+w.h)),sh=g.reduce((s,w)=>s+w.h,0),gap=(b0-a0-sh)/(g.length-1);let p=a0;g.forEach(w=>{w.y=Math.round(p);p+=w.h+gap;});_grpDone();}
+function alignLeft(){const g=_grp();if(g){const r=Math.min(...g.map(w=>w.x));g.forEach(w=>{w.x=r;});return _grpDone();}if(!selected)return;const ref=selected.x;widgets.filter(w=>w!==selected).forEach(w=>{w.x=ref;});renderAll();_dirty=true;}
+function alignVCenter(){const g=_grp();if(g){const c=(Math.min(...g.map(w=>w.x))+Math.max(...g.map(w=>w.x+w.w)))/2;g.forEach(w=>{w.x=Math.round(c-w.w/2);});return _grpDone();}if(!selected)return;const cx=selected.x+selected.w/2;widgets.filter(w=>w!==selected).forEach(w=>{w.x=cx-w.w/2;});renderAll();_dirty=true;}
+function alignTop(){const g=_grp();if(g){const r=Math.min(...g.map(w=>w.y));g.forEach(w=>{w.y=r;});return _grpDone();}if(!selected)return;const ref=selected.y;widgets.filter(w=>w!==selected).forEach(w=>{w.y=ref;});renderAll();_dirty=true;}
 
 // ═══════════════ SAUVEGARDE ═══════════════
 function saveSynoptic(){
@@ -4286,7 +4438,7 @@ function showProps(w){
     <span style="font-size:11px;">🔒 Verrouiller (ne bouge plus)</span>
   </label>`;
   if(!['label','symbol','image','dyn_text'].includes(w.type))h+=`<div class="prop-section">Général</div>`+pT('label','Étiquette',w.label||'');
-  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend','trend_db'].includes(w.type))h+=pT('unit','Unité',w.unit||'°C');h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117')+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
+  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend'].includes(w.type))h+=pT('unit','Unité',w.unit||(w.type==='trend_db'?'':'°C'));if(w.type==='trend_db'){h+=`<div class=\"prop-section\">Échelle des valeurs</div>`+pB('yAuto','Échelle automatique',w.yAuto!==false);if(w.yAuto===false){h+=pN('yMin','Valeur min',w.yMin??0,'','',1)+pN('yMax','Valeur max',w.yMax??100,'','',1);}}h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117')+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
   if(w.type==='numeric'){
     h+=`<div class="prop-section">Registre RF / Variable</div>`;
     h+=`<div class="prop-row"><div class="prop-label">Registre RF</div>
@@ -4836,7 +4988,7 @@ function showProps(w){
       renderAll();_dirty=true;
       // Pour les clés qui modifient la structure conditionnelle du panneau,
       // rafraîchir showProps après le cycle courant (évite le freeze Qt WebEngine).
-      const _structKeys=['action','animId','symId','shape','btnStyle'];
+      const _structKeys=['action','animId','symId','shape','btnStyle','yAuto'];
       if(_structKeys.includes(k)){
         setTimeout(()=>{ if(selected===w) showProps(w); },0);
       }

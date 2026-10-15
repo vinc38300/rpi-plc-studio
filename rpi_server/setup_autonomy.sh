@@ -196,6 +196,8 @@ Description=RPi-PLC Studio — Automate programmable (gpiod/Bookworm)
 Documentation=https://github.com/rpi-plc
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -204,8 +206,6 @@ WorkingDirectory=$SCRIPT_DIR
 ExecStart=$PY $SCRIPT_DIR/server.py
 Restart=always
 RestartSec=10
-StartLimitIntervalSec=60
-StartLimitBurst=10
 TimeoutStopSec=10
 KillMode=mixed
 

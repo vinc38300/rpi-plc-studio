@@ -257,6 +257,7 @@ footer {
   <a href="#pages">Navigation multi-pages</a>
   <a href="#props">Panneau propriétés</a>
   <a href="#colonnes" class="sub">Redimensionner les colonnes</a>
+  <a href="#groupes-fournis" class="sub">Groupes prêts à l'emploi</a>
   <a href="#fbd-outils">Outils d'analyse du schéma</a>
   <a href="#fbd-outils" class="sub">Recherche de blocs (Ctrl+F)</a>
   <a href="#fbd-outils-rf" class="sub">Recherche de registre RF (R)</a>
@@ -547,8 +548,8 @@ sudo i2cdetect -y 1
 <p>Deux paquets Debian sont fournis : l'un pour le <strong>PC</strong> (Studio), l'autre pour le <strong>Raspberry Pi</strong> (serveur autonome). Ils s'installent indépendamment.</p>
 <table>
   <tr><th>Paquet</th><th>Cible</th><th>Installation</th><th>Contenu</th></tr>
-  <tr><td><code>rpi-plc-studio_3.5-19.deb</code></td><td>PC Linux (Kubuntu / Ubuntu / Debian)</td><td><code>sudo apt install ./rpi-plc-studio_3.5-19.deb</code></td><td>Application dans <code>/opt/rpi-plc-studio</code>, lanceur <code>rpi-plc-studio</code>, entrée de menu <em>Électronique</em>, association des fichiers <code>.plcproj</code></td></tr>
-  <tr><td><code>rpi-plc_3.5-11-serveur.deb</code></td><td>Raspberry Pi (Bookworm / Bullseye, 32 ou 64 bits)</td><td><code>sudo apt install ./rpi-plc_3.5-11-serveur.deb</code></td><td>Serveur dans <code>/opt/rpi-plc</code>, service systemd <code>rpi-plc</code>, données dans <code>~/rpi-plc-data</code></td></tr>
+  <tr><td><code>rpi-plc-studio_3.5-21.deb</code></td><td>PC Linux (Kubuntu / Ubuntu / Debian)</td><td><code>sudo apt install ./rpi-plc-studio_3.5-21.deb</code></td><td>Application dans <code>/opt/rpi-plc-studio</code>, lanceur <code>rpi-plc-studio</code>, entrée de menu <em>Électronique</em>, association des fichiers <code>.plcproj</code></td></tr>
+  <tr><td><code>rpi-plc_3.5-12-serveur.deb</code></td><td>Raspberry Pi (Bookworm / Bullseye, 32 ou 64 bits)</td><td><code>sudo apt install ./rpi-plc_3.5-12-serveur.deb</code></td><td>Serveur dans <code>/opt/rpi-plc</code>, service systemd <code>rpi-plc</code>, données dans <code>~/rpi-plc-data</code></td></tr>
 </table>
 
 <h3>Ce que fait l'installation</h3>
@@ -955,6 +956,37 @@ sudo i2cdetect -y 1
   <tr><td>Importer une bibliothèque</td><td>Icône ⬆ → charge un fichier <code>.json</code> exporté précédemment (fusionne avec l'existant)</td></tr>
 </table>
 <div class="tip"><div class="ci">💡</div><p><strong>Export / import entre projets :</strong> les groupes de la bibliothèque sont enregistrés dans <code>~/.rpi-plc-studio/group_library.json</code> et sont donc visibles dans tous vos projets. Les fichiers <code>.json</code> exportés servent à les transmettre à une autre machine ou à les sauvegarder. <em>(Jusqu'à la version 3.5-17, l'icône ⬇ n'enregistrait rien : QtWebEngine abandonne les téléchargements sans gestionnaire. Corrigé en 3.5-18, y compris pour les autres exports du synoptique.)</em></p></div>
+
+<h3 id="groupes-fournis">Groupes prêts à l'emploi</h3>
+<p>Ces groupes sont fournis avec les fichiers de bibliothèque (⬆ pour les importer). Tous ont été testés avec le moteur du serveur.</p>
+<table>
+  <tr><th>Groupe</th><th>Entrées → sorties</th><th>Rôle</th></tr>
+  <tr><td><strong>ANTI_COURT_CYCLE</strong></td><td><code>DEMANDE</code> → <code>OUT</code></td><td>Durée mini de marche et d'arrêt d'une sortie (voir ci-dessous)</td></tr>
+  <tr><td><strong>FILTRE_TOR</strong></td><td><code>IN</code> → <code>OUT</code></td><td>Anti-rebond symétrique d'un signal tout-ou-rien</td></tr>
+  <tr><td><strong>Régulation V3V anticipée</strong></td><td><code>T_DEPART</code>, <code>CONSIGNE</code>, <code>MARCHE</code> → <code>OUVRIR</code>, <code>FERMER</code>, <code>SURCHAUFFE</code>, <code>T_PREVUE</code></td><td>Vanne 3 voies par impulsions anticipées (anticipation, gain, impulsion, pause, bande morte et T max réglables dans le code du PyBlock ou par variables AV)</td></tr>
+  <tr><td><strong>Forçage valeur imposée</strong></td><td><code>COMMANDE</code>, <code>FORCAGE</code>, <code>VALEUR</code> → <code>SORTIE</code></td><td>Forçage ON : la sortie prend la valeur imposée ; forçage OFF : elle suit la commande</td></tr>
+  <tr><td><strong>Forçage V3V solaire-chaudière</strong></td><td><code>CMD_SOLAIRE</code>, <code>CMD_CHAUDIERE</code>, <code>FORCAGE</code>, <code>VALEUR_ON_SOLAIRE</code> → <code>K_SOLAIRE</code>, <code>K_CHAUDIERE</code></td><td>Forçage d'une paire de relais complémentaires (un seul forçage, une seule valeur)</td></tr>
+  <tr><td><strong>Forçage V3V ouvrir-fermer</strong></td><td><code>CMD_OUVRIR</code>, <code>CMD_FERMER</code>, <code>FORC_OUVRIR</code>, <code>VAL_OUVRIR</code>, <code>FORC_FERMER</code>, <code>VAL_FERMER</code> → <code>OUVRIR</code>, <code>FERMER</code></td><td>Forçage de deux relais ouvrir / fermer avec interverrouillage (aucun mouvement si les deux sont demandés)</td></tr>
+</table>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">ANTI_COURT_CYCLE — durée mini de marche et d'arrêt</h4>
+<p>À placer entre la demande et la sortie à protéger (compresseur, brûleur, circulateur…). Une fois la sortie enclenchée, elle y reste au moins la <strong>durée mini de marche</strong>, même si la demande tombe. Une fois coupée, elle ne se réenclenche qu'après la <strong>durée mini d'arrêt</strong>.</p>
+<ul>
+  <li><strong>Valeurs par défaut :</strong> marche mini 600 s (10 min), arrêt mini 120 s. Elles se modifient en haut du code du PyBlock (<code>T_MARCHE_S</code>, <code>T_ARRET_S</code>).</li>
+  <li><strong>Réglage depuis le synoptique :</strong> renseigner <code>AV_MARCHE</code> et/ou <code>AV_ARRET</code> avec le nom d'une variable AV (en secondes). Une variable absente ou à 0 laisse la valeur par défaut.</li>
+  <li><strong>Au démarrage</strong> du programme, il n'y a pas d'attente à l'arrêt : une demande déjà présente enclenche la sortie tout de suite.</li>
+  <li><strong>Après un redémarrage du service</strong>, l'état (en marche, temps écoulé) est restauré : la durée mini de marche déjà entamée continue.</li>
+  <li><strong>Ne pas supprimer le bloc INV</strong> placé après le PyBlock : la sortie du PyBlock est volontairement inversée et l'INV la remet dans le bon sens.</li>
+  <li><strong>Une instance par sortie :</strong> chaque groupe posé dans le schéma a son propre état et ses propres temps.</li>
+  <li>Il s'ajoute aux protections déjà présentes dans un bloc : la durée effective est la plus longue des deux.</li>
+</ul>
+<p>Exemple mesuré en simulation : demande qui clignote 30 s / 30 s pendant 1 h → 5 démarrages seulement, marche minimale 630 s et arrêt minimal 150 s (les valeurs sont arrondies par le pas de 30 s de la demande).</p>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">FILTRE_TOR — anti-rebond</h4>
+<p>La sortie ne change d'état que si le signal reste stable pendant le délai : <strong>3 s</strong> avant de prendre en compte un passage à 1 (<code>T_MONTEE_S</code>), <strong>3 s</strong> avant un passage à 0 (<code>T_DESCENTE_S</code>). Réglages dans le code du PyBlock, ou par variables AV via <code>AV_MONTEE</code> et <code>AV_DESCENTE</code>. Au démarrage, la sortie suit le signal sans attendre. Même remarque que ci-dessus pour le bloc INV.</p>
+
+<div class="tip"><div class="ci">⚠</div><p><strong>Limite à connaître quand on crée un groupe :</strong> une entrée de groupe ne peut alimenter qu'<strong>un seul</strong> bloc interne. Le Studio ne conserve que le premier fil, les autres entrées restent vides sans message d'erreur. Si un signal doit servir à plusieurs blocs, le faire passer d'abord par un bloc unique (par exemple deux inverseurs en série) dont la sortie, elle, peut se répartir librement.</p></div>
+
 
 
 <div class="tip">
@@ -2942,7 +2974,9 @@ sudo tailscale up
       • <em>Référence</em> : n'importe quel RF / AV / mémoire — c'est ce choix qui détermine ce qui est historisé, aucune configuration séparée à faire<br>
       • <em>Fenêtre (h)</em> : plage affichée, 24h par défaut<br>
       • <em>Couleur</em> / <em>Fond</em><br>
-      • Axe temporel avec repères "-Nh" → "maintenant"<br><br>
+      • <em>Unité</em> : texte affiché après la valeur courante (ex. %, °C, W/h)<br>
+      • <em>Échelle automatique</em> (cochée par défaut) : décochée, deux champs <em>Valeur min</em> / <em>Valeur max</em> fixent l'échelle verticale<br>
+      • <strong>Échelles :</strong> axe vertical gradué en valeurs rondes (1 / 2 / 2,5 / 5 × 10<sup>n</sup>) avec lignes de repère ; une grandeur toujours positive ne descend jamais sous 0 ; axe horizontal gradué en heures rondes (fenêtre jusqu'à 2–3 jours) ou en dates JJ/MM (fenêtres plus longues), espacées d'au moins ~46 px<br><br>
       <strong>Fonctionnement :</strong> le moteur PLC scanne <code>synoptic.json</code> toutes les 60 s, détecte automatiquement les références utilisées par tous les widgets de ce type (toutes pages confondues), et échantillonne ces références toutes les <strong>5 minutes</strong> dans une table SQLite dédiée (<code>history_var</code>), conservée <strong>1 an</strong>. Le widget interroge <code>GET /api/history/&lt;ref&gt;?hours=N</code> côté navigateur toutes les 30 s.<br><br>
       <strong>Export :</strong> <code>GET /api/history/&lt;ref&gt;/csv?hours=N</code> pour téléchargement.<br>
       <strong>Taille conseillée :</strong> 260 × 110 px minimum.<br>

@@ -290,16 +290,21 @@ select.prop-input{cursor:pointer;}
   <button class="tbtn" onclick="clearCanvas()">🗑 Effacer</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="duplicateSelected()" title="Ctrl+D">⊕ Dupliquer</button>
-  <button class="tbtn" id="lock-btn" onclick="if(selected){selected.locked=!selected.locked;renderAll();_dirty=true;toast(selected.locked?'🔒 Verrouillé':'🔓 Déverrouillé','ok');}" title="Verrouiller / déverrouiller le widget sélectionné (Ctrl+L)">🔒</button>
+  <button class="tbtn" id="lock-btn" onclick="toggleLockSel()" title="Verrouiller / déverrouiller le widget ou toute la sélection (Ctrl+L). Sélectionner des verrouillés : Ctrl+Maj+glisser, Ctrl+clic ou Ctrl+Maj+A">🔒</button>
   <button class="tbtn" onclick="copySel()" title="Copier le widget (Ctrl+C)">⎘ Copier</button>
   <button class="tbtn" onclick="pasteSel()" title="Coller le widget copié (Ctrl+V)">⎗ Coller</button>
   <span id="syn-copy-flash" style="font-size:10px;color:#3fb950;opacity:0;transition:opacity 0.4s;margin:0 4px;pointer-events:none;"></span>
   <button class="tbtn" onclick="bringToFront()">▲ Avant</button>
   <button class="tbtn" onclick="sendToBack()">▼ Arrière</button>
   <div class="tb-div"></div>
-  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (widget sélectionné comme référence)">⬤⟵</button>
+  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (sélection multiple : sur le bord gauche du groupe)">⬤⟵</button>
   <button class="tbtn" onclick="alignVCenter()" title="Centrer verticalement">⬤⟷</button>
   <button class="tbtn" onclick="alignTop()"    title="Aligner en haut">⟰</button>
+  <button class="tbtn" onclick="alignRight()"   title="Aligner à droite (sélection multiple)">Droite</button>
+  <button class="tbtn" onclick="alignBottom()" title="Aligner en bas (sélection multiple)">Bas</button>
+  <button class="tbtn" onclick="alignHCenter()" title="Centrer horizontalement (sélection multiple)">Centre H</button>
+  <button class="tbtn" onclick="distributeH()" title="Répartir horizontalement (3 widgets ou plus)">Répart. ↔</button>
+  <button class="tbtn" onclick="distributeV()" title="Répartir verticalement (3 widgets ou plus)">Répart. ↕</button>
   <div class="tb-div"></div>
   <button class="tbtn" id="nav-bar-toggle" onclick="toggleNavBar()" title="Barre de navigation fixe">⊟ Nav</button>
   <div id="tb-sep"></div>

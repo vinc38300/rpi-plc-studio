@@ -112,68 +112,88 @@
     "ds18b20": []
   },
   "gpio": {
-    "6": {
-      "name": "CP1 K2",
+    "5": {
+      "name": "K1 Autorisation Chaudière",
       "mode": "output",
       "active_low": true
     },
-    "11": {
-      "name": "K3",
+    "6": {
+      "name": "K2 V3V Chaudière",
       "mode": "output",
       "active_low": true
     },
     "13": {
-      "name": "CT 20/21 K4",
+      "name": "K4 Réhausse Chaudière",
       "mode": "output",
       "active_low": true
     },
     "9": {
-      "name": "K5 Lampe rouge - stop bois",
+      "name": "K5 Circulateur ECS Solaire",
       "mode": "output",
       "active_low": true
     },
-    "5": {
-      "name": "Circulateur CR1",
+    "19": {
+      "name": "K6 Circulateur ECS Chaudière",
+      "mode": "output",
+      "active_low": true
+    },
+    "10": {
+      "name": "K7 V3V Ouverte",
+      "mode": "output",
+      "active_low": true
+    },
+    "26": {
+      "name": "K8 V3V Fermé",
+      "mode": "output",
+      "active_low": true
+    },
+    "22": {
+      "name": "K9 Circulateur Planché Chauffant",
+      "mode": "output",
+      "active_low": true
+    },
+    "21": {
+      "name": "K10 V3V Solaire",
       "mode": "output",
       "active_low": true
     },
     "7": {
-      "name": "TOR 8 GPIO7",
+      "name": "TOR  8",
       "mode": "input",
       "pull": "up"
     },
     "8": {
-      "name": "TOR 7 GPIO8",
+      "name": "TOR  7",
       "mode": "input",
       "pull": "up"
     },
     "14": {
-      "name": "TOR 1 G14",
+      "name": "TOR 1 alarme_chaudiere",
       "mode": "input",
       "pull": "up"
     },
     "15": {
-      "name": "TOR 2 GPIO15",
+      "name": "TOR 2",
       "mode": "input",
       "pull": "up"
     },
     "18": {
-      "name": "TOR 3 GPIO18",
+      "name": "TOR  3",
       "mode": "input",
       "pull": "up"
     },
     "23": {
-      "name": "TOR 4 TS1 G23",
+      "name": "TOR 4 Production_chaudiere",
       "mode": "input",
       "pull": "up"
     },
     "24": {
-      "name": "TOR 5 TA1 G24",
+      "name": "TOR  5",
       "mode": "input",
       "pull": "up"
     },
     "25": {
-      "name": "TOR 6 GPIO25",
+      "name": "TOR  6",
       "mode": "input",
       "pull": "up"
     }
