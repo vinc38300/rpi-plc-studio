@@ -87,7 +87,7 @@
 <style>
 :root {
   --bg:     #0d1117; --bg2: #161b22; --bg3: #1c2128;
-  --border: #30363d; --text: #e6edf3; --text2: #8b949e;
+  --border: #444c56; --text: #f0f6fc; --text2: #c9d1d9;
   --accent: #58a6ff; --green: #3fb950; --red: #f85149;
   --amber:  #d29922; --purple: #bc8cff; --teal: #39d353;
   --radius: 8px; --font: 'JetBrains Mono','Fira Code',Consolas,monospace;
@@ -133,17 +133,17 @@ header .spacer { flex:1; }
 @keyframes blink { 0%,100%{border-color:var(--red)} 50%{border-color:#3a1515} }
 .sonde-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .sonde-name { font-size:11px; color:var(--text2); }
-.sonde-addr { font-size:10px; color:var(--purple); }
+.sonde-addr { font-size:11px; color:var(--purple); }
 .sonde-temp { font-size:28px; font-weight:700; color:var(--accent); line-height:1; }
 .sonde-temp.hot  { color:var(--red); }
 .sonde-temp.warm { color:var(--amber); }
 .sonde-temp.cold { color:var(--teal); }
 .sonde-temp.err  { color:var(--text2); font-size:18px; }
-.sonde-volt { font-size:10px; color:var(--text2); margin-top:4px; }
+.sonde-volt { font-size:11px; color:var(--text2); margin-top:4px; }
 .sonde-bar { height:4px; background:var(--bg3); border-radius:2px; margin-top:8px; overflow:hidden; }
 .sonde-bar-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .5s; }
 .sonde-sim { margin-top:8px; }
-.sonde-sim label { font-size:10px; color:var(--text2); display:block; margin-bottom:2px; }
+.sonde-sim label { font-size:11px; color:var(--text2); display:block; margin-bottom:2px; }
 .sonde-sim input { width:100%; accent-color:var(--accent); cursor:pointer; }
 
 /* ── GRAPHIQUE ── */
@@ -169,16 +169,16 @@ canvas#mainChart { max-height:350px; }
 .gpio-pin.active .gpio-indicator { background:var(--green); box-shadow:0 0 6px var(--green); }
 .gpio-info { flex:1; min-width:0; }
 .gpio-pname { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.gpio-bcm   { font-size:10px; color:var(--purple); }
+.gpio-bcm   { font-size:11px; color:var(--purple); }
 .gpio-toggle { background:var(--bg3); border:1px solid var(--border); color:var(--text);
-               padding:3px 8px; border-radius:4px; cursor:pointer; font-size:10px;
+               padding:3px 8px; border-radius:4px; cursor:pointer; font-size:11px;
                font-family:var(--font); }
 .gpio-toggle:hover { border-color:var(--accent); }
 
 /* ── PLC STATUS ── */
 .plc-status { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:10px; }
 .stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:12px; }
-.stat-label { font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
+.stat-label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
 .stat-value { font-size:20px; font-weight:700; color:var(--accent); margin-top:4px; }
 .stat-value.ok  { color:var(--green); }
 .stat-value.err { color:var(--red); }
@@ -434,7 +434,7 @@ function buildMiniCharts(ids) {
         animation:false, parsing:false,
         scales: {
           x: { type:'time', display:false },
-          y: { display:true, ticks:{ font:{size:9}, color:'#8b949e', maxTicksLimit:3 },
+          y: { display:true, ticks:{ font:{size:10}, color:'#c9d1d9', maxTicksLimit:3 },
                grid:{color:'#21262d'} }
         },
         plugins:{ legend:{display:false}, tooltip:{enabled:false} }
@@ -485,10 +485,10 @@ async function reloadChart() {
           scales: {
             x: { type:'time',
                  time:{ tooltipFormat:'HH:mm dd/MM' },
-                 ticks:{ color:'#8b949e', maxTicksLimit:8 },
+                 ticks:{ color:'#c9d1d9', maxTicksLimit:8 },
                  grid:{color:'#21262d'} },
-            y: { title:{ display:true, text:'°C', color:'#8b949e' },
-                 ticks:{ color:'#8b949e' }, grid:{color:'#21262d'} }
+            y: { title:{ display:true, text:'°C', color:'#c9d1d9' },
+                 ticks:{ color:'#c9d1d9' }, grid:{color:'#21262d'} }
           },
           plugins: {
             legend:{ labels:{ color:'#e6edf3', font:{size:11} } },

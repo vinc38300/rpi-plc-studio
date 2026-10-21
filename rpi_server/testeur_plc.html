@@ -18,7 +18,7 @@
     --yellow:   #ffd740;
     --dim:      #2a4a5e;
     --text:     #cde8f5;
-    --muted:    #4a7a96;
+    --muted:    #8fbbd6;
     --font-mono: 'Share Tech Mono', monospace;
     --font-ui:   'Exo 2', sans-serif;
   }
@@ -298,7 +298,7 @@
   <!-- Live temperatures -->
   <div class="card">
     <div class="card-title">📊 Températures en direct
-      <span id="cycleInfo" style="font-size:.7rem;color:var(--dim)">—</span>
+      <span id="cycleInfo" style="font-size:.7rem;color:var(--muted)">—</span>
     </div>
     <div class="card-body">
       <div class="live-grid" id="liveTemps"></div>
@@ -748,7 +748,7 @@ async function pollState() {
     if (state.error_count > 0) {
       document.getElementById('cycleInfo').style.color = 'var(--red)';
     } else {
-      document.getElementById('cycleInfo').style.color = 'var(--dim)';
+      document.getElementById('cycleInfo').style.color = 'var(--muted)';
     }
     document.getElementById('cycleInfo').textContent =
       `Cycle #${cycle}${err > 0 ? ' ⚠ '+err+' erreurs' : ''}`;

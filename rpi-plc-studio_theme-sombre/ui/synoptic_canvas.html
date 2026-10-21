@@ -2,12 +2,11 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Synoptique — RPi-PLC</title>
+<title>Synoptique — RPi-PLC Studio</title>
 <style>
 :root {
   --bg:#0d1117; --bg2:#161b22; --bg3:#1c2128; --bg4:#21262d;
-  --border:#30363d; --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --border:#444c56; --text:#f0f6fc; --text2:#c9d1d9; --text3:#8b949e;
   --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
   --purple:#bc8cff; --cyan:#00d4ff; --orange:#f0883e;
   --r:8px; --font:'Segoe UI',system-ui,sans-serif;
@@ -27,15 +26,15 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 /* TOOLBAR — caché par défaut (mode opérateur) */
 #toolbar{display:none;align-items:center;gap:4px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
 #toolbar.visible{display:flex;}
-.tbtn{padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font);transition:all .15s;white-space:nowrap;}
+.tbtn{padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;font-family:var(--font);transition:all .15s;white-space:nowrap;}
 .tbtn:hover{border-color:var(--accent);color:var(--accent);}
 .tbtn.primary{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
 .tbtn.active{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
 /* Contrôles grille synoptique */
 .grid-group{display:flex;align-items:center;gap:4px;}
-.grid-lbl{font-size:9px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
+.grid-lbl{font-size:10px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
 .grid-sel{height:24px;border-radius:4px;border:1px solid var(--border);
-  background:var(--bg3);color:var(--text2);font-size:10px;padding:0 5px;
+  background:var(--bg3);color:var(--text2);font-size:11px;padding:0 5px;
   cursor:pointer;outline:none;font-family:var(--font);}
 .grid-sel:hover,.grid-sel:focus{border-color:var(--accent);color:var(--accent);}
 .snap-btn{padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;
@@ -66,11 +65,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .sb-panel::-webkit-scrollbar-thumb{background:var(--border);}
 
 /* Items widgets */
-.sb-section{padding:6px 10px 3px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
-.sb-item{display:flex;align-items:center;gap:7px;padding:5px 9px;cursor:grab;border-radius:5px;margin:1px 5px;transition:background .1s;font-size:11px;color:var(--text2);}
+.sb-section{padding:6px 10px 3px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
+.sb-item{display:flex;align-items:center;gap:7px;padding:5px 9px;cursor:grab;border-radius:5px;margin:1px 5px;transition:background .1s;font-size:12px;color:var(--text);}
 .sb-item:hover{background:var(--bg3);color:var(--text);}
 .sb-item:active{cursor:grabbing;}
-.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:10px;flex-shrink:0;}
+.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:11px;flex-shrink:0;}
 
 /* Grille symboles */
 .sym-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:5px;}
@@ -78,7 +77,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .sym-cell:hover{border-color:var(--accent);background:var(--bg4);}
 .sym-cell:active{cursor:grabbing;}
 .sym-cell svg{width:34px;height:34px;}
-.sym-label{font-size:8px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
+.sym-label{font-size:10px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
 
 /* Images */
 .img-bar{padding:5px 6px;flex-shrink:0;}
@@ -86,9 +85,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .img-thumb{position:relative;border-radius:5px;overflow:hidden;cursor:grab;border:1px solid var(--border);aspect-ratio:1;background:var(--bg3);}
 .img-thumb:hover{border-color:var(--accent);}
 .img-thumb img{width:100%;height:100%;object-fit:contain;}
-.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:10px;opacity:0;transition:opacity .15s;}
+.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:11px;opacity:0;transition:opacity .15s;}
 .img-thumb:hover .img-del{opacity:1;}
-.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:8px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
+.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:9px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
 .img-empty{padding:18px;text-align:center;color:var(--text3);font-size:11px;line-height:1.9;}
 
 /* CANVAS */
@@ -99,13 +98,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 /* PROPS */
 .props-panel{width:220px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
 .props-panel.hidden{width:0;overflow:hidden;border:none;}
-.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
+.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
 .props-scroll{flex:1;overflow-y:auto;padding:8px;}
 .props-scroll::-webkit-scrollbar{width:4px;}
 .props-scroll::-webkit-scrollbar-thumb{background:var(--border);}
-.prop-section{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
+.prop-section{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
 .prop-row{margin-bottom:6px;}
-.prop-label{font-size:10px;color:var(--text2);margin-bottom:2px;}
+.prop-label{font-size:11px;color:var(--text2);margin-bottom:2px;}
 .prop-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:5px;font-size:11px;font-family:var(--font);}
 .prop-input:focus{outline:none;border-color:var(--accent);}
 select.prop-input{cursor:pointer;}
@@ -156,7 +155,7 @@ select.prop-input{cursor:pointer;}
 .page-tab{
   padding:3px 12px;border-radius:5px;cursor:pointer;
   border:1px solid var(--border);background:var(--bg3);
-  color:var(--text2);font-size:10px;font-weight:600;
+  color:var(--text2);font-size:11px;font-weight:600;
   white-space:nowrap;transition:all .15s;user-select:none;
 }
 .page-tab:hover{border-color:var(--accent);color:var(--accent);}
@@ -172,7 +171,7 @@ select.prop-input{cursor:pointer;}
 .page-tab-del{
   padding:1px 5px;border-radius:3px;cursor:pointer;
   background:transparent;border:none;color:var(--text3);
-  font-size:10px;margin-left:2px;
+  font-size:11px;margin-left:2px;
 }
 .page-tab-del:hover{color:var(--red);}
 .page-tab.popup-tab{border-style:dashed !important;}
@@ -244,13 +243,13 @@ select.prop-input{cursor:pointer;}
   white-space:nowrap;transition:all .15s;min-height:30px;
 }
 .nav-prev-btn:hover,.nav-next-btn:hover{border-color:var(--accent);color:var(--accent);background:#1a2f45;}
-.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.25;cursor:default;pointer-events:none;}
+.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.55;cursor:default;pointer-events:none;}
 /* Fil d'Ariane central */
 .nav-breadcrumb{
   display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);
   flex:1;overflow:hidden;
 }
-.nav-breadcrumb-sep{color:var(--border);font-size:10px;}
+.nav-breadcrumb-sep{color:var(--border);font-size:11px;}
 .nav-breadcrumb-item{color:var(--text2);cursor:pointer;font-size:11px;padding:2px 5px;border-radius:4px;transition:all .12s;}
 .nav-breadcrumb-item:hover{color:var(--accent);background:rgba(88,166,255,.1);}
 .nav-breadcrumb-item.current{color:var(--text);font-weight:700;cursor:default;background:rgba(255,255,255,.05);}
@@ -262,50 +261,16 @@ select.prop-input{cursor:pointer;}
   transition:all .15s;flex-shrink:0;min-height:30px;
 }
 .nav-back-btn:hover{border-color:var(--amber);color:var(--amber);background:rgba(210,153,34,.1);}
-.nav-back-btn:disabled{opacity:0.25;cursor:default;}
+.nav-back-btn:disabled{opacity:0.55;cursor:default;}
 #nav-bar-toggle{
-  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:10px;
+  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:11px;
   border:1px solid var(--border);background:var(--bg3);color:var(--text2);
   transition:all .15s;
 }
 #nav-bar-toggle.on{border-color:var(--green);color:var(--green);background:rgba(63,185,80,.1);}
-
-/* ═══ MOBILE — écran étroit (<= 700px) OU paramètre ?mobile=1 ═══════════════
-   En mode opérateur :
-   - sidebar et props-panel disparaissent → canvas plein écran
-   - CSS zoom sur #canvasWrap → fit-to-width sans vide noir
-   - overflow:auto → scroll natif pour pan
-   ══════════════════════════════════════════════════════════════════════════ */
-@media (max-width:700px){
-  .sidebar{display:none !important;}
-  .props-panel{display:none !important;}
-  .canvas-wrap{flex:1;width:100%;overflow:auto;-webkit-overflow-scrolling:touch;}
-  #nav-fixed-bar{min-height:48px;height:48px;padding:4px 8px;gap:4px;}
-  .nav-fixed-btn,.nav-prev-btn,.nav-next-btn,.nav-back-btn{
-    min-height:38px;font-size:13px;padding:6px 12px;
-  }
-  .page-tab{padding:5px 16px;font-size:12px;}
-  #toast{bottom:60px;right:8px;font-size:13px;padding:10px 16px;}
-  #toolbar.visible ~ .workspace .sidebar{display:flex !important;}
-  #toolbar.visible ~ .workspace .props-panel{display:flex !important;}
-}
-/* Mode mobile forcé via ?mobile=1 (contourne les proxies/redirections) */
-body.force-mobile .sidebar{display:none !important;}
-body.force-mobile .props-panel{display:none !important;}
-body.force-mobile .canvas-wrap{flex:1;width:100%;overflow:auto;-webkit-overflow-scrolling:touch;}
-body.force-mobile #nav-fixed-bar{min-height:48px;height:48px;padding:4px 8px;gap:4px;}
-body.force-mobile .nav-fixed-btn,
-body.force-mobile .nav-prev-btn,
-body.force-mobile .nav-next-btn,
-body.force-mobile .nav-back-btn{min-height:38px;font-size:13px;padding:6px 12px;}
-body.force-mobile .page-tab{padding:5px 16px;font-size:12px;}
-body.force-mobile #toast{bottom:60px;right:8px;font-size:13px;padding:10px 16px;}
-body.force-mobile #toolbar.visible ~ .workspace .sidebar{display:flex !important;}
-body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !important;}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
 </head>
-<body tabindex="-1" {% if mobile %}class="force-mobile"{% endif %}>
+<body tabindex="-1">
 
 <div id="toolbar">
   <span id="editBadge" class="mode-badge edit" onclick="toggleMode()" title="Tab">✏ Édition</span>
@@ -325,14 +290,14 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   <button class="tbtn" onclick="clearCanvas()">🗑 Effacer</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="duplicateSelected()" title="Ctrl+D">⊕ Dupliquer</button>
-  <button class="tbtn" id="lock-btn" onclick="if(selected){selected.locked=!selected.locked;renderAll();_dirty=true;toast(selected.locked?'🔒 Verrouillé':'🔓 Déverrouillé','ok');}" title="Verrouiller / déverrouiller le widget sélectionné (Ctrl+L)">🔒</button>
+  <button class="tbtn" id="lock-btn" onclick="toggleLockSel()" title="Verrouiller / déverrouiller le widget ou toute la sélection (Ctrl+L). Sélectionner des verrouillés : Ctrl+Maj+glisser, Ctrl+clic ou Ctrl+Maj+A">🔒</button>
   <button class="tbtn" onclick="copySel()" title="Copier le widget (Ctrl+C)">⎘ Copier</button>
   <button class="tbtn" onclick="pasteSel()" title="Coller le widget copié (Ctrl+V)">⎗ Coller</button>
   <span id="syn-copy-flash" style="font-size:10px;color:#3fb950;opacity:0;transition:opacity 0.4s;margin:0 4px;pointer-events:none;"></span>
   <button class="tbtn" onclick="bringToFront()">▲ Avant</button>
   <button class="tbtn" onclick="sendToBack()">▼ Arrière</button>
   <div class="tb-div"></div>
-  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (widget sélectionné comme référence)">⬤⟵</button>
+  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (sélection multiple : sur le bord gauche du groupe)">⬤⟵</button>
   <button class="tbtn" onclick="alignVCenter()" title="Centrer verticalement">⬤⟷</button>
   <button class="tbtn" onclick="alignTop()"    title="Aligner en haut">⟰</button>
   <button class="tbtn" onclick="alignRight()"   title="Aligner à droite (sélection multiple)">Droite</button>
@@ -363,7 +328,6 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   <div style="flex:1;"></div>
   <span id="nav-page-counter" style="font-size:10px;color:var(--text3);margin-right:6px;flex-shrink:0;"></span>
   <button class="nav-fixed-btn" id="edit-mode-btn" onclick="toggleMode()" title="Basculer mode Édition / Opérateur" style="border-color:var(--accent);color:var(--accent);">👁 Opérateur</button>
-  <button class="nav-fixed-btn" onclick="window._synResetView&&window._synResetView()" title="Réinitialiser la vue (double-tap aussi)" style="display:none;border-color:var(--text3);color:var(--text3);font-size:13px;padding:4px 10px;" id="reset-view-btn">⌖</button>
 </div>
 
 <div class="workspace">
@@ -483,161 +447,7 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
 <div id="toast"></div>
 <input type="file" id="img-file-input" accept="image/*" multiple>
 
-<script src="/static/synoptic_canvas.js"></script>
-
-<script>
-/* ═══ FIT-TO-WIDTH — desktop ET mobile ════════════════════════════════════
-   Principe : CSS zoom sur #canvasWrap scale canvas + widgets-html ensemble.
-   · Desktop (viewport > bounds.xMax) : zoom > 1, contenu remplit l'écran
-   · Mobile / écran étroit            : zoom < 1, tout le contenu visible
-   Le pan vertical est géré par le scroll natif du navigateur.
-   ════════════════════════════════════════════════════════════════════════ */
-(function(){
-  var wrap  = document.getElementById('canvasWrap');
-  var inner = document.querySelector('.canvas-wrap');
-  if(!wrap || !inner) return;
-
-  // Scroll natif activé pour tous (pan vertical mobile + desktop si besoin)
-  inner.style.overflow              = 'auto';
-  inner.style.webkitOverflowScrolling = 'touch';
-
-  function _fitToWidth(){
-    if(typeof window.getSynopticBounds !== 'function') return;
-
-    var sb = document.getElementById('sidebar');
-    var bounds = window.getSynopticBounds();
-    if(!bounds || bounds.xMax <= 0) return;
-
-    // Mode édition (sidebar visible) : pas de zoom (les coordonnées souris
-    // doivent rester exactes) ; le canvas couvre TOUT le synoptique, avec
-    // défilement dans le cadre si la page dépasse l'écran. Avant, le zoom du
-    // mode opérateur était conservé et le canvas recalé sur la taille de la
-    // fenêtre : le bas de la page (images, fonds) était coupé.
-    if(sb && !sb.classList.contains('hidden')){
-      wrap.style.zoom = 1;
-      var cw = Math.max(inner.clientWidth,  bounds.xMax + 40);
-      var ch = Math.max(inner.clientHeight, bounds.yMax + 40);
-      var eCvs = document.getElementById('syn-canvas');
-      var eHtml = document.getElementById('widgets-html');
-      if(eCvs){ eCvs.width = cw; eCvs.height = ch; }
-      if(eHtml){ eHtml.style.width = cw+'px'; eHtml.style.height = ch+'px'; }
-      if(window.renderAll) window.renderAll();
-      return;
-    }
-
-    // ── 1. Caler le canvas exactement sur les bounds du contenu ────────────
-    //    (évite que _resize() ait mis cvs.width = viewport et que le zoom
-    //     provoque un dépassement : 1920 * 1.265 = 2428px → overflow)
-    var synCvs = document.getElementById('syn-canvas');
-    var htmlDiv = document.getElementById('widgets-html');
-    if(synCvs){ synCvs.width = bounds.xMax; synCvs.height = bounds.yMax; }
-    if(htmlDiv){ htmlDiv.style.width = bounds.xMax+'px'; htmlDiv.style.height = bounds.yMax+'px'; }
-    if(window.renderAll) window.renderAll();
-
-    // ── 2. Zoom pour remplir exactement la largeur disponible ───────────────
-    //    Desktop 1920px / bounds 1518px → ratio = 1.265 (upscale léger)
-    //    Mobile  390px  / bounds 1518px → ratio = 0.257 (zoom out)
-    var ratio = window.innerWidth / bounds.xMax;
-    ratio = Math.max(0.10, ratio);   // plancher 10% (garde contre synoptique vide)
-
-    wrap.style.zoom = ratio;
-    inner.scrollTop  = 0;
-    inner.scrollLeft = 0;
-  }
-
-  // ── Hooks ──────────────────────────────────────────────────────────────
-  // synoptic_canvas.js appelle onSynopticLoaded après chaque chargement/page
-  window.onSynopticLoaded = function(){ setTimeout(_fitToWidth, 80); };
-
-  // synoptic_canvas.js appelle onAfterResize à la fin de _resize()
-  // → applyMode() → _resize() → _fitToWidth() automatique
-  window.onAfterResize = _fitToWidth;
-
-  // Bouton ⌖ reset-vue
-  window._synResetView = _fitToWidth;
-
-  // Re-fit sur redimensionnement fenêtre
-  window.addEventListener('resize', function(){ setTimeout(_fitToWidth, 60); });
-
-  // Afficher le bouton ⌖ reset-vue (utile sur tous écrans)
-  var rvb = document.getElementById('reset-view-btn');
-  if(rvb) rvb.style.display = '';
-})();
-</script>
-
-<script>
-/* ═══════════════════════════════════════════════════════════════════
-   INITIALISATION SERVEUR RPi — Mode opérateur autonome
-   Charge le synoptique depuis /api/synoptic, reçoit les états PLC
-   via Socket.IO (événement plc_update).
-   ═══════════════════════════════════════════════════════════════════ */
-(function(){
-  // ── 1. Mode opérateur dès le démarrage ──────────────────────────
-  function _initOperator(){
-    if(window.setOperatorMode) window.setOperatorMode(true);
-  }
-
-  // ── 2. Chargement du synoptique depuis l'API ─────────────────────
-  function _loadSynoptic(){
-    fetch('/api/synoptic')
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if(window.loadSynopticData) window.loadSynopticData(data);
-      })
-      .catch(function(e){ console.error('[synoptic.html] Erreur chargement synoptique:', e); });
-  }
-
-  // ── 2b. Noms des GPIO (mêmes libellés que le studio dans les menus) ──
-  function _loadGpioConfig(){
-    fetch('/api/gpio/config')
-      .then(function(r){ return r.json(); })
-      .then(function(cfg){ if(window.setGpioConfig) window.setGpioConfig(cfg); })
-      .catch(function(e){ console.warn('[synoptic.html] Config GPIO indisponible:', e); });
-  }
-
-  // ── 3. État PLC initial ──────────────────────────────────────────
-  function _loadInitialState(){
-    fetch('/api/state')
-      .then(function(r){ return r.json(); })
-      .then(function(s){ if(window.updatePLCState) window.updatePLCState(s); })
-      .catch(function(){});
-  }
-
-  // ── 4. Mises à jour temps réel via Socket.IO ─────────────────────
-  function _connectSocket(){
-    try{
-      var socket = io();
-      socket.on('plc_update', function(s){
-        if(window.updatePLCState) window.updatePLCState(s);
-      });
-      socket.on('connect', function(){
-        _loadInitialState();
-      });
-      socket.on('connect_error', function(e){
-        console.warn('[synoptic.html] Socket.IO:', e.message);
-      });
-    } catch(e){
-      // Socket.IO non disponible : repli sur polling 2 s
-      console.warn('[synoptic.html] Socket.IO absent, polling actif');
-      setInterval(_loadInitialState, 2000);
-    }
-  }
-
-  // Lancer dans l'ordre après chargement complet du canvas JS
-  _initOperator();
-  _loadGpioConfig();
-  _loadSynoptic();
-  _loadInitialState();
-  _connectSocket();
-  // Afficher le bouton reset-vue sur mobile (écran étroit OU ?mobile=1)
-  var _isMobile = window.innerWidth<=700 || document.body.classList.contains('force-mobile');
-  if(_isMobile){
-    var rvb=document.getElementById('reset-view-btn');
-    if(rvb) rvb.style.display='';
-  }
-})();
-</script>
-
+<script src="synoptic_canvas.js"></script>
 
 <div id="sim-panel-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(3px);align-items:center;justify-content:center;">
   <div style="background:#0d1117;border:1.5px solid #30363d;border-radius:14px;width:min(96vw,820px);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.8);overflow:hidden;">

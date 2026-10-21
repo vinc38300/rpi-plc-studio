@@ -381,7 +381,7 @@ footer {
         <li><a href="#props">Panneau propriétés</a></li>
       </ul>
     </li>
-    <li><a href="#blocs-es">Bibliothèque de blocs (86 blocs)</a></li>
+    <li><a href="#blocs-es">Bibliothèque de blocs (87 blocs)</a></li>
     <li><a href="#blocs-group">Blocs Groupes — Encapsulation &amp; bibliothèque</a></li>
     <li><a href="#carithm">Bloc CArithm — Code C embarqué</a></li>
     <li><a href="#carte-io">Matériel — Carte E/S NTC40</a></li>
@@ -763,7 +763,7 @@ sudo i2cdetect -y 1
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="palette"><span class="icon">📦</span> Palette de blocs</h2>
 
-<p>La palette à gauche du canvas liste les <strong>86 blocs disponibles</strong> en 15 catégories (E/S, Logique, Bobines, Temps, Compteurs, Comparaison, Analogique, Calcul, Arithmétique, Variables, Actionneurs, Métier, Connecteurs, Groupes, Cartouche). Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
+<p>La palette à gauche du canvas liste les <strong>87 blocs disponibles</strong> en 15 catégories (E/S, Logique, Bobines, Temps, Compteurs, Comparaison, Analogique, Calcul, Arithmétique, Variables, Actionneurs, Métier, Connecteurs, Groupes, Cartouche). Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
 
 <h3>Pour ajouter un bloc</h3>
 <ul>
@@ -1346,6 +1346,11 @@ sudo i2cdetect -y 1
     <div class="block-card-header"><span class="block-badge" style="color:#ff8040;border-color:#ff804040">VALVE3V</span><span class="block-card-title">Vanne 3 voies (BaseDirValve)</span></div>
     <div class="block-card-desc">Commande une vanne motorisée 3 voies avec deux sorties : OINC ouvre et ODEC ferme. Deux GPIO configurables. Équivalent BaseDirValve Proview (K7_K8_V3V).</div>
     <div class="block-ports"><span class="port-in">OINC (+ouvre)</span><span class="port-in">ODEC (+ferme)</span><span class="port-out">Q</span></div>
+  </div>
+  <div class="block-card">
+    <div class="block-card-header"><span class="block-badge" style="color:#29b6f6;border-color:#29b6f640">TELEGRAM</span><span class="block-card-title">Alerte Telegram</span></div>
+    <div class="block-card-desc">Envoie un message Telegram personnalisé quand IN reste actif (anti-parasite réglable), puis un message de retour à la normale. Autant de blocs que nécessaire, chacun avec son texte. Voir § <a href="#telegram">Bot Telegram</a>.</div>
+    <div class="block-ports"><span class="port-in">IN</span></div>
   </div>
 </div>
 
@@ -2623,6 +2628,29 @@ cat /sys/bus/w1/devices/28-xxxxxxxxxxxx/w1_slave</code></pre>
   <li>Une température passe sous le <strong>seuil bas</strong> (défaut 3°C)</li>
 </ul>
 <div class="note"><div class="ci">ℹ</div><p><strong>Anti-spam :</strong> une seule alerte par canal toutes les 10 minutes maximum. L'alerte se résout automatiquement quand la température revient à la normale.</p></div>
+
+<h3 id="telegram-bloc">Alerte depuis le programme — bloc TELEGRAM</h3>
+<p>Le bloc <code>TELEGRAM</code> (catégorie <em>Actionneurs</em>) envoie un message de votre choix quand le signal câblé sur son entrée <code>IN</code> devient actif — par exemple l'alarme chaudière. On en place autant qu'on veut dans le programme, chacun avec son propre texte ; aucun fichier serveur n'est à modifier.</p>
+<table>
+  <tr><th>Paramètre</th><th>Description</th></tr>
+  <tr><td><code>Message (IN actif)</code></td><td>Texte envoyé quand <code>IN</code> reste actif pendant le délai anti-parasite. Accepte des variables (voir ci-dessous).</td></tr>
+  <tr><td><code>Message retour à la normale</code></td><td>Texte envoyé quand <code>IN</code> redevient inactif (stable pendant le même délai). Vide = aucun message.</td></tr>
+  <tr><td><code>Déclenche quand IN est</code></td><td><code>actif (1)</code> par défaut ; <code>inactif (0)</code> pour un contact normalement fermé.</td></tr>
+  <tr><td><code>Anti-parasite (s)</code></td><td>L'état doit rester stable ce temps avant tout envoi (défaut 3 s). Un parasite plus court n'envoie rien.</td></tr>
+  <tr><td><code>Rappel toutes les (s)</code></td><td>Renvoie le message tant que <code>IN</code> reste actif (0 = jamais, défaut).</td></tr>
+</table>
+<p><strong>Variables dans le texte :</strong> <code>{RF247}</code>, <code>{RF247:.1f}</code> (avec format), <code>{M7}</code>, <code>{nom_variable}</code> (variable DV/AV), <code>{date}</code>, <code>{heure}</code>. Une référence introuvable est remplacée par <code>?</code>.</p>
+<pre><code><span class="comment"># Exemple — alarme chaudière</span>
+INPUT(GPIO14 « Alarme Chaudière ») ──► TELEGRAM
+   Message : 🚨 Chaudière en défaut — T° {RF247:.1f}°C à {heure}
+   Retour  : ✅ Chaudière revenue à la normale</code></pre>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Ajouter le bloc</strong> depuis la palette (<em>Actionneurs → TELEGRAM</em>) et câbler le signal d'alarme sur <code>IN</code>.</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Saisir les messages</strong> dans le panneau de propriétés.</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Déployer</strong> : la première fois avec <em>🚀 Déployer</em> (nouveaux fichiers serveur) ; ensuite, ajouter ou modifier des blocs <code>TELEGRAM</code> ne demande que <em>⚡ Programme seul</em>.</div></div>
+</div>
+<div class="note"><div class="ci">ℹ</div><p>Le bot doit être activé (token + chat_id, § Configuration) : sans cela le bloc ne fait rien. Les messages partent vers tous les <code>chat_ids</code> configurés. L'envoi est asynchrone : un Telegram injoignable ne ralentit jamais le cycle de régulation. Dans le studio (simulation), le bloc n'envoie rien : il écrit seulement une ligne <code>📨 [simulation]</code> dans le journal.</p></div>
+<div class="tip"><div class="ci">💡</div><p><strong>Alternative sans modifier le programme :</strong> la clé <code>"alarmes_tor"</code> de la section <code>telegram</code> du <code>config.json</code> définit des alertes équivalentes (<code>name</code>, <code>source</code> = <code>RFxxx</code> / <code>Mxx</code> / <code>GPIOxx</code> / variable, <code>active</code>, <code>delay_s</code>, <code>repeat_s</code>, <code>notify_clear</code>, <code>info</code>), modifiables à chaud via <code>POST /api/telegram/config</code>.</p></div>
 
 <h3>Rapport quotidien automatique</h3>
 <p>Un résumé de toutes les températures est envoyé chaque jour à l'heure configurée (défaut 8h00). Il inclut l'état du PLC, le nombre de cycles, et les valeurs de chaque sonde.</p>

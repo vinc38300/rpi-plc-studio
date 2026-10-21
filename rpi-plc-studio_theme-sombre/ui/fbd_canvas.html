@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FBD Editor — Canvas Infini</title>
+<style>
+:root{
+  --fbd-bg:#0d1117; --fbd-bg2:#161b22; --fbd-bg3:#1c2128; --fbd-bg4:#21262d;
+  --fbd-border:#444c56; --fbd-border2:#6e7681;
+  --fbd-text:#f0f6fc; --fbd-text2:#c9d1d9; --fbd-text3:#8b949e;
+  --fbd-accent:#58a6ff; --fbd-grid:#1c2128;
+}
+:root.theme-light{
+  --fbd-bg:#f0f2f5; --fbd-bg2:#ffffff; --fbd-bg3:#f1f5f9; --fbd-bg4:#e2e8f0;
+  --fbd-border:#d1d9e0; --fbd-border2:#94a3b8;
+  --fbd-text:#1a1f2e; --fbd-text2:#475569; --fbd-text3:#94a3b8;
+  --fbd-accent:#2563eb; --fbd-grid:#e8ecf0;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--fbd-bg);
+  font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;color:var(--fbd-text);}
+#app{display:flex;flex-direction:column;width:100%;height:100%;}
+#nav-bar{
+  display:flex;align-items:center;background:var(--fbd-bg);
+  border-bottom:1px solid var(--fbd-border);height:38px;padding:0 8px;
+  gap:6px;flex-shrink:0;
+}
+/* Legacy page nav elements — hidden */
+#nav-prev,#nav-next,#nav-page-name,#nav-page-dots,#nav-add,#nav-del,
+#nav-crosspage-badge,#nav-pages-label{ display:none !important; }
+.nav-btn{
+  height:26px;padding:0 9px;border-radius:4px;cursor:pointer;
+  background:var(--fbd-bg3);border:1px solid var(--fbd-border);color:var(--fbd-text2);
+  font-size:11px;display:flex;align-items:center;justify-content:center;
+  user-select:none;flex-shrink:0;gap:4px;white-space:nowrap;
+  font-family:inherit;transition:all .15s;
+}
+.nav-btn:hover{border-color:#58a6ff;color:#58a6ff;background:#0d1f35;}
+.nav-btn.accent{border-color:#7c3aed;color:#bc8cff;background:#1a0a35;}
+.nav-btn.accent:hover{border-color:#bc8cff;background:#2a1050;}
+.nav-btn.cartouche-btn{border-color:#3d5070;color:#c9d1d9;background:#12192a;}
+.nav-btn.cartouche-btn:hover{border-color:#58a6ff;color:#58a6ff;}
+#btn-undo,#btn-redo{
+  width:28px;height:26px;border-radius:4px;cursor:pointer;
+  background:transparent;border:1px solid var(--fbd-border);
+  color:var(--fbd-text2);font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;flex-shrink:0;opacity:0.6;transition:all .15s;
+}
+#btn-undo:hover,#btn-redo:hover{border-color:#58a6ff;color:#58a6ff;}
+#btn-undo.active,#btn-redo.active{opacity:1;}
+.nav-sep{width:1px;height:20px;background:#30363d;margin:0 2px;flex-shrink:0;}
+#infinite-badge{
+  background:#0a1e2a;border:1px solid #1f4060;
+  border-radius:4px;padding:2px 8px;color:#8cc0e6;font-size:10px;
+  letter-spacing:.5px;white-space:nowrap;
+}
+#nav-grid-group{display:flex;align-items:center;gap:4px;}
+#nav-grid-label{font-size:10px;color:var(--fbd-text3);letter-spacing:.4px;white-space:nowrap;}
+#nav-grid-select{
+  height:24px;border-radius:4px;border:1px solid var(--fbd-border);
+  background:var(--fbd-bg3);color:var(--fbd-text2);font-size:11px;
+  padding:0 4px;cursor:pointer;outline:none;font-family:inherit;
+}
+#nav-grid-select:hover,#nav-grid-select:focus{border-color:#58a6ff;color:#58a6ff;}
+#nav-snap-toggle{
+  height:24px;padding:0 8px;border-radius:4px;cursor:pointer;
+  border:1px solid var(--fbd-border);background:var(--fbd-bg3);
+  color:var(--fbd-text2);font-size:11px;white-space:nowrap;transition:all .15s;font-family:inherit;
+}
+#nav-snap-toggle:hover{border-color:#58a6ff;color:#58a6ff;}
+#nav-snap-toggle.snap-on{border-color:#3fb950;color:#3fb950;background:rgba(63,185,80,.1);}
+#body{display:flex;flex:1;overflow:hidden;min-height:0;}
+#palette{
+  width:162px;flex-shrink:0;background:var(--fbd-bg);
+  border-right:1px solid #30363d;overflow-y:auto;overflow-x:hidden;
+}
+#palette::-webkit-scrollbar{width:3px;}
+#palette::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px;}
+.pal-hdr{padding:5px 8px 3px;font-size:10px;text-transform:uppercase;
+  letter-spacing:1px;color:var(--fbd-text3);border-top:1px solid var(--fbd-border);margin-top:1px;user-select:none;}
+.pal-item{display:flex;align-items:center;gap:6px;padding:4px 7px;cursor:grab;border-radius:4px;margin:1px 3px;min-width:0;}
+.pal-item:hover{background:var(--fbd-bg3);}
+.pal-badge{font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid;min-width:38px;text-align:center;flex-shrink:0;line-height:1.4;}
+.pal-desc{color:var(--fbd-text2);font-size:10px;line-height:1.3;min-width:0;overflow-wrap:anywhere;}
+.pal-fav-hdr{padding:4px 8px 3px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#f0883e;border-top:1px solid var(--fbd-border);margin-top:1px;user-select:none;display:flex;align-items:center;gap:4px;}
+.pal-fav-hdr .fav-help{font-size:9px;color:var(--fbd-text3);margin-left:auto;text-transform:none;letter-spacing:0;}
+.pal-item-fav{display:flex;align-items:center;gap:6px;padding:4px 7px;cursor:grab;border-radius:4px;margin:1px 3px;border-left:2px solid #f0883e44;}
+.pal-item-fav:hover{background:var(--fbd-bg3);}
+.pal-item-fav .pal-star{color:#f0883e;}
+.pal-item .pal-star{margin-left:auto;flex-shrink:0;opacity:0;font-size:11px;cursor:pointer;color:#8b949e;transition:opacity .15s,color .15s;padding:0 2px;}
+.pal-item:hover .pal-star{opacity:1;}
+.pal-item .pal-star:hover{color:#f0883e;}
+.pal-item-fav .pal-drag-handle{font-size:11px;color:#8b949e;cursor:grab;flex-shrink:0;opacity:.5;user-select:none;padding:0 1px;}
+.pal-item-fav:hover .pal-drag-handle{opacity:1;}
+.pal-fav-drop-zone{min-height:22px;margin:2px 6px;border-radius:4px;border:1px dashed #f0883e55;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f0883e88;transition:background .15s,border-color .15s;}
+.pal-fav-drop-zone.drag-over{background:#f0883e15;border-color:#f0883e;color:#f0883e;}
+.pal-item.dragging-fav{opacity:.4;}
+.pal-item-fav.drag-above{border-top:2px solid #f0883e;}
+.pal-item-fav.drag-below{border-bottom:2px solid #f0883e;}
+#canvas-area{position:relative;flex:1;overflow:hidden;min-width:200px;}
+/* Poignées de redimensionnement des colonnes (palette | canvas | propriétés) */
+.splitter{flex:0 0 5px;width:5px;cursor:col-resize;position:relative;z-index:30;touch-action:none;
+  background:transparent;transition:background .15s;}
+.splitter::after{content:'';position:absolute;top:0;bottom:0;left:-3px;right:-3px;} /* zone de saisie élargie */
+.splitter:hover,.splitter.drag{background:var(--fbd-accent);opacity:.55;}
+body.col-resizing,body.col-resizing *{cursor:col-resize !important;user-select:none !important;}
+canvas{position:absolute;top:0;left:0;}
+#props{width:206px;flex-shrink:0;background:var(--fbd-bg2);border-left:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden;}
+#props-title{padding:6px 10px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--fbd-text2);border-bottom:1px solid var(--fbd-border);flex-shrink:0;}
+#props-body{padding:8px;overflow-y:auto;flex:1;}
+#props-body::-webkit-scrollbar{width:3px;}
+#props-body::-webkit-scrollbar-thumb{background:#30363d;}
+.pr{margin-bottom:7px;}
+.pl{font-size:10px;color:var(--fbd-text2);margin-bottom:2px;display:block;text-transform:uppercase;letter-spacing:.5px;}
+.pi,.ps{width:100%;background:var(--fbd-bg);border:1px solid var(--fbd-border);border-radius:4px;color:var(--fbd-text);padding:3px 6px;font:10px 'JetBrains Mono',monospace;}
+.pi:focus,.ps:focus{outline:none;border-color:#58a6ff;}
+.pb{width:100%;margin-top:3px;padding:4px;background:var(--fbd-bg3);border:1px solid var(--fbd-border);border-radius:4px;color:var(--fbd-text);cursor:pointer;font:10px 'JetBrains Mono',monospace;}
+.pb:hover{border-color:#58a6ff;color:#58a6ff;}
+.pb.danger{border-color:#f85149;color:#f85149;}
+.pb.danger:hover{background:#2a0a0a;}
+.psep{border:none;border-top:1px solid #30363d;margin:7px 0;}
+#phint{padding:14px 8px;color:var(--fbd-text3);font-size:11px;text-align:center;line-height:1.8;}
+.conn-row{display:flex;justify-content:space-between;align-items:center;padding:2px 5px;background:var(--fbd-bg);border-radius:3px;margin:2px 0;font-size:10px;cursor:pointer;}
+.conn-row:hover{background:var(--fbd-bg3);}
+.conn-chip{font-size:9px;padding:1px 4px;border-radius:2px;}
+.conn-jump{color:#39d353;font-size:10px;margin-left:4px;}
+#tt{position:fixed;background:var(--fbd-bg2);border:1px solid var(--fbd-border);color:var(--fbd-text);font:9px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:4px;pointer-events:none;display:none;z-index:500;white-space:nowrap;}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="nav-bar">
+  <!-- Legacy page nav (masqué par CSS) -->
+  <div class="nav-arrow" id="nav-prev">◀</div>
+  <div id="nav-page-name"></div>
+  <div class="nav-arrow" id="nav-next">▶</div>
+  <div id="nav-page-dots"></div>
+  <div id="nav-add">+</div>
+  <div id="nav-del">✕</div>
+  <div id="nav-crosspage-badge">↔ INTER-PAGES</div>
+
+  <!-- Badge canvas infini -->
+  <div id="infinite-badge">∞ CANVAS INFINI</div>
+
+  <div class="nav-sep"></div>
+  <div id="btn-undo" onclick="undo()" title="Annuler (Ctrl+Z)">↩</div>
+  <div id="btn-redo" onclick="redo()" title="Rétablir (Ctrl+Y)">↪</div>
+  <div class="nav-sep"></div>
+
+  <div id="btn-copy"  onclick="copyBlock()"  title="Copier (Ctrl+C)"  class="nav-btn">⎘ Copier</div>
+  <div id="btn-paste" onclick="pasteBlock()" title="Coller (Ctrl+V)"  class="nav-btn">⎗ Coller</div>
+  <span id="fbd-copy-flash" style="font-size:10px;color:#3fb950;opacity:0;transition:opacity 0.4s;margin-left:2px;pointer-events:none;"></span>
+
+  <div class="nav-sep"></div>
+  <div id="grp-breadcrumb" style="display:none;align-items:center;gap:4px;font-size:11px;font-family:'JetBrains Mono',monospace;background:#1a0a35;border:1px solid #7c3aed;border-radius:4px;padding:2px 8px;margin-right:4px;"></div>
+  <button onclick="groupSelected()" title="Grouper (Ctrl+G)" class="nav-btn accent">⊞ Grouper</button>
+  <button onclick="exitGroup()" title="Sortir du groupe (Échap)" id="btn-exit-group" style="display:none;" class="nav-btn accent">← Sortir</button>
+
+  <div class="nav-sep"></div>
+  <button onclick="addCartouche()" title="Ajouter un cadre cartouche imprimable" class="nav-btn cartouche-btn">◫ Cartouche</button>
+
+  <div class="nav-sep"></div>
+  <div id="nav-fit" onclick="fitView()" class="nav-btn">⊡ Ajuster</div>
+
+  <div class="nav-sep"></div>
+  <div id="nav-grid-group">
+    <span id="nav-grid-label">GRILLE</span>
+    <select id="nav-grid-select" title="Pas de la grille" onchange="setGridSize(parseInt(this.value))">
+      <option value="5">5 px</option>
+      <option value="10">10 px</option>
+      <option value="20" selected>20 px</option>
+      <option value="40">40 px</option>
+    </select>
+    <div id="nav-snap-toggle" class="snap-on" onclick="toggleSnap()" title="Accroche grille">⊞ Snap</div>
+  </div>
+</div>
+
+<div id="body">
+  <div id="palette"></div>
+  <div id="split-pal" class="splitter" title="Glisser pour redimensionner la palette (double-clic : taille d'origine)"></div>
+  <div id="canvas-area">
+    <div id="fbd-search-bar" style="display:none;position:absolute;top:4px;left:50%;
+      transform:translateX(-50%);z-index:100;align-items:center;gap:6px;padding:4px 10px;
+      background:#161b22;border:1px solid #7c3aed;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.6);">
+      <input id="fbd-search-input" type="text" placeholder="🔍 Nom, type, ID…"
+        style="background:#0d1117;border:1px solid #7c3aed;border-radius:5px;color:#e6edf3;padding:4px 10px;font:11px monospace;width:260px;outline:none;"
+        oninput="_fbdSearch(this.value)"
+        onkeydown="if(event.key==='Escape')_fbdSearchClose();if(event.key==='Enter')_fbdSearchNext();">
+      <span id="fbd-search-count" style="font-size:10px;color:#8b949e;min-width:50px;"></span>
+      <button onclick="_fbdSearchNext()" style="background:#1a0a35;border:1px solid #7c3aed;border-radius:4px;color:#bc8cff;padding:2px 8px;cursor:pointer;font-size:11px;">↓</button>
+      <button onclick="_fbdSearchPrev()" style="background:#1a0a35;border:1px solid #7c3aed;border-radius:4px;color:#bc8cff;padding:2px 8px;cursor:pointer;font-size:11px;">↑</button>
+      <button onclick="_fbdSearchClose()" style="background:#2a0a0a;border:1px solid #f85149;border-radius:4px;color:#f85149;padding:2px 6px;cursor:pointer;">✕</button>
+    </div>
+    <canvas id="bg"></canvas>
+    <canvas id="main"></canvas>
+  </div>
+  <div id="split-props" class="splitter" title="Glisser pour redimensionner les propriétés (double-clic : taille d'origine)"></div>
+  <div id="props">
+    <div id="props-title">Propriétés</div>
+    <div id="props-body"><div id="phint">Cliquer sur un bloc<br>pour éditer.<br><br>Double-clic canvas<br>pour ajouter.<br><br>Glisser depuis<br>la palette.<br><br>◫ <b>Cartouche</b><br>pour délimiter<br>une zone imprimable.</div></div>
+  </div>
+</div>
+</div>
+<div id="tt"></div>
+<script src="fbd_canvas.js"></script>
+<script>
+/* ── Colonnes redimensionnables : palette | canvas | propriétés ──────────────
+   Largeurs mémorisées (localStorage), bornées pour que le canvas reste utilisable,
+   double-clic sur une poignée = taille d'origine. N'altère pas la logique du canvas :
+   on ne fait que changer la largeur des colonnes puis appeler resize(). */
+(function(){
+  var KEY='fbd_col_widths_v1', MIN_CANVAS=280;
+  var els={pal:document.getElementById('palette'), props:document.getElementById('props')};
+  var DEF={pal:162, props:206}, LIM={pal:[120,520], props:[160,560]};
+  var bodyEl=document.getElementById('body'), busy=false, saved={};
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{}; }catch(e){ saved={}; }
+
+  function other(side){ return side==='pal'?els.props:els.pal; }
+  function maxFor(side){
+    var room=bodyEl.clientWidth-other(side).offsetWidth-10-MIN_CANVAS;
+    return Math.max(LIM[side][0], Math.min(LIM[side][1], room));
+  }
+  function clampW(side,w){ return Math.max(LIM[side][0], Math.min(maxFor(side), Math.round(w))); }
+  function setW(side,w,persist){
+    w=clampW(side,w); els[side].style.width=w+'px';
+    if(persist){ saved[side]=w; try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){} }
+    if(typeof resize==='function') resize();     // redimensionne et redessine le canvas
+    return w;
+  }
+  function reset(side){
+    delete saved[side]; try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(e){}
+    els[side].style.width=DEF[side]+'px'; if(typeof resize==='function') resize();
+  }
+  function bind(splitId,side){
+    var sp=document.getElementById(splitId), drag=null;
+    sp.addEventListener('pointerdown',function(e){
+      if(e.button!==0) return;
+      drag={x:e.clientX, w:els[side].offsetWidth, id:e.pointerId};
+      try{ sp.setPointerCapture(e.pointerId); }catch(_){}
+      sp.classList.add('drag'); document.body.classList.add('col-resizing'); e.preventDefault();
+    });
+    sp.addEventListener('pointermove',function(e){
+      if(!drag) return;
+      var dx=e.clientX-drag.x;
+      setW(side, drag.w+(side==='pal'?dx:-dx), false);
+    });
+    function end(e){
+      if(!drag) return; drag=null;
+      try{ sp.releasePointerCapture(e.pointerId); }catch(_){}
+      sp.classList.remove('drag'); document.body.classList.remove('col-resizing');
+      saved[side]=els[side].offsetWidth; try{ localStorage.setItem(KEY,JSON.stringify(saved)); }catch(_){}
+    }
+    sp.addEventListener('pointerup',end); sp.addEventListener('pointercancel',end);
+    sp.addEventListener('dblclick',function(){ reset(side); });
+  }
+  bind('split-pal','pal'); bind('split-props','props');
+
+  // fenêtre réduite : on re-borne les colonnes pour que le canvas ne disparaisse jamais
+  window.addEventListener('resize',function(){
+    if(busy) return; busy=true;
+    try{
+      var ch=false;
+      ['pal','props'].forEach(function(s){
+        var cur=els[s].offsetWidth, w=clampW(s,cur);
+        if(Math.abs(w-cur)>0.5){ els[s].style.width=w+'px'; ch=true; }
+      });
+      if(ch && typeof resize==='function') resize();
+    }finally{ busy=false; }
+  });
+
+  // restauration des largeurs mémorisées
+  ['pal','props'].forEach(function(s){ if(saved[s]) els[s].style.width=clampW(s,saved[s])+'px'; });
+  if(typeof resize==='function') setTimeout(resize,0);
+})();
+</script>
+</body>
+</html>

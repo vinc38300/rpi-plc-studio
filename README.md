@@ -6,13 +6,13 @@ Conçu à l'origine pour piloter une installation de chauffage (solaire thermiqu
 
 ## Sommaire
 
-- [Aperçu](#aperçu)
+- [Aperçu](#aper%C3%A7u)
 - [Architecture](#architecture)
-- [Fonctionnalités](#fonctionnalités)
+- [Fonctionnalités](#fonctionnalit%C3%A9s)
 - [Installation](#installation)
-- [Démarrage rapide](#démarrage-rapide)
-- [Structure du dépôt](#structure-du-dépôt)
-- [Déploiement](#déploiement)
+- [Démarrage rapide](#d%C3%A9marrage-rapide)
+- [Structure du dépôt](#structure-du-d%C3%A9p%C3%B4t)
+- [Déploiement](#d%C3%A9ploiement)
 - [Limitations connues](#limitations-connues)
 - [Licence](#licence)
 
@@ -129,10 +129,10 @@ Dépendances installées automatiquement : `python3-gpiod` (v2, GPIO natif Bookw
 
 Le Studio propose deux modes, tous deux gérés par `core/deployer.py` :
 
-| Mode | Déclenché par | Transfère |
-|---|---|---|
-| **Programme seul** | `deploy_prog_only()` | `programme.json`, `synoptic.json`, `config.json` (fusion GPIO/sondes), et **tous les fichiers de `SERVER_FILES`** (mise à jour silencieuse si nécessaire) |
-| **Complet** | `deploy()` | Idem + arrêt propre du service, libération GPIO, redémarrage du serveur |
+| Mode               | Déclenché par        | Transfère                                                                                                                                                 |
+|--------------------|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Programme seul** | `deploy_prog_only()` | `programme.json`, `synoptic.json`, `config.json` (fusion GPIO/sondes), et **tous les fichiers de** `SERVER_FILES` (mise à jour silencieuse si nécessaire) |
+| **Complet**        | `deploy()`           | Idem + arrêt propre du service, libération GPIO, redémarrage du serveur                                                                                   |
 
 `smart_check()` analyse le Raspberry Pi avant déploiement (OS, GPIO, dépendances Python, fichiers serveur présents/à jour, état du service) et recommande l'action adaptée.
 

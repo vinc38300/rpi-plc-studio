@@ -115,7 +115,7 @@ class LogTerminal(QTextEdit):
             "[DEPLOY]":"#d29922",
             "[PROG]":  "#bc8cff",
             "[SVC]":   "#39d353",
-            "[PIP]":   "#8b949e",
+            "[PIP]":   "#b1bac4",
             "ERREUR":  "#f85149",
             "TON":     "#bc8cff",
             "CTU":     "#39d353",
@@ -139,7 +139,7 @@ class LogTerminal(QTextEdit):
                 color = c
                 break
         t = time.strftime("%H:%M:%S")
-        self.append(f'<span style="color:#484f58">[{t}]</span> '
+        self.append(f'<span style="color:#8b949e">[{t}]</span> '
                     f'<span style="color:{color}">{msg.strip()}</span>')
         self.moveCursor(QTextCursor.End)
 
@@ -2072,6 +2072,12 @@ class MainWindow(QMainWindow):
             QApplication.instance().setStyleSheet(qss)
         except Exception as e:
             print(f"[Thème] Erreur QSS {path}: {e}")
+        try:
+            from ui import theme_fix
+            theme_fix.apply_theme_palette(name)
+            theme_fix.set_dark_mode(name == "dark")
+        except Exception as e:
+            print(f"[Thème] Palette/contraste : {e}")
 
         # Canvas bar
         if name == "light":

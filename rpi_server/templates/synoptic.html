@@ -7,7 +7,7 @@
 <style>
 :root {
   --bg:#0d1117; --bg2:#161b22; --bg3:#1c2128; --bg4:#21262d;
-  --border:#30363d; --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --border:#444c56; --text:#f0f6fc; --text2:#c9d1d9; --text3:#8b949e;
   --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
   --purple:#bc8cff; --cyan:#00d4ff; --orange:#f0883e;
   --r:8px; --font:'Segoe UI',system-ui,sans-serif;
@@ -33,9 +33,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .tbtn.active{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
 /* Contrôles grille synoptique */
 .grid-group{display:flex;align-items:center;gap:4px;}
-.grid-lbl{font-size:9px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
+.grid-lbl{font-size:10px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
 .grid-sel{height:24px;border-radius:4px;border:1px solid var(--border);
-  background:var(--bg3);color:var(--text2);font-size:10px;padding:0 5px;
+  background:var(--bg3);color:var(--text2);font-size:11px;padding:0 5px;
   cursor:pointer;outline:none;font-family:var(--font);}
 .grid-sel:hover,.grid-sel:focus{border-color:var(--accent);color:var(--accent);}
 .snap-btn{padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;
@@ -66,11 +66,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .sb-panel::-webkit-scrollbar-thumb{background:var(--border);}
 
 /* Items widgets */
-.sb-section{padding:6px 10px 3px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
+.sb-section{padding:6px 10px 3px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
 .sb-item{display:flex;align-items:center;gap:7px;padding:5px 9px;cursor:grab;border-radius:5px;margin:1px 5px;transition:background .1s;font-size:11px;color:var(--text2);}
 .sb-item:hover{background:var(--bg3);color:var(--text);}
 .sb-item:active{cursor:grabbing;}
-.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:10px;flex-shrink:0;}
+.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:11px;flex-shrink:0;}
 
 /* Grille symboles */
 .sym-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:5px;}
@@ -78,7 +78,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .sym-cell:hover{border-color:var(--accent);background:var(--bg4);}
 .sym-cell:active{cursor:grabbing;}
 .sym-cell svg{width:34px;height:34px;}
-.sym-label{font-size:8px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
+.sym-label{font-size:9px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
 
 /* Images */
 .img-bar{padding:5px 6px;flex-shrink:0;}
@@ -86,9 +86,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .img-thumb{position:relative;border-radius:5px;overflow:hidden;cursor:grab;border:1px solid var(--border);aspect-ratio:1;background:var(--bg3);}
 .img-thumb:hover{border-color:var(--accent);}
 .img-thumb img{width:100%;height:100%;object-fit:contain;}
-.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:10px;opacity:0;transition:opacity .15s;}
+.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:11px;opacity:0;transition:opacity .15s;}
 .img-thumb:hover .img-del{opacity:1;}
-.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:8px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
+.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:9px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
 .img-empty{padding:18px;text-align:center;color:var(--text3);font-size:11px;line-height:1.9;}
 
 /* CANVAS */
@@ -99,13 +99,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 /* PROPS */
 .props-panel{width:220px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
 .props-panel.hidden{width:0;overflow:hidden;border:none;}
-.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
+.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
 .props-scroll{flex:1;overflow-y:auto;padding:8px;}
 .props-scroll::-webkit-scrollbar{width:4px;}
 .props-scroll::-webkit-scrollbar-thumb{background:var(--border);}
-.prop-section{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
+.prop-section{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
 .prop-row{margin-bottom:6px;}
-.prop-label{font-size:10px;color:var(--text2);margin-bottom:2px;}
+.prop-label{font-size:11px;color:var(--text2);margin-bottom:2px;}
 .prop-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:5px;font-size:11px;font-family:var(--font);}
 .prop-input:focus{outline:none;border-color:var(--accent);}
 select.prop-input{cursor:pointer;}
@@ -156,7 +156,7 @@ select.prop-input{cursor:pointer;}
 .page-tab{
   padding:3px 12px;border-radius:5px;cursor:pointer;
   border:1px solid var(--border);background:var(--bg3);
-  color:var(--text2);font-size:10px;font-weight:600;
+  color:var(--text2);font-size:11px;font-weight:600;
   white-space:nowrap;transition:all .15s;user-select:none;
 }
 .page-tab:hover{border-color:var(--accent);color:var(--accent);}
@@ -172,7 +172,7 @@ select.prop-input{cursor:pointer;}
 .page-tab-del{
   padding:1px 5px;border-radius:3px;cursor:pointer;
   background:transparent;border:none;color:var(--text3);
-  font-size:10px;margin-left:2px;
+  font-size:11px;margin-left:2px;
 }
 .page-tab-del:hover{color:var(--red);}
 .page-tab.popup-tab{border-style:dashed !important;}
@@ -244,13 +244,13 @@ select.prop-input{cursor:pointer;}
   white-space:nowrap;transition:all .15s;min-height:30px;
 }
 .nav-prev-btn:hover,.nav-next-btn:hover{border-color:var(--accent);color:var(--accent);background:#1a2f45;}
-.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.25;cursor:default;pointer-events:none;}
+.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.55;cursor:default;pointer-events:none;}
 /* Fil d'Ariane central */
 .nav-breadcrumb{
   display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);
   flex:1;overflow:hidden;
 }
-.nav-breadcrumb-sep{color:var(--border);font-size:10px;}
+.nav-breadcrumb-sep{color:var(--border);font-size:11px;}
 .nav-breadcrumb-item{color:var(--text2);cursor:pointer;font-size:11px;padding:2px 5px;border-radius:4px;transition:all .12s;}
 .nav-breadcrumb-item:hover{color:var(--accent);background:rgba(88,166,255,.1);}
 .nav-breadcrumb-item.current{color:var(--text);font-weight:700;cursor:default;background:rgba(255,255,255,.05);}
@@ -262,9 +262,9 @@ select.prop-input{cursor:pointer;}
   transition:all .15s;flex-shrink:0;min-height:30px;
 }
 .nav-back-btn:hover{border-color:var(--amber);color:var(--amber);background:rgba(210,153,34,.1);}
-.nav-back-btn:disabled{opacity:0.25;cursor:default;}
+.nav-back-btn:disabled{opacity:0.55;cursor:default;}
 #nav-bar-toggle{
-  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:10px;
+  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:11px;
   border:1px solid var(--border);background:var(--bg3);color:var(--text2);
   transition:all .15s;
 }
@@ -325,7 +325,7 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   <button class="tbtn" onclick="clearCanvas()">🗑 Effacer</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="duplicateSelected()" title="Ctrl+D">⊕ Dupliquer</button>
-  <button class="tbtn" id="lock-btn" onclick="if(selected){selected.locked=!selected.locked;renderAll();_dirty=true;toast(selected.locked?'🔒 Verrouillé':'🔓 Déverrouillé','ok');}" title="Verrouiller / déverrouiller le widget sélectionné (Ctrl+L)">🔒</button>
+  <button class="tbtn" id="lock-btn" onclick="toggleLockSel()" title="Verrouiller / déverrouiller le widget ou toute la sélection (Ctrl+L). Sélectionner des verrouillés : Ctrl+Maj+glisser, Ctrl+clic ou Ctrl+Maj+A">🔒</button>
   <button class="tbtn" onclick="copySel()" title="Copier le widget (Ctrl+C)">⎘ Copier</button>
   <button class="tbtn" onclick="pasteSel()" title="Coller le widget copié (Ctrl+V)">⎗ Coller</button>
   <span id="syn-copy-flash" style="font-size:10px;color:#3fb950;opacity:0;transition:opacity 0.4s;margin:0 4px;pointer-events:none;"></span>
@@ -335,6 +335,11 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (widget sélectionné comme référence)">⬤⟵</button>
   <button class="tbtn" onclick="alignVCenter()" title="Centrer verticalement">⬤⟷</button>
   <button class="tbtn" onclick="alignTop()"    title="Aligner en haut">⟰</button>
+  <button class="tbtn" onclick="alignRight()"   title="Aligner à droite (sélection multiple)">Droite</button>
+  <button class="tbtn" onclick="alignBottom()" title="Aligner en bas (sélection multiple)">Bas</button>
+  <button class="tbtn" onclick="alignHCenter()" title="Centrer horizontalement (sélection multiple)">Centre H</button>
+  <button class="tbtn" onclick="distributeH()" title="Répartir horizontalement (3 widgets ou plus)">Répart. ↔</button>
+  <button class="tbtn" onclick="distributeV()" title="Répartir verticalement (3 widgets ou plus)">Répart. ↕</button>
   <div class="tb-div"></div>
   <button class="tbtn" id="nav-bar-toggle" onclick="toggleNavBar()" title="Barre de navigation fixe">⊟ Nav</button>
   <div id="tb-sep"></div>
@@ -643,11 +648,11 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
     </div>
     <div style="display:flex;gap:4px;padding:6px 12px;background:#0d1117;border-bottom:1px solid #21262d;flex-shrink:0;">
       <button id="simtab-sondes" onclick="switchSimTab('sondes')" style="padding:4px 12px;border-radius:6px;border:1px solid #58a6ff;background:#1a2f45;color:#58a6ff;font-size:11px;cursor:pointer;">🌡 Sondes</button>
-      <button id="simtab-registres" onclick="switchSimTab('registres')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#8b949e;font-size:11px;cursor:pointer;">📊 Registres RF</button>
-      <button id="simtab-bits" onclick="switchSimTab('bits')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#8b949e;font-size:11px;cursor:pointer;">⚡ Bits M / GPIO</button>
+      <button id="simtab-registres" onclick="switchSimTab('registres')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;font-size:11px;cursor:pointer;">📊 Registres RF</button>
+      <button id="simtab-bits" onclick="switchSimTab('bits')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;font-size:11px;cursor:pointer;">⚡ Bits M / GPIO</button>
     </div>
     <div id="sim-panel-body" style="overflow-y:auto;flex:1;padding:12px 16px;"></div>
-    <div style="padding:6px 16px;background:#161b22;border-top:1px solid #30363d;font-size:9px;color:#484f58;flex-shrink:0;">
+    <div style="padding:6px 16px;background:#161b22;border-top:1px solid #30363d;font-size:9px;color:#8b949e;flex-shrink:0;">
       Démarrer ▶ la simulation, puis utiliser ce panneau. Sondes : slider ou saisie directe en °C. Registres RF4/5/6/7/8/9/12 modifiables.
     </div>
   </div>

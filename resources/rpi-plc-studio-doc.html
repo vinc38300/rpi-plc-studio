@@ -248,6 +248,7 @@ footer {
   <a href="#apercu">Aperçu général</a>
   <a href="#archi">Architecture du projet</a>
   <a href="#install">Installation</a>
+  <a href="#install-deb" class="sub">Paquets .deb (PC et RPi)</a>
 
   <div class="nav-section">Interface PC</div>
   <a href="#interface-pc">Fenêtre principale</a>
@@ -255,6 +256,13 @@ footer {
   <a href="#palette">Palette de blocs</a>
   <a href="#pages">Navigation multi-pages</a>
   <a href="#props">Panneau propriétés</a>
+  <a href="#colonnes" class="sub">Redimensionner les colonnes</a>
+  <a href="#groupes-fournis" class="sub">Groupes prêts à l'emploi</a>
+  <a href="#fbd-outils">Outils d'analyse du schéma</a>
+  <a href="#fbd-outils" class="sub">Recherche de blocs (Ctrl+F)</a>
+  <a href="#fbd-outils-rf" class="sub">Recherche de registre RF (R)</a>
+  <a href="#fbd-outils-chaine" class="sub">Chaîne amont / aval (T)</a>
+  <a href="#fbd-outils-conn" class="sub">Connecteurs jumelés (J)</a>
 
   <div class="nav-section">Bibliothèque de blocs</div>
   <a href="#blocs-es">E/S — Entrées / Sorties</a>
@@ -293,6 +301,7 @@ footer {
 
   <div class="nav-section">Déploiement RPi</div>
   <a href="#deploy">Déploiement SSH</a>
+  <a href="#rpi-monitor">Moniteur RPi en direct</a>
   <a href="#tailscale-headscale">Tailscale / Headscale</a>
   <a href="#server">Serveur autonome</a>
   <a href="#setup-autonomy">setup_autonomy.sh</a>
@@ -372,7 +381,7 @@ footer {
         <li><a href="#props">Panneau propriétés</a></li>
       </ul>
     </li>
-    <li><a href="#blocs-es">Bibliothèque de blocs (86 blocs)</a></li>
+    <li><a href="#blocs-es">Bibliothèque de blocs (87 blocs)</a></li>
     <li><a href="#blocs-group">Blocs Groupes — Encapsulation &amp; bibliothèque</a></li>
     <li><a href="#carithm">Bloc CArithm — Code C embarqué</a></li>
     <li><a href="#carte-io">Matériel — Carte E/S NTC40</a></li>
@@ -535,6 +544,26 @@ sudo i2cdetect -y 1
 <div class="tip"><div class="ci">✅</div><p><strong>Vérification rapide :</strong> Si <code>i2cdetect</code> affiche bien 0x48, 0x49 et 0x4A, les 3 ADS1115 sont correctement câblés et l'I²C est actif.</p></div>
 
 
+<h3 id="install-deb">Installation par paquets .deb (recommandé)</h3>
+<p>Deux paquets Debian sont fournis : l'un pour le <strong>PC</strong> (Studio), l'autre pour le <strong>Raspberry Pi</strong> (serveur autonome). Ils s'installent indépendamment.</p>
+<table>
+  <tr><th>Paquet</th><th>Cible</th><th>Installation</th><th>Contenu</th></tr>
+  <tr><td><code>rpi-plc-studio_3.5-21.deb</code></td><td>PC Linux (Kubuntu / Ubuntu / Debian)</td><td><code>sudo apt install ./rpi-plc-studio_3.5-21.deb</code></td><td>Application dans <code>/opt/rpi-plc-studio</code>, lanceur <code>rpi-plc-studio</code>, entrée de menu <em>Électronique</em>, association des fichiers <code>.plcproj</code></td></tr>
+  <tr><td><code>rpi-plc_3.5-12-serveur.deb</code></td><td>Raspberry Pi (Bookworm / Bullseye, 32 ou 64 bits)</td><td><code>sudo apt install ./rpi-plc_3.5-12-serveur.deb</code></td><td>Serveur dans <code>/opt/rpi-plc</code>, service systemd <code>rpi-plc</code>, données dans <code>~/rpi-plc-data</code></td></tr>
+</table>
+
+<h3>Ce que fait l'installation</h3>
+<ul>
+  <li><strong>Studio :</strong> installe les dépendances manquantes (PyQt5, QtWebEngine, paramiko, requests) puis crée <code>~/.rpi-plc-studio</code> (journaux). Les projets restent dans <code>~/rpi-plc-studio/</code>.</li>
+  <li><strong>Serveur :</strong> crée <code>~/rpi-plc-data</code> avec un <code>config.json</code> par défaut (copié depuis <code>/etc/rpi-plc/config.json.default</code> seulement s'il n'existe pas : une mise à jour ne l'écrase jamais), active l'I²C, ajoute l'utilisateur aux groupes <code>gpio</code>, <code>spi</code>, <code>i2c</code>, génère et démarre le service systemd (<code>StartLimitIntervalSec</code> et <code>StartLimitBurst</code> sont dans la section <code>[Unit]</code>, seule section où systemd les prend en compte).</li>
+  <li>Interface web du serveur : <code>http://&lt;IP-du-RPi&gt;:5000</code> · journaux : <code>journalctl -u rpi-plc -f</code>.</li>
+</ul>
+
+<div class="tip"><div class="ci">⚠</div><p><strong>Dépendances du serveur :</strong> <code>openssl</code> est requis (le certificat HTTPS auto-signé est généré avec cette commande). <code>python3-rpi.gpio</code> (ou <code>python3-rpi-lgpio</code> sur Raspberry Pi 5) est recommandé : sans lui, <code>server.py</code> démarre en <strong>simulation</strong> et le postinst l'indique.</p></div>
+
+<div class="tip"><div class="ci">🔐</div><p><strong>Aucun secret dans les paquets :</strong> le <code>config.json</code> embarqué ne contient ni jeton Telegram, ni identifiants personnels (identifiants par défaut uniquement). Les réglages réels sont conservés dans le projet et sur le RPi.</p></div>
+
+
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="interface-pc"><span class="icon">🖥</span> Interface PC — Fenêtre principale</h2>
 
@@ -648,6 +677,17 @@ sudo i2cdetect -y 1
   <tr><td><code>Actif bas</code></td><td>☑ / ☐</td><td>Si coché, la logique est inversée : GPIO à 0 V = sortie active (typique des relais opto-couplés).</td></tr>
 </table>
 
+<h3>Source de vérité et synchronisation</h3>
+<p>Le <strong>projet ouvert fait foi</strong> : le configurateur démarre toujours à partir de la configuration GPIO enregistrée dans le projet (<code>plc.gpio_config</code>). Le <code>config.json</code> local de l'application ne sert que de repli quand le projet n'en contient pas.</p>
+<p>À chaque ouverture de projet et à chaque validation du configurateur, la même configuration est appliquée partout :</p>
+<ul>
+  <li>le <code>config.json</code> local (lu par le déploiement) ;</li>
+  <li>les menus de l'éditeur FBD (noms des broches dans les listes <em>GPIO sortie</em> / <em>GPIO entrée</em>) ;</li>
+  <li>le synoptique ;</li>
+  <li>le RPi, au déploiement (la configuration GPIO du projet est prioritaire sur celle déjà présente sur le RPi).</li>
+</ul>
+<div class="tip"><div class="ci">💡</div><p>Quand Studio est installé par paquet <code>.deb</code>, son dossier <code>/opt/rpi-plc-studio</code> n'est pas modifiable par l'utilisateur : l'écriture du <code>config.json</code> local est alors ignorée sans erreur, et le projet reste la référence. Rien à faire de votre côté.</p></div>
+
 <h3>Broches réservées et avertissements</h3>
 <table>
   <tr><th>GPIO BCM</th><th>Statut</th><th>Raison</th></tr>
@@ -683,7 +723,7 @@ sudo i2cdetect -y 1
   L'éditeur est un canvas HTML5 embarqué dans un widget QWebEngineView. Il gère la création de blocs, le traçage de fils, la navigation multi-pages, et communique avec le moteur PLC via un pont Python ↔ JavaScript (PyBridge).
 </div>
 
-<h3>Navigation dans le canvas</h3>
+<h3 id="canvas">Navigation dans le canvas</h3>
 <table>
   <tr><th>Action</th><th>Geste / Touche</th></tr>
   <tr><td>Déplacer la vue</td><td>Clic droit + glisser, ou Espace + glisser</td></tr>
@@ -723,13 +763,22 @@ sudo i2cdetect -y 1
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="palette"><span class="icon">📦</span> Palette de blocs</h2>
 
-<p>La palette à gauche du canvas liste les <strong>86 blocs disponibles</strong> en 15 catégories (E/S, Logique, Bobines, Temps, Compteurs, Comparaison, Analogique, Calcul, Arithmétique, Variables, Actionneurs, Métier, Connecteurs, Groupes, Cartouche). Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
+<p>La palette à gauche du canvas liste les <strong>87 blocs disponibles</strong> en 15 catégories (E/S, Logique, Bobines, Temps, Compteurs, Comparaison, Analogique, Calcul, Arithmétique, Variables, Actionneurs, Métier, Connecteurs, Groupes, Cartouche). Chaque bloc affiche son nom, une description courte, et ses ports d'entrée/sortie en info-bulle.</p>
 
 <h3>Pour ajouter un bloc</h3>
 <ul>
   <li><strong>Clic</strong> sur un bloc de la palette → le place au centre du canvas</li>
   <li><strong>Glisser-déposer</strong> depuis la palette vers la position souhaitée</li>
   <li><strong>Double-clic</strong> sur le canvas → menu de sélection du type de bloc</li>
+</ul>
+
+<h3 id="colonnes">Redimensionner les colonnes</h3>
+<p>Les trois colonnes de l'éditeur (<strong>palette</strong> à gauche, <strong>canvas</strong> au centre, <strong>propriétés</strong> à droite) sont séparées par des poignées : survoler la limite entre deux colonnes fait apparaître un trait bleu, puis il suffit de <strong>glisser</strong> pour élargir ou réduire la colonne. Le canvas s'adapte et se redessine tout seul.</p>
+<ul>
+  <li><strong>Double-clic</strong> sur une poignée : retour à la largeur d'origine de la colonne.</li>
+  <li>Les largeurs sont <strong>mémorisées</strong> et retrouvées au prochain lancement.</li>
+  <li>Bornes : palette de 120 à 520 px, propriétés de 160 à 560 px ; le canvas garde toujours au moins 280 px, même si la fenêtre est réduite.</li>
+  <li>Dans la <em>Bibliothèque</em> de la palette, les noms longs passent à la ligne et les boutons ⬇ (exporter) et ✕ (supprimer) restent toujours visibles ; le nom complet s'affiche aussi en info-bulle.</li>
 </ul>
 
 <h3 id="props">Panneau de propriétés</h3>
@@ -815,6 +864,9 @@ sudo i2cdetect -y 1
   </div>
 </div>
 
+<h3>Navigation entre connecteurs jumelés</h3>
+<p>Quand un connecteur (<code>CONN</code>, <code>CONN_TX</code>, <code>CONN_RX</code>) est sélectionné, le panneau propriétés liste tous les autres connecteurs de même numéro, avec la page où ils se trouvent et leur rôle (<span style="color:#f0883e">TX</span> émetteur, <span style="color:#39d3b0">RX</span> récepteur, <span style="color:#58a6ff">⇄</span> bidirectionnel). Un clic sur une ligne ouvre la page concernée, centre la vue sur le bloc et le sélectionne. Le détail des raccourcis est dans <a href="#fbd-outils-conn">Outils d'analyse du schéma</a>.</p>
+
 
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="blocs-group"><span class="icon">⊞</span> Blocs Groupes — Encapsulation et bibliothèque</h2>
@@ -899,9 +951,43 @@ sudo i2cdetect -y 1
   <tr><td>Ajouter à la bibliothèque</td><td>Clic droit sur un bloc GROUP → <strong>Exporter vers bibliothèque</strong>, ou via le menu contextuel. Donner un nom.</td></tr>
   <tr><td>Utiliser un groupe de la bibliothèque</td><td>Clic sur son entrée dans la palette (section <em>Bibliothèque</em>), ou le glisser-déposer sur le canvas</td></tr>
   <tr><td>Supprimer de la bibliothèque</td><td>Cliquer le ✕ rouge à droite de l'entrée dans la palette</td></tr>
-  <tr><td>Exporter la bibliothèque</td><td>Icône ⬇ dans l'en-tête <em>Bibliothèque</em> → télécharge un fichier <code>.json</code></td></tr>
+  <tr><td>Exporter la bibliothèque</td><td>Icône ⬇ dans l'en-tête <em>Bibliothèque</em> → boîte « Enregistrer sous » puis fichier <code>.json</code> contenant tous les groupes</td></tr>
+  <tr><td>Exporter un seul groupe</td><td>Clic droit sur un bloc GROUP → <strong>⬇ Exporter ce groupe (.json)</strong>, ou icône ⬇ sur la ligne du groupe dans la bibliothèque. Le fichier est au même format que la bibliothèque : il se réimporte avec l'icône ⬆ dans n'importe quel autre projet.</td></tr>
   <tr><td>Importer une bibliothèque</td><td>Icône ⬆ → charge un fichier <code>.json</code> exporté précédemment (fusionne avec l'existant)</td></tr>
 </table>
+<div class="tip"><div class="ci">💡</div><p><strong>Export / import entre projets :</strong> les groupes de la bibliothèque sont enregistrés dans <code>~/.rpi-plc-studio/group_library.json</code> et sont donc visibles dans tous vos projets. Les fichiers <code>.json</code> exportés servent à les transmettre à une autre machine ou à les sauvegarder. <em>(Jusqu'à la version 3.5-17, l'icône ⬇ n'enregistrait rien : QtWebEngine abandonne les téléchargements sans gestionnaire. Corrigé en 3.5-18, y compris pour les autres exports du synoptique.)</em></p></div>
+
+<h3 id="groupes-fournis">Groupes prêts à l'emploi</h3>
+<p>Ces groupes sont fournis avec les fichiers de bibliothèque (⬆ pour les importer). Tous ont été testés avec le moteur du serveur.</p>
+<table>
+  <tr><th>Groupe</th><th>Entrées → sorties</th><th>Rôle</th></tr>
+  <tr><td><strong>ANTI_COURT_CYCLE</strong></td><td><code>DEMANDE</code> → <code>OUT</code></td><td>Durée mini de marche et d'arrêt d'une sortie (voir ci-dessous)</td></tr>
+  <tr><td><strong>FILTRE_TOR</strong></td><td><code>IN</code> → <code>OUT</code></td><td>Anti-rebond symétrique d'un signal tout-ou-rien</td></tr>
+  <tr><td><strong>Régulation V3V anticipée</strong></td><td><code>T_DEPART</code>, <code>CONSIGNE</code>, <code>MARCHE</code> → <code>OUVRIR</code>, <code>FERMER</code>, <code>SURCHAUFFE</code>, <code>T_PREVUE</code></td><td>Vanne 3 voies par impulsions anticipées (anticipation, gain, impulsion, pause, bande morte et T max réglables dans le code du PyBlock ou par variables AV)</td></tr>
+  <tr><td><strong>Forçage valeur imposée</strong></td><td><code>COMMANDE</code>, <code>FORCAGE</code>, <code>VALEUR</code> → <code>SORTIE</code></td><td>Forçage ON : la sortie prend la valeur imposée ; forçage OFF : elle suit la commande</td></tr>
+  <tr><td><strong>Forçage V3V solaire-chaudière</strong></td><td><code>CMD_SOLAIRE</code>, <code>CMD_CHAUDIERE</code>, <code>FORCAGE</code>, <code>VALEUR_ON_SOLAIRE</code> → <code>K_SOLAIRE</code>, <code>K_CHAUDIERE</code></td><td>Forçage d'une paire de relais complémentaires (un seul forçage, une seule valeur)</td></tr>
+  <tr><td><strong>Forçage V3V ouvrir-fermer</strong></td><td><code>CMD_OUVRIR</code>, <code>CMD_FERMER</code>, <code>FORC_OUVRIR</code>, <code>VAL_OUVRIR</code>, <code>FORC_FERMER</code>, <code>VAL_FERMER</code> → <code>OUVRIR</code>, <code>FERMER</code></td><td>Forçage de deux relais ouvrir / fermer avec interverrouillage (aucun mouvement si les deux sont demandés)</td></tr>
+</table>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">ANTI_COURT_CYCLE — durée mini de marche et d'arrêt</h4>
+<p>À placer entre la demande et la sortie à protéger (compresseur, brûleur, circulateur…). Une fois la sortie enclenchée, elle y reste au moins la <strong>durée mini de marche</strong>, même si la demande tombe. Une fois coupée, elle ne se réenclenche qu'après la <strong>durée mini d'arrêt</strong>.</p>
+<ul>
+  <li><strong>Valeurs par défaut :</strong> marche mini 600 s (10 min), arrêt mini 120 s. Elles se modifient en haut du code du PyBlock (<code>T_MARCHE_S</code>, <code>T_ARRET_S</code>).</li>
+  <li><strong>Réglage depuis le synoptique :</strong> renseigner <code>AV_MARCHE</code> et/ou <code>AV_ARRET</code> avec le nom d'une variable AV (en secondes). Une variable absente ou à 0 laisse la valeur par défaut.</li>
+  <li><strong>Au démarrage</strong> du programme, il n'y a pas d'attente à l'arrêt : une demande déjà présente enclenche la sortie tout de suite.</li>
+  <li><strong>Après un redémarrage du service</strong>, l'état (en marche, temps écoulé) est restauré : la durée mini de marche déjà entamée continue.</li>
+  <li><strong>Ne pas supprimer le bloc INV</strong> placé après le PyBlock : la sortie du PyBlock est volontairement inversée et l'INV la remet dans le bon sens.</li>
+  <li><strong>Une instance par sortie :</strong> chaque groupe posé dans le schéma a son propre état et ses propres temps.</li>
+  <li>Il s'ajoute aux protections déjà présentes dans un bloc : la durée effective est la plus longue des deux.</li>
+</ul>
+<p>Exemple mesuré en simulation : demande qui clignote 30 s / 30 s pendant 1 h → 5 démarrages seulement, marche minimale 630 s et arrêt minimal 150 s (les valeurs sont arrondies par le pas de 30 s de la demande).</p>
+
+<h4 style="margin:20px 0 10px;font-size:1.05em;">FILTRE_TOR — anti-rebond</h4>
+<p>La sortie ne change d'état que si le signal reste stable pendant le délai : <strong>3 s</strong> avant de prendre en compte un passage à 1 (<code>T_MONTEE_S</code>), <strong>3 s</strong> avant un passage à 0 (<code>T_DESCENTE_S</code>). Réglages dans le code du PyBlock, ou par variables AV via <code>AV_MONTEE</code> et <code>AV_DESCENTE</code>. Au démarrage, la sortie suit le signal sans attendre. Même remarque que ci-dessus pour le bloc INV.</p>
+
+<div class="tip"><div class="ci">⚠</div><p><strong>Limite à connaître quand on crée un groupe :</strong> une entrée de groupe ne peut alimenter qu'<strong>un seul</strong> bloc interne. Le Studio ne conserve que le premier fil, les autres entrées restent vides sans message d'erreur. Si un signal doit servir à plusieurs blocs, le faire passer d'abord par un bloc unique (par exemple deux inverseurs en série) dont la sortie, elle, peut se répartir librement.</p></div>
+
+
 
 <div class="tip">
   <span class="ci">💡</span>
@@ -1260,6 +1346,11 @@ sudo i2cdetect -y 1
     <div class="block-card-header"><span class="block-badge" style="color:#ff8040;border-color:#ff804040">VALVE3V</span><span class="block-card-title">Vanne 3 voies (BaseDirValve)</span></div>
     <div class="block-card-desc">Commande une vanne motorisée 3 voies avec deux sorties : OINC ouvre et ODEC ferme. Deux GPIO configurables. Équivalent BaseDirValve Proview (K7_K8_V3V).</div>
     <div class="block-ports"><span class="port-in">OINC (+ouvre)</span><span class="port-in">ODEC (+ferme)</span><span class="port-out">Q</span></div>
+  </div>
+  <div class="block-card">
+    <div class="block-card-header"><span class="block-badge" style="color:#29b6f6;border-color:#29b6f640">TELEGRAM</span><span class="block-card-title">Alerte Telegram</span></div>
+    <div class="block-card-desc">Envoie un message Telegram personnalisé quand IN reste actif (anti-parasite réglable), puis un message de retour à la normale. Autant de blocs que nécessaire, chacun avec son texte. Voir § <a href="#telegram">Bot Telegram</a>.</div>
+    <div class="block-ports"><span class="port-in">IN</span></div>
   </div>
 </div>
 
@@ -1744,6 +1835,22 @@ scp mon_programme.json pi@IP-RPi:~/rpi_server/programme.json
 <span class="comment"># Redémarrer le service</span>
 ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
 
+<h3 id="rpi-monitor">📡 Moniteur RPi en direct</h3>
+<p>Le menu <strong>Raspberry Pi → Démarrer moniteur RPi en direct</strong> (<kbd>F10</kbd>) interroge l'état du serveur 5 fois par seconde (<code>/api/state</code>, toutes les 200 ms) et affiche en direct les entrées, sorties, sondes et registres du RPi dans le Studio.</p>
+<ul>
+  <li><strong>HTTP et HTTPS :</strong> le schéma est détecté et mémorisé ; avec le certificat auto-signé du serveur, le certificat n'est ignoré que pour les hôtes du réseau local ou du VPN (Tailscale / Headscale).</li>
+  <li><strong>Authentification :</strong> si la sécurité est activée sur le RPi (<code>security.enabled</code>), le moniteur ouvre une session (<code>POST /api/login</code>, cookie <code>plc_session</code>) puis la renouvelle tout seul si elle expire. Sans identifiants dans le projet, ou s'ils ont été refusés, Studio les redemande (utilisateur puis mot de passe) et les mémorise dans le projet, comme pour le déploiement. Laisser l'utilisateur vide pour un RPi sans authentification.</li>
+  <li><strong>Identifiants refusés :</strong> le moniteur s'arrête et le dit (relancer avec <kbd>F10</kbd>). Il ne réessaie pas en boucle, pour ne pas déclencher le blocage anti-bruteforce du serveur (5 échecs en 5 minutes).</li>
+  <li><strong>Délai :</strong> 4 s par requête, pour tolérer la négociation TLS et les liaisons VPN lentes.</li>
+</ul>
+<table>
+  <tr><th>Message</th><th>Cause probable</th></tr>
+  <tr><td>Authentification requise par le RPi : aucun identifiant fourni</td><td>Sécurité activée sur le RPi, projet sans identifiants — saisir utilisateur et mot de passe quand Studio les demande</td></tr>
+  <tr><td>Login refusé : identifiants incorrects</td><td>Utilisateur / mot de passe différents de ceux de <code>security</code> dans le <code>config.json</code> du RPi</td></tr>
+  <tr><td>Login refusé : trop de tentatives (blocage 5 min côté RPi)</td><td>Trop d'échecs successifs — attendre 5 minutes</td></tr>
+  <tr><td>Réponse non-JSON reçue…</td><td>L'adresse répond mais ce n'est pas le serveur PLC (mauvais port, proxy, page de login)</td></tr>
+</table>
+
 <h3 id="tailscale-headscale">🔒 Tailscale / Headscale — Accès distant automatique</h3>
 <p>
   Depuis l'onglet <strong>Avancé</strong> de la fenêtre de déploiement, le bloc
@@ -1789,9 +1896,11 @@ ssh pi@IP-RPi "sudo systemctl restart rpi-plc"</code></pre>
 <table>
   <tr><th>Champ</th><th>Valeur</th></tr>
   <tr><td><code>URL Headscale</code></td><td>Ex. <code>https://headscale.mondomaine.fr</code></td></tr>
-  <tr><td><code>Utilisateur Headscale</code></td><td>Utilisateur créé côté serveur via <code>headscale users create</code></td></tr>
+  <tr><td><code>Utilisateur Headscale</code></td><td>Utilisateur Headscale : son nom, son identifiant numérique, ou — pour un utilisateur <strong>OIDC</strong> — son e-mail ou son nom affiché</td></tr>
   <tr><td><code>Clé API Headscale</code></td><td>Clé générée à l'étape 1 — mémorisée dans le projet, à ne renseigner qu'une fois</td></tr>
 </table>
+
+<div class="tip"><div class="ci">💡</div><p><strong>Utilisateurs OIDC :</strong> avec une connexion OIDC (Authelia, Keycloak, YunoHost SSO…), Headscale enregistre l'utilisateur sous un nom technique souvent différent de celui qu'on connaît. Studio compare donc votre saisie, sans tenir compte des majuscules, à l'<strong>identifiant</strong>, au <strong>nom</strong>, à l'<strong>e-mail</strong> et au <strong>nom affiché</strong>. S'il n'existe qu'<strong>un seul</strong> utilisateur et que rien ne correspond, celui-ci est utilisé. Sinon l'erreur affiche la liste des utilisateurs disponibles, avec leur identifiant : il suffit d'en recopier un.</p></div>
 
 <h4 style="margin:20px 0 10px;font-size:1.05em;">Ce qui se passe automatiquement au déploiement</h4>
 <ol style="margin:0 0 16px;padding-left:22px;">
@@ -2441,7 +2550,7 @@ RUNTIMCNT → STARTS=RF10, TOTAL=RF11, RUNTIME=RF12</code></pre>
   <tr>
     <td>« Utilisateur Headscale introuvable » au déploiement</td>
     <td>Le nom saisi dans Studio ne correspond à aucun utilisateur Headscale</td>
-    <td>Vérifier la liste côté serveur : <code>headscale users list</code>. Corriger le champ <code>Utilisateur Headscale</code> dans Studio.</td>
+    <td>Le message liste les utilisateurs disponibles : recopier le nom, l'e-mail ou l'identifiant d'un d'eux dans le champ <code>Utilisateur Headscale</code> (ou <code>headscale users list</code> côté serveur).</td>
   </tr>
   <tr>
     <td>Le RPi n'apparaît pas dans Headplane après déploiement</td>
@@ -2519,6 +2628,29 @@ cat /sys/bus/w1/devices/28-xxxxxxxxxxxx/w1_slave</code></pre>
   <li>Une température passe sous le <strong>seuil bas</strong> (défaut 3°C)</li>
 </ul>
 <div class="note"><div class="ci">ℹ</div><p><strong>Anti-spam :</strong> une seule alerte par canal toutes les 10 minutes maximum. L'alerte se résout automatiquement quand la température revient à la normale.</p></div>
+
+<h3 id="telegram-bloc">Alerte depuis le programme — bloc TELEGRAM</h3>
+<p>Le bloc <code>TELEGRAM</code> (catégorie <em>Actionneurs</em>) envoie un message de votre choix quand le signal câblé sur son entrée <code>IN</code> devient actif — par exemple l'alarme chaudière. On en place autant qu'on veut dans le programme, chacun avec son propre texte ; aucun fichier serveur n'est à modifier.</p>
+<table>
+  <tr><th>Paramètre</th><th>Description</th></tr>
+  <tr><td><code>Message (IN actif)</code></td><td>Texte envoyé quand <code>IN</code> reste actif pendant le délai anti-parasite. Accepte des variables (voir ci-dessous).</td></tr>
+  <tr><td><code>Message retour à la normale</code></td><td>Texte envoyé quand <code>IN</code> redevient inactif (stable pendant le même délai). Vide = aucun message.</td></tr>
+  <tr><td><code>Déclenche quand IN est</code></td><td><code>actif (1)</code> par défaut ; <code>inactif (0)</code> pour un contact normalement fermé.</td></tr>
+  <tr><td><code>Anti-parasite (s)</code></td><td>L'état doit rester stable ce temps avant tout envoi (défaut 3 s). Un parasite plus court n'envoie rien.</td></tr>
+  <tr><td><code>Rappel toutes les (s)</code></td><td>Renvoie le message tant que <code>IN</code> reste actif (0 = jamais, défaut).</td></tr>
+</table>
+<p><strong>Variables dans le texte :</strong> <code>{RF247}</code>, <code>{RF247:.1f}</code> (avec format), <code>{M7}</code>, <code>{nom_variable}</code> (variable DV/AV), <code>{date}</code>, <code>{heure}</code>. Une référence introuvable est remplacée par <code>?</code>.</p>
+<pre><code><span class="comment"># Exemple — alarme chaudière</span>
+INPUT(GPIO14 « Alarme Chaudière ») ──► TELEGRAM
+   Message : 🚨 Chaudière en défaut — T° {RF247:.1f}°C à {heure}
+   Retour  : ✅ Chaudière revenue à la normale</code></pre>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Ajouter le bloc</strong> depuis la palette (<em>Actionneurs → TELEGRAM</em>) et câbler le signal d'alarme sur <code>IN</code>.</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Saisir les messages</strong> dans le panneau de propriétés.</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Déployer</strong> : la première fois avec <em>🚀 Déployer</em> (nouveaux fichiers serveur) ; ensuite, ajouter ou modifier des blocs <code>TELEGRAM</code> ne demande que <em>⚡ Programme seul</em>.</div></div>
+</div>
+<div class="note"><div class="ci">ℹ</div><p>Le bot doit être activé (token + chat_id, § Configuration) : sans cela le bloc ne fait rien. Les messages partent vers tous les <code>chat_ids</code> configurés. L'envoi est asynchrone : un Telegram injoignable ne ralentit jamais le cycle de régulation. Dans le studio (simulation), le bloc n'envoie rien : il écrit seulement une ligne <code>📨 [simulation]</code> dans le journal.</p></div>
+<div class="tip"><div class="ci">💡</div><p><strong>Alternative sans modifier le programme :</strong> la clé <code>"alarmes_tor"</code> de la section <code>telegram</code> du <code>config.json</code> définit des alertes équivalentes (<code>name</code>, <code>source</code> = <code>RFxxx</code> / <code>Mxx</code> / <code>GPIOxx</code> / variable, <code>active</code>, <code>delay_s</code>, <code>repeat_s</code>, <code>notify_clear</code>, <code>info</code>), modifiables à chaud via <code>POST /api/telegram/config</code>.</p></div>
 
 <h3>Rapport quotidien automatique</h3>
 <p>Un résumé de toutes les températures est envoyé chaque jour à l'heure configurée (défaut 8h00). Il inclut l'état du PLC, le nombre de cycles, et les valeurs de chaque sonde.</p>
@@ -2741,6 +2873,12 @@ sudo tailscale up
 </div>
 
 <!-- ─── SIDEBAR ONGLETÉE ─── -->
+<h3 id="syn-web-edition">Synoptique dans le navigateur — mode édition et noms de GPIO</h3>
+<ul>
+  <li><strong>Canvas complet en édition :</strong> en mode édition (sidebar visible), la page n'est plus zoomée pour tenir dans la fenêtre. Le canvas couvre <strong>tout</strong> le synoptique (images et fonds compris) avec des barres de défilement si la page dépasse l'écran, et les coordonnées de la souris restent exactes. Le zoom d'ajustement reste réservé au mode opérateur.</li>
+  <li><strong>Mêmes noms de GPIO que dans Studio :</strong> les listes de broches des widgets affichent les noms configurés (ex. « K4 Réhausse Chaudière ») au lieu de « GPIO 13 ». Ils sont lus au chargement via <code>GET /api/gpio/config</code>.</li>
+</ul>
+
 <h3 id="syn-sidebar">La sidebar ongletée (nouveauté v2)</h3>
 <p>La palette latérale gauche est divisée en <strong>3 onglets cliquables</strong> :</p>
 <table>
@@ -2864,7 +3002,9 @@ sudo tailscale up
       • <em>Référence</em> : n'importe quel RF / AV / mémoire — c'est ce choix qui détermine ce qui est historisé, aucune configuration séparée à faire<br>
       • <em>Fenêtre (h)</em> : plage affichée, 24h par défaut<br>
       • <em>Couleur</em> / <em>Fond</em><br>
-      • Axe temporel avec repères "-Nh" → "maintenant"<br><br>
+      • <em>Unité</em> : texte affiché après la valeur courante (ex. %, °C, W/h)<br>
+      • <em>Échelle automatique</em> (cochée par défaut) : décochée, deux champs <em>Valeur min</em> / <em>Valeur max</em> fixent l'échelle verticale<br>
+      • <strong>Échelles :</strong> axe vertical gradué en valeurs rondes (1 / 2 / 2,5 / 5 × 10<sup>n</sup>) avec lignes de repère ; une grandeur toujours positive ne descend jamais sous 0 ; axe horizontal gradué en heures rondes (fenêtre jusqu'à 2–3 jours) ou en dates JJ/MM (fenêtres plus longues), espacées d'au moins ~46 px<br><br>
       <strong>Fonctionnement :</strong> le moteur PLC scanne <code>synoptic.json</code> toutes les 60 s, détecte automatiquement les références utilisées par tous les widgets de ce type (toutes pages confondues), et échantillonne ces références toutes les <strong>5 minutes</strong> dans une table SQLite dédiée (<code>history_var</code>), conservée <strong>1 an</strong>. Le widget interroge <code>GET /api/history/&lt;ref&gt;?hours=N</code> côté navigateur toutes les 30 s.<br><br>
       <strong>Export :</strong> <code>GET /api/history/&lt;ref&gt;/csv?hours=N</code> pour téléchargement.<br>
       <strong>Taille conseillée :</strong> 260 × 110 px minimum.<br>
@@ -3463,11 +3603,14 @@ else:
   <tr><td><kbd>F5</kbd></td><td>Démarrer la simulation PLC</td></tr>
   <tr><td><kbd>F6</kbd></td><td>Arrêter la simulation PLC</td></tr>
   <tr><td><kbd>F7</kbd></td><td>Déployer vers le Raspberry Pi</td></tr>
+  <tr><td><kbd>Maj+F7</kbd></td><td>Envoyer au RPI (menu Simulation)</td></tr>
   <tr><td><kbd>F8</kbd></td><td>Ouvrir / fermer le synoptique</td></tr>
   <tr><td><kbd>Ctrl+S</kbd></td><td>Enregistrer le projet</td></tr>
   <tr><td><kbd>Ctrl+N</kbd></td><td>Nouveau projet</td></tr>
   <tr><td><kbd>Ctrl+O</kbd></td><td>Ouvrir un projet</td></tr>
   <tr><td><kbd>Ctrl+G</kbd></td><td>Ouvrir le Configurateur GPIO (menu Raspberry Pi)</td></tr>
+  <tr><td><kbd>F9</kbd></td><td>Ouvrir le synoptique Régulation (web)</td></tr>
+  <tr><td><kbd>F10</kbd></td><td>Démarrer le moniteur RPi en direct (menu Raspberry Pi) — voir <a href="#rpi-monitor">Moniteur RPi</a></td></tr>
 </table>
 
 <h3>Canvas FBD — blocs et fils</h3>
@@ -3479,6 +3622,10 @@ else:
   <tr><td><kbd>Ctrl+Z</kbd></td><td>Annuler (undo, 40 niveaux)</td></tr>
   <tr><td><kbd>Ctrl+Y</kbd> ou <kbd>Ctrl+Maj+Z</kbd></td><td>Rétablir (redo)</td></tr>
   <tr><td><kbd>Ctrl+A</kbd></td><td>Tout sélectionner (multi-sélection)</td></tr>
+  <tr><td><kbd>Ctrl+F</kbd> / <kbd>F3</kbd></td><td>Recherche de blocs / résultat suivant</td></tr>
+  <tr><td><kbd>R</kbd></td><td>Chercher un registre RF (qui l'écrit, qui le lit)</td></tr>
+  <tr><td><kbd>T</kbd></td><td>Chaîne amont / aval du bloc sélectionné</td></tr>
+  <tr><td><kbd>J</kbd> / <kbd>Maj+J</kbd></td><td>Connecteur jumeau suivant / précédent</td></tr>
   <tr><td>Clic droit sur le canvas</td><td>Menu contextuel (ajouter bloc, coller, etc.)</td></tr>
   <tr><td>Molette souris</td><td>Zoom avant / arrière</td></tr>
   <tr><td>Clic molette + glisser</td><td>Panoramique (pan)</td></tr>
@@ -3515,6 +3662,47 @@ else:
 </table>
 
 <!-- ════════════════════════════════════════════════════════════ -->
+<h2 id="fbd-outils"><span class="icon">🔎</span> Outils d'analyse du schéma FBD</h2>
+
+<p class="section-intro">Quatre outils en <strong>lecture seule</strong> aident à s'y retrouver dans un gros programme (plusieurs pages, connecteurs, groupes imbriqués, registres RF). Ils ne modifient jamais le programme.</p>
+
+<table>
+  <tr><th>Outil</th><th>Raccourci</th><th>À quoi ça sert</th></tr>
+  <tr><td>Recherche de blocs</td><td><kbd>Ctrl+F</kbd>, <kbd>F3</kbd></td><td>Retrouver un bloc par nom, type, identifiant, nom de variable ou texte de code</td></tr>
+  <tr><td>Recherche de registre RF</td><td><kbd>R</kbd></td><td>Savoir qui écrit et qui lit un registre</td></tr>
+  <tr><td>Chaîne amont / aval</td><td><kbd>T</kbd></td><td>Remonter aux origines d'un signal et suivre jusqu'où il va</td></tr>
+  <tr><td>Connecteurs jumelés</td><td><kbd>J</kbd> / <kbd>Maj+J</kbd></td><td>Sauter d'un connecteur à son jumeau, d'une page à l'autre</td></tr>
+</table>
+
+<h3>Recherche de blocs — Ctrl+F</h3>
+<p><kbd>Ctrl+F</kbd> ouvre la barre de recherche. La recherche porte sur <strong>toutes les pages</strong> : nom du bloc, type, identifiant, nom de variable (<code>varname</code>), nom de signal et contenu du code (PYBLOCK / CArithm). Le premier résultat est sélectionné et centré ; <kbd>F3</kbd> passe au suivant (en boucle) et le compteur affiche <code>2/7</code>. « 0 résultat » apparaît en rouge si rien ne correspond.</p>
+
+<h3 id="fbd-outils-rf">Recherche de registre RF — R</h3>
+<p>Appuyer sur <kbd>R</kbd> ouvre le panneau <strong>Chercher RF</strong>, pré-rempli avec le registre du bloc sélectionné. Saisir <code>12</code> ou <code>RF12</code>. Le panneau liste chaque occurrence, classée par rôle :</p>
+<table>
+  <tr><th>Rôle</th><th>Couleur</th><th>Signification</th></tr>
+  <tr><td>écrit (source)</td><td style="color:#3fb950">vert</td><td>Le bloc produit la valeur (<code>reg_out</code>, <code>oa1_ref</code>, <code>od1_ref</code>, <code>cv_ref</code>…)</td></tr>
+  <tr><td>relais CONN</td><td style="color:#58a6ff">bleu</td><td>Le registre transite par un connecteur</td></tr>
+  <tr><td>lit (destination)</td><td style="color:#f0883e">orange</td><td>Le bloc consomme la valeur (<code>reg_a</code>, <code>a1_ref</code>, <code>d1_ref</code>…)</td></tr>
+  <tr><td>cité dans le code</td><td style="color:#bc8cff">violet</td><td>Le numéro apparaît dans le code d'un PYBLOCK / CArithm</td></tr>
+</table>
+<p>Les blocs concernés de la page affichée sont entourés de la couleur de leur rôle. <kbd>Entrée</kbd> passe à l'occurrence suivante, <kbd>Maj+Entrée</kbd> à la précédente, un clic sur une ligne y saute (même sur une autre page), <kbd>Échap</kbd> ferme le panneau.</p>
+<div class="tip"><div class="ci">💡</div><p>Typiquement : « qui écrit RF247 ? » ou « ce registre est-il lu quelque part ? » avant de supprimer un bloc. Un registre écrit mais jamais lu (ou l'inverse) se voit immédiatement.</p></div>
+
+<h3 id="fbd-outils-chaine">Chaîne amont / aval — T</h3>
+<p>Sélectionner un bloc puis appuyer sur <kbd>T</kbd> : le panneau <strong>Chaîne amont / aval</strong> s'ouvre et les fils concernés sont surlignés sur le canvas.</p>
+<ul>
+  <li><span style="color:#d946ef"><strong>Magenta</strong></span> : tout ce qui alimente le bloc (amont). <strong>Origines</strong> = les bouts de chaîne, c'est-à-dire les blocs sans entrée câblée (sondes, variables, constantes).</li>
+  <li><span style="color:#fb923c"><strong>Orange</strong></span> : tout ce que le bloc alimente (aval). <strong>Aboutissements</strong> = les bouts de chaîne (sorties, relais, afficheurs).</li>
+  <li>Le bloc d'ancrage est entouré de blanc ; les bouts de chaîne ont un contour plus épais.</li>
+</ul>
+<p>La chaîne <strong>traverse</strong> les connecteurs jumeaux (d'une page à l'autre) et les groupes (elle entre par le port <code>GROUP_IN</code> et sort par le <code>GROUP_OUT</code> correspondant, à tous les niveaux d'imbrication). Un clic sur un bloc de la liste ouvre sa page, et son groupe s'il est dedans. <strong>⚓ Ré-ancrer</strong> recalcule depuis un autre bloc sélectionné ; le panneau se met à jour tout seul si le schéma change. <kbd>T</kbd> ou <kbd>Échap</kbd> ferme.</p>
+
+<h3 id="fbd-outils-conn">Connecteurs jumelés — J / Maj+J</h3>
+<p>Avec un connecteur sélectionné, <kbd>J</kbd> saute au connecteur suivant de même numéro, <kbd>Maj+J</kbd> au précédent. Le parcours est circulaire sur <strong>toutes les pages</strong> : la vue change de page, centre le bloc et le sélectionne. Les mêmes actions existent en boutons <strong>◀ Précédent / Suivant ▶</strong> dans le panneau propriétés. S'il n'y a pas d'autre connecteur de ce numéro, le panneau l'indique.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="validation"><span class="icon">✓</span> Validation du câblage FBD</h2>
 
 
@@ -3545,7 +3733,7 @@ else:
 <!-- ════════════════════════════════════════════════════════════ -->
 <h2 id="api-complete"><span class="icon">🔌</span> API REST — Référence complète</h2>
 
-<p class="section-intro">Toutes les routes Flask exposées par <code>server.py</code> sur le port 5000. Les requêtes retournent du JSON sauf indication contraire. En mode sécurisé, un cookie de session <code>session_token</code> est requis (obtenu via <code>POST /login</code>).</p>
+<p class="section-intro">Toutes les routes Flask exposées par <code>server.py</code> sur le port 5000. Les requêtes retournent du JSON sauf indication contraire. En mode sécurisé, un cookie de session <code>plc_session</code> est requis (obtenu via <code>POST /login</code> ou, pour les clients JSON comme le moniteur de Studio, <code>POST /api/login</code>).</p>
 
 <h3>État et contrôle PLC</h3>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/state</div><div class="endpoint-desc">État complet : gpio, memory, analog, registers, timers, counters, pids, cycle, error_count, on_rpi, ts</div></div></div>
@@ -3569,6 +3757,7 @@ else:
 <h3>GPIO — Lecture, Écriture, Scan, Test</h3>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/write</div><div class="endpoint-desc">Forcer un GPIO en sortie. Body : <code>{"pin":5,"value":true}</code>. Alias : <code>/api/gpio</code> (compatibilité synoptique)</div></div></div>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/status</div><div class="endpoint-desc">État de tous les GPIO configurés : mode, valeur, nom, active_low, pull</div></div></div>
+<div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/config</div><div class="endpoint-desc">Noms et modes des GPIO configurés : <code>{"13": {"name": "K4 Réhausse Chaudière", "mode": "output"}, …}</code>. Utilisé par le synoptique web pour afficher les mêmes libellés que Studio.</div></div></div>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/scan</div><div class="endpoint-desc">Lance un scan des GPIO (lecture entrées + actualisation sorties). Body : vide ou <code>{}</code></div></div></div>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/gpio/test</div><div class="endpoint-desc">Test d'une sortie GPIO (pulse ON/OFF). Body : <code>{"pin":5,"duration_ms":500}</code></div></div></div>
 
@@ -3620,7 +3809,8 @@ else:
 <h3>Authentification</h3>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/api/auth/status</div><div class="endpoint-desc">État de la sécurité : <code>{"enabled": false, "https": false, "username": "admin"}</code></div></div></div>
 <div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/auth/config</div><div class="endpoint-desc">Mettre à jour la configuration sécurité. Redémarrage du service requis pour appliquer. Body : <code>{"enabled":true,"https":false,"username":"admin","password":"newpass"}</code></div></div></div>
-<div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/login</div><div class="endpoint-desc">Authentification — retourne un cookie de session (TTL 8h). Body form : <code>username, password</code></div></div></div>
+<div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/login</div><div class="endpoint-desc">Authentification — retourne un cookie de session <code>plc_session</code> (TTL 8h). Body form : <code>username, password</code></div></div></div>
+<div class="endpoint"><span class="method post">POST</span><div class="endpoint-info"><div class="endpoint-url">/api/login</div><div class="endpoint-desc">Même authentification, pour les clients JSON. Body : <code>{"username": "…", "password": "…"}</code>. Réponses : cookie <code>plc_session</code> si OK, <code>401</code> identifiants incorrects, <code>429</code> trop d'échecs (blocage 5 min).</div></div></div>
 <div class="endpoint"><span class="method get">GET</span><div class="endpoint-info"><div class="endpoint-url">/logout</div><div class="endpoint-desc">Déconnexion — supprime la session en mémoire</div></div></div>
 
 <h3>Interfaces web</h3>

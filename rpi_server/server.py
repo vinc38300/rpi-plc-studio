@@ -562,6 +562,7 @@ class PLCEngine:
         self.error        = ""
         self.error_count  = 0
         self.on_update    = None
+        self.bot          = None     # TelegramBot, attaché par main() — utilisé par le bloc TELEGRAM
         self._last_ana    = 0.0
         self._last_db     = 0.0
         self._last_db_vars       = 0.0   # dernier échantillonnage générique (5 min)
@@ -1141,6 +1142,22 @@ class PLCEngine:
             self._write_q(block, t["done"])
             et_ref = block.get("et_ref")
             if et_ref: self.write_register(et_ref, float(t["acc"]))
+
+        elif btype == "telegram":
+            # Bloc TELEGRAM : envoie "msg" quand l'entrée reste active delay_s secondes,
+            # "msg_clear" au retour à l'état inactif, rappel toutes les repeat_s s (0 = jamais).
+            # L'envoi est asynchrone (bot._send_async) : jamais bloquant pour le cycle de scan.
+            trig = bool(self.eval_cond(block.get("condition"), default_if_none=False))
+            if block.get("invert"): trig = not trig
+            bot = getattr(self, "bot", None)
+            if bot is not None and hasattr(bot, "notify_block"):
+                try:
+                    bot.notify_block(bid, trig, block.get("msg", ""), block.get("msg_clear", ""),
+                                     float(block.get("delay_s", 3)), float(block.get("repeat_s", 0)),
+                                     self.snapshot)
+                except (TypeError, ValueError):
+                    pass
+            return f"TELEGRAM {bid} actif={trig}"
 
         elif btype == "counter":
             preset = float(self.read_analog(block.get("pv_ref"))) if block.get("pv_ref") else float(block.get("preset", 10))
@@ -3132,6 +3149,9 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         # ── Notifications Telegram ──────────────────────────────────────
         if hasattr(bot, 'check_alarms'):
             bot.check_alarms(s.get("analog", {}))
+        if hasattr(bot, 'check_digital_alarms'):
+            try: bot.check_digital_alarms(s)
+            except Exception as _e: log.warning(f"check_digital_alarms : {_e}")
         if hasattr(bot, 'check_relay_changes'):
             bot.check_relay_changes(s.get("gpio", {}))
         if hasattr(bot, 'check_plc_state'):
@@ -3915,6 +3935,7 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
             "alarm_low":      cfg.get("alarm_low", 3.0),
             "report_hour":    cfg.get("report_hour", 8),
             "report_enabled": cfg.get("report_enabled", True),
+            "alarmes_tor":    cfg.get("alarmes_tor", []),
             "bot_running":    bool(getattr(bot, "_running", False)),
         })
 
@@ -3926,7 +3947,7 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         for k in ("enabled","chat_ids","alarm_high","alarm_low",
                   "report_hour","report_enabled",
                   "notify_relays","notify_plc",
-                  "alarm_cooldown_s","relay_cooldown_s"):
+                  "alarm_cooldown_s","relay_cooldown_s","alarmes_tor"):
             if k in d: cfg[k] = d[k]
         # Token : ne jamais écraser par une valeur vide (champ masqué dans le formulaire)
         if d.get("token"):
@@ -4188,6 +4209,7 @@ def main():
 
     # Bot Telegram
     bot = TelegramBot(config, engine, recipes, calibration=calibration)
+    engine.bot = bot            # bloc FBD TELEGRAM : envoi de messages depuis le programme
     bot.start()
 
     # Démarrer Flask EN PREMIER — avant le scan GPIO

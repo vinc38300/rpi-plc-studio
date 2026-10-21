@@ -152,7 +152,8 @@ function _bg2() { return _cv('--bg2', '#161b22'); }
 function _bg3() { return _cv('--bg3', '#1c2128'); }
 function _bg4() { return _cv('--bg4', '#21262d'); }
 function _txt() { return _cv('--text','#e6edf3'); }
-function _t2()  { return _cv('--text2','#8b949e'); }
+function _t2()  { return _cv('--text2','#c9d1d9'); }
+function _t3()  { return _cv('--text3','#8b949e'); }
 function _brd() { return _cv('--border','#30363d'); }
 // Vider le cache à chaque changement de thème
 function _clearCvCache(){ for(const k in _cv.__cache__||{}){ delete _cv.__cache__[k]; } }
@@ -1268,7 +1269,7 @@ function rNumeric(w, val){
   ctx.fillStyle = bg; ctx.strokeStyle = _brd(); ctx.lineWidth = 1;
   rr(ctx, w.x, w.y, w.w, w.h, 6); ctx.fill(); ctx.stroke();
   ctx.globalAlpha = 1;
-  if(w.label){ ctx.fillStyle='#8b949e'; ctx.font='10px sans-serif';
+  if(w.label){ ctx.fillStyle=_t2(); ctx.font='10px sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText(w.label, w.x+6, w.y+4); }
   const dec = w.decimals!==undefined ? parseInt(w.decimals) : 1;
@@ -1298,7 +1299,7 @@ function rSwitchM(w, val, canvasOnly){
   const parts = lbl.split(' — ');
   const mainLbl = parts[0]||lbl;
   ctx.fillText(mainLbl, w.x+26, w.y+w.h/2-(parts[1]?6:0));
-  if(parts[1]){ ctx.fillStyle='#484f58'; ctx.font='9px sans-serif';
+  if(parts[1]){ ctx.fillStyle=_t3(); ctx.font='9px sans-serif';
     ctx.fillText(parts[1], w.x+26, w.y+w.h/2+7); }
   // État texte
   ctx.fillStyle = c; ctx.font='bold 10px sans-serif';
@@ -1327,10 +1328,10 @@ function renderW(w, canvasOnly){
 function rr(c,x,y,w,h,r){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+r,r);c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x+w-r,y+h,r);c.lineTo(x+r,y+h);c.arcTo(x,y+h,x,y+h-r,r);c.lineTo(x,y+r);c.arcTo(x,y,x+r,y,r);c.closePath();}
 function hov(w,html,canvasOnly){if(editMode||canvasOnly)return;const _hd=_getHtmlDiv();if(!_hd)return;const d=document.createElement('div');d.style.cssText=`position:absolute;left:${w.x}px;top:${w.y}px;width:${w.w}px;height:${w.h}px;pointer-events:auto;`;d.innerHTML=html;_hd.appendChild(d);}
 
-function rTemp(w,val){const al=val!=null&&(val>(w.alarmHigh??85)||val<(w.alarmLow??3)),c=al?'#f85149':(w.color||'#00d4ff');ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();ctx.strokeStyle=al?'#f85149':_brd();ctx.lineWidth=al?2:1;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.stroke();ctx.globalAlpha=1;ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+30,w.y+7);ctx.fillStyle=c;ctx.font='16px sans-serif';ctx.fillText('🌡',w.x+6,w.y+4);const txt=val!=null&&!isNaN(val)?val.toFixed(1)+(w.unit??'°C'):'N/C';ctx.fillStyle=c;ctx.font=`bold ${val!=null?24:14}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,w.x+w.w/2,w.y+w.h/2+8);const p=val!=null?Math.min(1,Math.max(0,(val+50)/200)):0;ctx.fillStyle=_bg4();rr(ctx,w.x+8,w.y+w.h-16,w.w-16,4,2);ctx.fill();ctx.fillStyle=c;rr(ctx,w.x+8,w.y+w.h-16,(w.w-16)*p,4,2);ctx.fill();const hi=w.alarmHigh??85,lo=w.alarmLow??3;ctx.fillStyle='#484f58';ctx.font='8px sans-serif';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText(`↑${hi}° ↓${lo}°`,w.x+8,w.y+w.h-18);}
-function rGauge(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,cx=w.x+w.w/2,cy=w.y+w.h/2+5,r=Math.min(w.w,w.h)/2-12,s=Math.PI*.75,e2=Math.PI*2.25,c=w.color||'#d080ff';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=_bg4();ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.arc(cx,cy,r,s,e2);ctx.stroke();ctx.strokeStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,s,s+(e2-s)*p);ctx.stroke();ctx.fillStyle=c;ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val!=null?val.toFixed(1)+(w.unit||''):'—',cx,cy);ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textBaseline='top';ctx.fillText(w.label||'',cx,w.y+3);}
+function rTemp(w,val){const al=val!=null&&(val>(w.alarmHigh??85)||val<(w.alarmLow??3)),c=al?'#f85149':(w.color||'#00d4ff');ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();ctx.strokeStyle=al?'#f85149':_brd();ctx.lineWidth=al?2:1;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.stroke();ctx.globalAlpha=1;ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+30,w.y+7);ctx.fillStyle=c;ctx.font='16px sans-serif';ctx.fillText('🌡',w.x+6,w.y+4);const txt=val!=null&&!isNaN(val)?val.toFixed(1)+(w.unit??'°C'):'N/C';ctx.fillStyle=c;ctx.font=`bold ${val!=null?24:14}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,w.x+w.w/2,w.y+w.h/2+8);const p=val!=null?Math.min(1,Math.max(0,(val+50)/200)):0;ctx.fillStyle=_bg4();rr(ctx,w.x+8,w.y+w.h-16,w.w-16,4,2);ctx.fill();ctx.fillStyle=c;rr(ctx,w.x+8,w.y+w.h-16,(w.w-16)*p,4,2);ctx.fill();const hi=w.alarmHigh??85,lo=w.alarmLow??3;ctx.fillStyle=_t3();ctx.font='8px sans-serif';ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText(`↑${hi}° ↓${lo}°`,w.x+8,w.y+w.h-18);}
+function rGauge(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,cx=w.x+w.w/2,cy=w.y+w.h/2+5,r=Math.min(w.w,w.h)/2-12,s=Math.PI*.75,e2=Math.PI*2.25,c=w.color||'#d080ff';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,10);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=_bg4();ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.arc(cx,cy,r,s,e2);ctx.stroke();ctx.strokeStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,s,s+(e2-s)*p);ctx.stroke();ctx.fillStyle=c;ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val!=null?val.toFixed(1)+(w.unit||''):'—',cx,cy);ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textBaseline='top';ctx.fillText(w.label||'',cx,w.y+3);}
 function rBar(w,val){const mn=w.min??0,mx=w.max??100,p=val!=null?Math.min(1,Math.max(0,(val-mn)/(mx-mn))):0,c=w.color||'#3fb950';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d2010';rr(ctx,w.x,w.y,w.w,w.h,6);ctx.fill();ctx.globalAlpha=1;const bh=(w.h-20)*p;ctx.fillStyle=c;rr(ctx,w.x+4,w.y+w.h-10-bh,w.w-8,bh,3);ctx.fill();ctx.fillStyle=c;ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(val!=null?val.toFixed(0)+(w.unit||''):'—',w.x+w.w/2,w.y+3);}
-function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+7,w.y+4);if(buf.length<2)return;const mn=Math.min(...buf.map(p=>p.y)),mx=Math.max(...buf.map(p=>p.y)),sp=mx-mn||1;const px=i=>w.x+5+(i/(buf.length-1))*(w.w-10),py=v=>w.y+w.h-7-((v-mn)/sp)*(w.h-20);ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();buf.forEach((p,i)=>i===0?ctx.moveTo(px(i),py(p.y)):ctx.lineTo(px(i),py(p.y)));ctx.stroke();const lp=buf[buf.length-1];ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(buf.length-1),py(lp.y),3,0,Math.PI*2);ctx.fill();ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(lp.y.toFixed(1)+(w.unit||''),w.x+w.w-5,w.y+4);}
+function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+7,w.y+4);if(buf.length<2)return;const mn=Math.min(...buf.map(p=>p.y)),mx=Math.max(...buf.map(p=>p.y)),sp=mx-mn||1;const px=i=>w.x+5+(i/(buf.length-1))*(w.w-10),py=v=>w.y+w.h-7-((v-mn)/sp)*(w.h-20);ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();buf.forEach((p,i)=>i===0?ctx.moveTo(px(i),py(p.y)):ctx.lineTo(px(i),py(p.y)));ctx.stroke();const lp=buf[buf.length-1];ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(buf.length-1),py(lp.y),3,0,Math.PI*2);ctx.fill();ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(lp.y.toFixed(1)+(w.unit||''),w.x+w.w-5,w.y+4);}
 
 // ── Courbe historisée (BDD, persistante) ──────────────────────────────────
 // Contrairement à rTrend (buffer mémoire navigateur, perdu au reload), cette
@@ -1339,10 +1340,53 @@ function rTrend(w){const buf=rtBuffers[w.varRef]||[],c=w.color||'#58a6ff';ctx.gl
 // (RF/AV/mémoire) est simplement la propriété varRef du widget : le moteur
 // PLC détecte automatiquement les widgets 'trend_db' présents dans
 // synoptic.json et historise leurs varRef toutes les 5 minutes côté serveur.
+// ── Échelles des courbes historisées ─────────────────────────────────────
+// Pas « joli » (1 / 2 / 2,5 / 5 × 10^n) pour que les graduations tombent sur des valeurs rondes.
+function _niceStep(range,maxTicks){
+  const raw=range/Math.max(1,maxTicks), mag=Math.pow(10,Math.floor(Math.log10(raw))), n=raw/mag;
+  return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag;
+}
+function _axisDec(step){ for(let d=0;d<=3;d++){ const s=step*Math.pow(10,d); if(Math.abs(s-Math.round(s))<1e-6) return d; } return 3; }
+function _fmtAxis(v,dec){
+  const a=Math.abs(v);
+  if(a>=10000) return (v/1000).toFixed(a>=100000?0:1).replace(/\.0$/,'')+'k';
+  return v.toFixed(dec);
+}
+const _p2=n=>String(n).padStart(2,'0');
+// Repères de temps (heure locale) alignés sur des heures / jours ronds, espacés d'au moins ~46 px.
+function _timeTicks(tMin,tNow,pxWidth){
+  const span=tNow-tMin||1, pxPerSec=pxWidth/span;
+  const steps=[1,2,3,6,12,24,48,72,120,168,240,360].map(h=>h*3600);
+  let step=steps[steps.length-1];
+  for(const s of steps){ if(s*pxPerSec>=46){ step=s; break; } }
+  const ticks=[], d=new Date(tMin*1000);
+  if(step<86400){
+    const h=step/3600; d.setMinutes(0,0,0);
+    while(d.getTime()/1000<tMin || d.getHours()%h!==0) d.setHours(d.getHours()+1);
+  } else {
+    d.setHours(0,0,0,0); while(d.getTime()/1000<tMin) d.setDate(d.getDate()+1);
+  }
+  const dayStep=Math.max(1,Math.round(step/86400));
+  for(let guard=0; d.getTime()/1000<=tNow && guard<200; guard++){
+    ticks.push({t:d.getTime()/1000, d:new Date(d.getTime())});
+    if(step<86400) d.setHours(d.getHours()+step/3600); else d.setDate(d.getDate()+dayStep);
+  }
+  return {ticks,step};
+}
+
+// ── Courbe historisée (BDD, persistante) ──────────────────────────────────
+// Contrairement à rTrend (buffer mémoire navigateur, perdu au reload), cette
+// version interroge /api/history/<ref> côté serveur — la donnée survit aux
+// rechargements de page et aux redémarrages du Raspberry Pi. Le ref suivi
+// (RF/AV/mémoire) est simplement la propriété varRef du widget : le moteur
+// PLC détecte automatiquement les widgets 'trend_db' présents dans
+// synoptic.json et historise leurs varRef toutes les 5 minutes côté serveur.
+// Échelles : axe des valeurs (graduations rondes + lignes de repère) et axe du temps
+// (heures / jours ronds). Échelle automatique par défaut ; w.yAuto===false => w.yMin / w.yMax.
 function rTrendDb(w){
   const c=w.color||'#58a6ff';
   ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||'#0d1f35';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;
-  ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
   ctx.fillText(w.label||'',w.x+7,w.y+4);
 
   const now=Date.now(),hours=w.hours||24;
@@ -1358,24 +1402,72 @@ function rTrendDb(w){
 
   const buf=cache.data;
   if(!buf||buf.length<2){
-    ctx.fillStyle='#484f58';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=_t3();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(cache.loading?'Chargement…':'Pas de données',w.x+w.w/2,w.y+w.h/2);
     return;
   }
   const tNow=Math.floor(now/1000),tMin=tNow-hours*3600;
-  const mn=Math.min(...buf.map(p=>p.v)),mx=Math.max(...buf.map(p=>p.v)),sp=(mx-mn)||1;
-  const px=ts=>w.x+5+((ts-tMin)/(tNow-tMin||1))*(w.w-10);
-  const py=v=>w.y+w.h-16-((v-mn)/sp)*(w.h-30);
+  let dmin=Infinity,dmax=-Infinity;
+  for(const p of buf){ if(p.v<dmin)dmin=p.v; if(p.v>dmax)dmax=p.v; }
+
+  // ── zone de tracé : marges pour l'axe des valeurs (gauche) et du temps (bas) ──
+  const T=w.y+22, Bt=w.y+w.h-15, plotH=Math.max(10,Bt-T);
+  // échelle des valeurs
+  let yLo,yHi,step;
+  if(w.yAuto===false && isFinite(w.yMin) && isFinite(w.yMax) && w.yMax>w.yMin){
+    yLo=w.yMin; yHi=w.yMax; step=_niceStep(yHi-yLo,Math.floor(plotH/24));
+  } else {
+    let span=dmax-dmin; if(span<1e-9){ const m=Math.max(1,Math.abs(dmax)*0.1); dmin-=m; dmax+=m; span=dmax-dmin; }
+    step=_niceStep(span*1.06,Math.max(2,Math.floor(plotH/24)));
+    let lo=dmin-span*0.03, hi=dmax+span*0.03;
+    if(dmin>=0 && lo<0) lo=0;          // une grandeur toujours positive ne descend pas sous 0
+    if(dmax<=0 && hi>0) hi=0;
+    yLo=Math.floor(lo/step)*step; yHi=Math.ceil(hi/step)*step;
+    if(yHi<=yLo) yHi=yLo+step;
+  }
+  const dec=_axisDec(step);
+  const yTicks=[]; for(let v=Math.ceil(yLo/step-1e-9)*step; v<=yHi+step*1e-6; v+=step) yTicks.push(Math.round(v/step)*step);
+  // largeur de l'axe d'après les libellés
+  ctx.font='9px sans-serif';
+  let axW=0; for(const v of yTicks) axW=Math.max(axW,ctx.measureText(_fmtAxis(v,dec)).width);
+  axW=Math.ceil(axW)+8;
+  const L=w.x+axW+3, R=w.x+w.w-6;
+  if(R-L<30){ axW=0; }
+  const px=ts=>L+((ts-tMin)/(tNow-tMin||1))*(R-L);
+  const py=v=>Bt-((v-yLo)/((yHi-yLo)||1))*plotH;
+
+  // ── grille + graduations des valeurs ──
+  ctx.lineWidth=1; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.font='9px sans-serif';
+  for(const v of yTicks){
+    const y=Math.round(py(v))+0.5;
+    ctx.strokeStyle='rgba(255,255,255,0.09)'; ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(R,y); ctx.stroke();
+    ctx.fillStyle=_t2(); ctx.fillText(_fmtAxis(v,dec),L-4,y);
+  }
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(L+0.5,T); ctx.lineTo(L+0.5,Bt+0.5); ctx.lineTo(R,Bt+0.5); ctx.stroke();
+
+  // ── graduations du temps ──
+  const tt=_timeTicks(tMin,tNow,R-L);
+  ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle='#6e7681';
+  let lastRight=-1e9;
+  for(const k of tt.ticks){
+    const x=Math.round(px(k.t))+0.5;
+    if(x<L||x>R) continue;
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.beginPath(); ctx.moveTo(x,T); ctx.lineTo(x,Bt); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(x,Bt); ctx.lineTo(x,Bt+3); ctx.stroke();
+    const dd=k.d, lbl=(tt.step>=86400||dd.getHours()===0)?`${_p2(dd.getDate())}/${_p2(dd.getMonth()+1)}`:`${_p2(dd.getHours())}h`;
+    const wl=ctx.measureText(lbl).width;
+    if(x-wl/2>lastRight+4 && x-wl/2>=w.x+1 && x+wl/2<=w.x+w.w-1){ ctx.fillText(lbl,x,w.y+w.h-2); lastRight=x+wl/2; }
+  }
+
+  // ── courbe (coupée à la zone de tracé) ──
+  ctx.save(); ctx.beginPath(); ctx.rect(L,T-2,R-L,plotH+4); ctx.clip();
   ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();
   buf.forEach((p,i)=>{const x=px(p.ts),y=py(p.v);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-  ctx.stroke();
+  ctx.stroke(); ctx.restore();
   const lp=buf[buf.length-1];
   ctx.fillStyle=c;ctx.beginPath();ctx.arc(px(lp.ts),py(lp.v),3,0,Math.PI*2);ctx.fill();
   ctx.font='bold 10px sans-serif';ctx.textAlign='right';ctx.textBaseline='top';
   ctx.fillText(lp.v.toFixed(1)+(w.unit||''),w.x+w.w-5,w.y+4);
-  ctx.fillStyle='#6e7681';ctx.font='9px sans-serif';ctx.textBaseline='bottom';
-  ctx.textAlign='left'; ctx.fillText(`-${hours}h`,w.x+5,w.y+w.h-3);
-  ctx.textAlign='right';ctx.fillText('maintenant',w.x+w.w-5,w.y+w.h-3);
 }
 function rVal(w,val){ctx.globalAlpha=w.opacity??1;ctx.fillStyle=w.bg||_bg3();rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label||'',w.x+w.w/2,w.y+4);ctx.fillStyle=w.color||'#e6edf3';ctx.font='bold 16px sans-serif';ctx.textBaseline='middle';const v=val!=null?(isNaN(parseFloat(val))?String(val):parseFloat(val).toFixed(w.decimals??1)+(w.unit||'')):'—';ctx.fillText(v,w.x+w.w/2,w.y+w.h/2+4);}
 function rAvDisplay(w,val){
@@ -1461,7 +1553,7 @@ function rNumEntry(w,val,canvasOnly){
   // Zone saisie
   if(editMode){
     ctx.fillStyle='#30363d';rr(ctx,w.x+7,w.y+54,w.w-14,22,5);ctx.fill();
-    ctx.fillStyle='#484f58';ctx.font='10px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=_t3();ctx.font='10px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText('[ saisie opérateur ]',w.x+w.w/2,w.y+65);
   } else {
     hov(w,`
@@ -1547,7 +1639,7 @@ function rToggle(w,val,canvasOnly){
   const bgColor=on?(st==='flat'?'#1a0a2a':c+'15'):_bg3();
   ctx.fillStyle=bgColor;rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();
   if(st!=='flat'){ctx.strokeStyle=on?c+'80':'#30363d';ctx.lineWidth=on?1.5:1;rr(ctx,w.x,w.y,w.w,w.h,8);ctx.stroke();}
-  ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
   ctx.fillText(w.label||'',w.x+w.w/2,w.y+4);
   const tx=w.x+w.w/2-20,ty=w.y+w.h/2-7,tw=40,th=14,tr=7;
   // Piste du toggle
@@ -1585,7 +1677,7 @@ function rDvPush(w,val,canvasOnly){
   ctx.beginPath(); ctx.arc(cx2-3,cy2-3,4,0,Math.PI*2); ctx.fillStyle=on?'#ffffff50':'#ffffff20'; ctx.fill();
   ctx.fillStyle=on?c:'#8b949e'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText(w.label||'', w.x+w.w/2, w.y+w.h-16);
-  ctx.fillStyle='#484f58'; ctx.font='8px monospace'; ctx.textAlign='right'; ctx.textBaseline='top';
+  ctx.fillStyle=_t3(); ctx.font='8px monospace'; ctx.textAlign='right'; ctx.textBaseline='top';
   ctx.fillText('DV:'+w.varRef, w.x+w.w-5, w.y+4);
   if(!editMode) hov(w,`<button onmousedown="writeDV('${w.varRef}',true)" onmouseup="writeDV('${w.varRef}',false)" onmouseleave="writeDV('${w.varRef}',false)" ontouchstart="writeDV('${w.varRef}',true)" ontouchend="writeDV('${w.varRef}',false)" style="position:absolute;inset:0;width:100%;height:100%;background:transparent;border:none;cursor:pointer;-webkit-tap-highlight-color:transparent;" title="Maintenir = actif · Relâcher = inactif"></button>`,canvasOnly);
 }
@@ -1599,7 +1691,7 @@ function rDvToggle(w,val,canvasOnly){
   ctx.strokeStyle=c+(on?'':'60'); ctx.lineWidth=on?2:1; rr(ctx,w.x,w.y,w.w,w.h,8); ctx.stroke();
   ctx.fillStyle=_t2(); ctx.font='10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(w.label||'', w.x+8, w.y+6);
-  ctx.fillStyle='#484f58'; ctx.font='8px monospace'; ctx.textAlign='right'; ctx.textBaseline='top';
+  ctx.fillStyle=_t3(); ctx.font='8px monospace'; ctx.textAlign='right'; ctx.textBaseline='top';
   ctx.fillText('DV:'+w.varRef, w.x+w.w-5, w.y+6);
   const tw2=44,th2=14,tx2=w.x+w.w/2-22,ty2=w.y+w.h/2-3;
   ctx.fillStyle=on?c+'50':_bg4(); rr(ctx,tx2,ty2,tw2,th2,7); ctx.fill();
@@ -2061,7 +2153,7 @@ function rCntDisplay(w){
   ctx.strokeStyle=c+'60';ctx.lineWidth=1.5;rr(ctx,w.x,w.y,w.w,w.h,10);ctx.stroke();
   ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
   ctx.fillText(w.label||'',w.x+9,w.y+6);
-  ctx.fillStyle='#484f58';ctx.font='8px monospace';ctx.textAlign='right';
+  ctx.fillStyle=_t3();ctx.font='8px monospace';ctx.textAlign='right';
   ctx.fillText(bid?'⏱ '+bid:'— non lié —',w.x+w.w-6,w.y+6);
   const rows=[];
   if(w.showStarts!==false) rows.push({label:'Démarrages',val:starts!=null?Math.round(starts)+'':'—',unit:''});
@@ -2105,7 +2197,7 @@ function rDynText(w, val){
   }
   // Étiquette (optionnelle, petite, gris)
   if(w.label){
-    ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';
+    ctx.fillStyle=_t2();ctx.font='10px sans-serif';
     ctx.textAlign='left';ctx.textBaseline='top';
     ctx.fillText(w.label,w.x+4,w.y+2);
   }
@@ -2136,7 +2228,7 @@ function rDynText(w, val){
   ctx.fillText(txt,tx,cy);
   // Indicateur de source (mode édition) - petit badge en bas droite
   if(editMode&&w.varRef){
-    ctx.fillStyle='#484f58';ctx.font='8px sans-serif';
+    ctx.fillStyle=_t3();ctx.font='8px sans-serif';
     ctx.textAlign='right';ctx.textBaseline='bottom';
     ctx.fillText(w.varRef,w.x+w.w-3,w.y+w.h-2);
   }
@@ -2222,7 +2314,7 @@ function _drawEditOverlay(w){
   ctx.font='8px sans-serif';
   const dw=ctx.measureText(dim).width+8;
   ctx.fillStyle='rgba(13,31,53,0.82)';ctx.fillRect(w.x+w.w-dw-2,w.y+w.h-14,dw,13);
-  ctx.fillStyle='#8b949e';ctx.textAlign='right';ctx.textBaseline='bottom';
+  ctx.fillStyle=_t2();ctx.textAlign='right';ctx.textBaseline='bottom';
   ctx.fillText(dim,w.x+w.w-3,w.y+w.h-2);
   ctx.restore();
   if(isSel) _drawHandles(w,true);
@@ -2300,7 +2392,7 @@ function rDrawLine(w){
   ctx.globalAlpha=1;
   _drawEditOverlay(w);
 }
-function rAlarm(w,val){const on=!!val,c=on?(w.colorOn||'#f85149'):(w.colorOff||'#484f58'),r=Math.min(w.w,w.h)/2-5,cx=w.x+w.w/2,cy=w.y+w.h/2-6;ctx.fillStyle=c+'20';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.fillStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();if(on){ctx.strokeStyle=c+'60';ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx,cy,r+4,0,Math.PI*2);ctx.stroke();}ctx.fillStyle='#8b949e';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(w.label||'',cx,w.y+w.h-2);}
+function rAlarm(w,val){const on=!!val,c=on?(w.colorOn||'#f85149'):(w.colorOff||'#484f58'),r=Math.min(w.w,w.h)/2-5,cx=w.x+w.w/2,cy=w.y+w.h/2-6;ctx.fillStyle=c+'20';rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();ctx.fillStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();if(on){ctx.strokeStyle=c+'60';ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx,cy,r+4,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=_t2();ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(w.label||'',cx,w.y+w.h-2);}
 
 // ── Rendu symbole SVG (via blob URL + cache) ──────────────────────────
 function rSym(w,val){
@@ -2324,7 +2416,7 @@ function rSym(w,val){
     ctx.fillStyle=_bg3();rr(ctx,w.x,w.y,w.w,w.h,5);ctx.fill();
   }
   ctx.globalAlpha=1;
-  if(w.label){ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label,w.x+w.w/2,w.y+w.h+2);}
+  if(w.label){ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label,w.x+w.w/2,w.y+w.h+2);}
 }
 
 // ── Rendu image utilisateur ───────────────────────────────────────────
@@ -2340,7 +2432,7 @@ function rImg(w){
     else{const s=Math.min(w.w/i.naturalWidth,w.h/i.naturalHeight),dw=i.naturalWidth*s,dh=i.naturalHeight*s;ctx.drawImage(i,w.x+(w.w-dw)/2,w.y+(w.h-dh)/2,dw,dh);}
   }
   ctx.globalAlpha=1;
-  if(w.label){ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label,w.x+w.w/2,w.y+w.h+2);}
+  if(w.label){ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(w.label,w.x+w.w/2,w.y+w.h+2);}
 }
 
 // ═══════════════ SYMBOLES ANIMÉS ═══════════════════════════════════════
@@ -3753,7 +3845,7 @@ function rAnim(w,val,canvasOnly){
   if(!def){
     // Placeholder si animId inconnu
     ctx.fillStyle=_bg3();rr(ctx,w.x,w.y,w.w,w.h,8);ctx.fill();
-    ctx.fillStyle='#484f58';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=_t3();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(w.animId||'?',w.x+w.w/2,w.y+w.h/2);
     return;
   }
@@ -3790,7 +3882,7 @@ function rAnim(w,val,canvasOnly){
     ctx.fillStyle='rgba(13,31,53,0.82)';
     const dw=ctx.measureText(dim).width+8;
     ctx.fillRect(w.x+w.w-dw-2,w.y+w.h-16,dw,14);
-    ctx.fillStyle='#8b949e'; ctx.font='8px sans-serif';
+    ctx.fillStyle=_t2(); ctx.font='8px sans-serif';
     ctx.textAlign='right'; ctx.textBaseline='bottom';
     ctx.fillText(dim,w.x+w.w-4,w.y+w.h-3);
     // 4 poignées de redimensionnement
@@ -3799,7 +3891,7 @@ function rAnim(w,val,canvasOnly){
   }
   // Label sous le widget
   if(w.label){
-    ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillStyle=_t2();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
     ctx.fillText(w.label,w.x+w.w/2,w.y+w.h+2);
   }
 }
@@ -4120,7 +4212,7 @@ function clearCanvas(){if(!confirm('Effacer tous les widgets ?'))return;widgets=
 // ── Alignements / répartition sur une sélection multiple (≥2 widgets) ──
 function _grp(){const g=[..._multiSel].filter(w=>!w.locked);return g.length>1?g:null;}
 function _grpDone(){renderAll();_dirty=true;return true;}
-function _needGrp(){toast('Sélectionnez au moins 2 widgets (Ctrl+clic ou rectangle)','warn');}
+function _needGrp(){toast('Sélectionnez au moins 2 widgets (Ctrl+clic ou rectangle)','info');}
 function alignRight(){const g=_grp();if(!g)return _needGrp();const r=Math.max(...g.map(w=>w.x+w.w));g.forEach(w=>{w.x=Math.round(r-w.w);});_grpDone();}
 function alignBottom(){const g=_grp();if(!g)return _needGrp();const r=Math.max(...g.map(w=>w.y+w.h));g.forEach(w=>{w.y=Math.round(r-w.h);});_grpDone();}
 function alignHCenter(){const g=_grp();if(!g)return _needGrp();const c=(Math.min(...g.map(w=>w.y))+Math.max(...g.map(w=>w.y+w.h)))/2;g.forEach(w=>{w.y=Math.round(c-w.h/2);});_grpDone();}
@@ -4347,7 +4439,7 @@ function showProps(w){
     <span style="font-size:11px;">🔒 Verrouiller (ne bouge plus)</span>
   </label>`;
   if(!['label','symbol','image','dyn_text'].includes(w.type))h+=`<div class="prop-section">Général</div>`+pT('label','Étiquette',w.label||'');
-  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend','trend_db'].includes(w.type))h+=pT('unit','Unité',w.unit||'°C');h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117')+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
+  if(['temperature','gauge','bar','trend','trend_db','value'].includes(w.type)){h+=`<div class="prop-section">Variable PLC</div><div class="prop-row"><div class="prop-label">Référence</div><select class="prop-input" data-key="varRef"><optgroup label="Températures">${an}</optgroup><optgroup label="Registres RF">${rfOpts}</optgroup></select></div><div class="prop-row"><div class="prop-label" style="font-size:10px;color:var(--t3)">✏ Saisie libre</div>${rf}</div>`;if(!['trend'].includes(w.type))h+=pT('unit','Unité',w.unit||(w.type==='trend_db'?'':'°C'));if(w.type==='trend_db'){h+=`<div class=\"prop-section\">Échelle des valeurs</div>`+pB('yAuto','Échelle automatique',w.yAuto!==false);if(w.yAuto===false){h+=pN('yMin','Valeur min',w.yMin??0,'','',1)+pN('yMax','Valeur max',w.yMax??100,'','',1);}}h+=pC('color','Couleur',w.color||'#58a6ff')+pC('bg','Fond',w.bg||'#0d1117')+pN('opacity','Opacité fond',w.opacity??1,'0','1',0.05);if(w.type==='temperature'){h+=`<div class="prop-section">Alarmes</div>`+pN('alarmHigh','Seuil haut',w.alarmHigh??85,'','')+pN('alarmLow','Seuil bas',w.alarmLow??3,'','');}if(['gauge','bar'].includes(w.type)){h+=`<div class="prop-section">Échelle</div>`+pN('min','Min',w.min??0)+pN('max','Max',w.max??100);}if(w.type==='trend_db'){h+=`<div class="prop-section">Historique</div>`+pN('hours','Fenêtre (h)',w.hours??24,1,8760,1)+`<div class="prop-row" style="font-size:10px;color:var(--t3)">Échantillonné côté serveur toutes les 5 min, conservé 1 an. La référence ci-dessus est détectée automatiquement par le moteur PLC dès l'enregistrement de la page.</div>`;}}
   if(w.type==='numeric'){
     h+=`<div class="prop-section">Registre RF / Variable</div>`;
     h+=`<div class="prop-row"><div class="prop-label">Registre RF</div>
@@ -4897,7 +4989,7 @@ function showProps(w){
       renderAll();_dirty=true;
       // Pour les clés qui modifient la structure conditionnelle du panneau,
       // rafraîchir showProps après le cycle courant (évite le freeze Qt WebEngine).
-      const _structKeys=['action','animId','symId','shape','btnStyle'];
+      const _structKeys=['action','animId','symId','shape','btnStyle','yAuto'];
       if(_structKeys.includes(k)){
         setTimeout(()=>{ if(selected===w) showProps(w); },0);
       }

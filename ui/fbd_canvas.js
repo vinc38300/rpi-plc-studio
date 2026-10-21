@@ -367,6 +367,8 @@ const DEFS = {
   PYBLOCK:  {cat:'Arithmétique',col:'#0a0a25',hdr:'#10102a',bdg:'#7c3aed',ins:['A1','A2','A3','A4','d1','d2','d3','d4'],outs:['OA1','OA2','od1','od2','od3'],desc:'Bloc Python natif — accès complet aux variables PLC'},
   CONTACTOR:{cat:'Actionneurs',col:'#0a1f0a',hdr:'#102a10',bdg:'#40ff80',ins:['ON'],        outs:['Q'],           desc:'Contacteur/Relais (ContactorFo)'},
   VALVE3V:  {cat:'Actionneurs',col:'#1a0f0a',hdr:'#251510',bdg:'#ff8040',ins:['OINC','ODEC'],outs:['Q_OUV','Q_FER'],desc:'Vanne 3 voies — Q_OUV=ouverture, Q_FER=fermeture'},
+  // Alerte Telegram : message personnalisable quand IN est actif
+  TELEGRAM: {cat:'Actionneurs',col:'#0a1a2a',hdr:'#0d2340',bdg:'#29b6f6',ins:['IN'],        outs:[],             desc:'Telegram — envoie un message quand IN est actif (texte, anti-parasite, retour a la normale)'},
   // Compteur de marche
   RUNTIMCNT:{cat:'Compteurs',  col:'#0a2a0a',hdr:'#103510',bdg:'#50ff50',ins:['RUN','RST'], outs:['STARTS','TOTAL','RUNTIME'],desc:'Compteur marche — RUN=signal, RST=reset'},
 };
@@ -403,7 +405,13 @@ function enterGroup(grpBlock){
     gPageIdx = pages.length - 1;
   }
   groupStack.push({returnPageIdx: cur, groupBlockId: grpBlock.id});
-  goPage(gPageIdx);
+  // FIX : la page interne n'avait aucun viewport enregistré (pgVP) → goPage()
+  // levait « Cannot read properties of undefined (reading 'x') » AVANT render()
+  // et updateGroupBreadcrumb() : fil d'Ariane / bouton « Sortir » absents, vue
+  // non recadrée sur le contenu du groupe.
+  if(!pgVP[gPageId]) pgVP[gPageId] = {x:40,y:40,scale:1};
+  try{ goPage(gPageIdx); }
+  catch(err){ console.error('[FBD] enterGroup/goPage:', err); }
   updateGroupBreadcrumb();
 }
 
@@ -425,6 +433,7 @@ function exitGroup(){
   // Supprimer la page interne (elle est sauvegardée dans le bloc)
   const gPageId = _groupPageId(groupBlockId);
   const gIdx = pages.findIndex(p=>p.id===gPageId);
+  delete pgVP[gPageId];   // FIX : repartir d'un viewport neuf (recadrage auto) à la prochaine entrée
   if(gIdx>=0) pages.splice(gIdx,1);
   goPage(returnPageIdx < pages.length ? returnPageIdx : pages.length-1);
   updateGroupBreadcrumb();
@@ -1264,6 +1273,7 @@ function defParams(t){
   if(t==='INPUT')   return{pin:14,name:'TOR1'};
   if(t==='OUTPUT')  return{pin:5,name:'K1'};
   if(t==='CONST')   return{value:0};
+  if(t==='TELEGRAM')return{msg:'Alerte : defaut detecte',msg_clear:'Retour a la normale',delay_s:3,repeat_s:0,trigger:'1'};
   if(t==='MEM')     return{bit:'M0'};
   if(t==='PAGE_IN') return{signal:'SIG1'};
   if(t==='PAGE_OUT')return{signal:'SIG1'};
@@ -2130,6 +2140,7 @@ function pdisp(b){
   if(b.type==='CONTACTOR')return p.name||'K1';
   if(b.type==='VALVE3V') return p.name||'V3V';
   if(b.type==='RUNTIMCNT')return p.name||'Cpt';
+  if(b.type==='TELEGRAM'){const m=String(p.msg||'').trim();return '> '+(m.length>22?m.slice(0,21)+'..':m);}
   if(b.type==='MQTT'){
     const t=p.topic||'';
     const parts=t.split('/');
@@ -2973,6 +2984,18 @@ function showBlockProps(b){
       MDAY = jour du mois (1-31)<br>
       WDAY = jour semaine (0=Dim..6=Sam)
     </div>`;
+  }else if(b.type==='TELEGRAM'){
+    const tp=b.params, _esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    h+=`<div style="color:var(--fbd-text2);font-size:10px;padding:4px 0 6px;line-height:1.6">
+      Envoie un message Telegram quand <b>IN</b> reste actif.<br>
+      Variables dans le texte : <code>{RF247}</code> <code>{RF247:.1f}</code> <code>{M7}</code> <code>{nom_variable}</code> <code>{date}</code> <code>{heure}</code>
+    </div>`;
+    h+=`<div class="pr"><span class="pl">Message (IN actif)</span><input class="pi" data-key="msg" type="text" value="${_esc(tp.msg)}" style="width:100%;box-sizing:border-box"></div>`;
+    h+=`<div class="pr"><span class="pl">Message retour a la normale (vide = aucun)</span><input class="pi" data-key="msg_clear" type="text" value="${_esc(tp.msg_clear)}" style="width:100%;box-sizing:border-box"></div>`;
+    h+=pSel('trigger','Declenche quand IN est',tp.trigger||'1',[{v:'1',l:'actif (1)'},{v:'0',l:'inactif (0) - contact NF'}]);
+    h+=pNum('delay_s','Anti-parasite (s)',tp.delay_s??3,0,3600,1);
+    h+=pNum('repeat_s','Rappel toutes les (s, 0 = jamais)',tp.repeat_s??0,0,86400,1);
+    h+=`<div style="color:var(--fbd-text3);font-size:9px;padding:4px 0">Necessite le bot Telegram active sur le RPi (SCADA / fenetre de deploiement).</div>`;
   }else if(b.type==='MQTT'){
     h+=`<div style="color:var(--fbd-text2);font-size:10px;padding:4px 0 6px">
       <b>Subscribe (SUB)</b> : lit le topic → ecrit dans reg_out (RF*)<br>

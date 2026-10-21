@@ -1,0 +1,29 @@
+RPi-PLC Studio — thème sombre plus lisible (Studio + serveur RPi)
+=================================================================
+Copier ces fichiers par-dessus ceux du dossier du Studio (mêmes chemins) :
+
+  Studio (PC)
+    main.py
+    resources/theme_dark.qss
+    ui/theme_fix.py                  (NOUVEAU)
+    ui/main_window.py
+    ui/deploy_dialog.py              (Telegram : relais off par défaut)
+    ui/synoptic_canvas.html
+    ui/synoptic_canvas.js
+    ui/fbd_canvas.html
+
+  Serveur RPi (pages web)
+    rpi_server/templates/index.html
+    rpi_server/templates/scada.html
+    rpi_server/templates/synoptic.html
+    rpi_server/templates/synoptic_mobile.html
+    rpi_server/static/synoptic_canvas.js   (identique à ui/synoptic_canvas.js)
+    rpi_server/testeur_plc.html
+    rpi_server/server.py             (Telegram : relais off par défaut)
+    rpi_server/config.json           (Telegram : relais off par défaut)
+
+Studio : relancer  python3 main.py  puis Affichage > Thème sombre.
+RPi    : faire un déploiement depuis le Studio (les templates et
+         synoptic_canvas.js sont renvoyés à chaque déploiement), puis
+         recharger les pages (Ctrl+F5 ; sur téléphone, fermer/rouvrir la page).
+Le thème clair n'est pas modifié. patch.diff contient toutes les différences.

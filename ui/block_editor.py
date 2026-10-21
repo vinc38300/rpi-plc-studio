@@ -1235,6 +1235,7 @@ class BlockEditor(QWidget):
         _COMPILE_PRIO = {
             'SENSOR':0,'PT_IN':0,'ANA_IN':0,'DS_IN':0,'AV':0,'DV':0,'BACKUP':0,'STOAV':0,
             'MQTT':0,
+            'TELEGRAM':5,     # consommateur : compilé après les sources qui le déclenchent
             # PAGE_IN/PAGE_OUT supprimés — canvas infini (fils directs)
             'ADD':2,'SUB':2,'MUL':2,'DIV':2,'ABS':2,'SQRT':2,
             'MIN':2,'MAX':2,'MOD':2,'POW':2,'CLAMP':2,'CLAMP_A':2,
@@ -1847,6 +1848,32 @@ class BlockEditor(QWidget):
                 out_dec = resolve_bool_out(bid, "Q_FER")
                 if out_inc is not None: blk["out_inc"] = out_inc
                 if out_dec is not None: blk["out_dec"] = out_dec
+                prog.append(blk)
+
+            elif bt == "TELEGRAM":
+                # Bloc d'alerte : envoie un message Telegram quand IN reste actif delay_s secondes
+                insb, in_port = wire_src(bid, "IN")
+                cond = build_cond(insb) or p.get("condition")
+                # Même contournement inter-pages que RUNTIMCNT : sortie od{N} d'un PYBLOCK
+                if cond is None and insb and insb.get("type") == "PYBLOCK" and in_port:
+                    sp = in_port.lower()
+                    if sp.startswith("od"):
+                        od_rf = insb.get("params", {}).get(f"{sp}_ref")
+                        if od_rf:
+                            cond = {"type": "input", "ref": od_rf}
+                def _tg_num(key, default):
+                    try:
+                        return max(0.0, float(p.get(key, default)))
+                    except (TypeError, ValueError):
+                        return float(default)
+                blk["type"]      = "telegram"
+                blk["msg"]       = str(p.get("msg", ""))
+                blk["msg_clear"] = str(p.get("msg_clear", ""))
+                blk["delay_s"]   = _tg_num("delay_s", 3)
+                blk["repeat_s"]  = _tg_num("repeat_s", 0)
+                if str(p.get("trigger", "1")) == "0":
+                    blk["invert"] = True            # déclenche quand IN est inactif (contact NF)
+                if cond: blk["condition"] = cond
                 prog.append(blk)
 
             elif bt == "RUNTIMCNT":

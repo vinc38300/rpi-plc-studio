@@ -12,7 +12,7 @@ Corrections :
   - Commandes /ping /diagnose /fixwebhook
 """
 
-import json, time, threading, logging, requests
+import json, re, time, threading, logging, requests
 from datetime import datetime
 from pathlib import Path
 
@@ -95,6 +95,10 @@ class TelegramBot:
         self._prev_gpio:  dict  = {}
         self._prev_running      = None
         self._last_report_date  = None
+        # Alarmes TOR (ex. chaudière en défaut) — voir check_digital_alarms()
+        self._tor_defs:  list   = self._parse_tor(self.cfg.get("alarmes_tor", []))
+        self._tor_state: dict   = {}
+        self._tor_warned: set   = set()
         self._last_error: str   = None   # ← initialisé ici (évite AttributeError)
         self._recipe_index: dict = {}    # {"0": "Chauffage_Normal", ...} — pour callback_data des boutons
 
@@ -268,6 +272,193 @@ class TelegramBot:
             else:
                 self._last_alarm.pop(khi, None)
                 self._last_alarm.pop(klo, None)
+
+    # ── Alarmes TOR (entrée / registre / bit M / variable) ───────────────────
+    #
+    # Config dans config.json → "telegram" → "alarmes_tor" (liste) :
+    #   {"name": "Chaudière en défaut",   # libellé du message
+    #    "source": "RF448",               # RFxxx | Mxx | GPIOxx (ou n° de broche) | nom de variable DV/AV
+    #    "active": true,                  # true = alarme quand la source est vraie ; false = quand elle est fausse (contact NF)
+    #    "delay_s": 3,                    # la valeur doit rester stable ce temps avant d'envoyer (anti-parasite)
+    #    "repeat_s": 0,                   # rappel toutes les N s tant que le défaut dure (0 = pas de rappel)
+    #    "notify_clear": true,            # message « retour à la normale »
+    #    "info": [{"label": "T° chaudière", "ref": "RF247", "unit": "°C"}]}   # valeurs jointes au message (facultatif)
+
+    @staticmethod
+    def _parse_tor(raw) -> list:
+        out = []
+        if not isinstance(raw, list):
+            return out
+        for i, d in enumerate(raw):
+            if not isinstance(d, dict) or d.get("source") in (None, ""):
+                continue
+            try:
+                out.append({
+                    "key":          f"{i}:{d.get('source')}",
+                    "name":         str(d.get("name") or d.get("source")),
+                    "source":       d.get("source"),
+                    "active":       bool(d.get("active", True)),
+                    "delay_s":      max(0.0, float(d.get("delay_s", 3))),
+                    "repeat_s":     max(0.0, float(d.get("repeat_s", 0))),
+                    "notify_clear": bool(d.get("notify_clear", True)),
+                    "info":         [x for x in (d.get("info") or []) if isinstance(x, dict) and x.get("ref")],
+                })
+            except (TypeError, ValueError):
+                log.warning(f"alarmes_tor[{i}] ignorée : paramètres invalides")
+        return out
+
+    @staticmethod
+    def _resolve_ref(snap: dict, ref):
+        """Valeur courante d'une référence dans un snapshot du moteur, ou None si introuvable."""
+        if ref is None or isinstance(ref, bool):
+            return None
+        r = str(ref).strip()
+        u = r.upper()
+        pin = None
+        if r.isdigit():
+            pin = r
+        elif u.startswith("GPIO") and u[4:].isdigit():
+            pin = u[4:]
+        if pin is not None:
+            g = (snap.get("gpio") or {}).get(pin)
+            return g.get("value") if isinstance(g, dict) else None
+        if re.fullmatch(r"RF\d+", u):
+            return (snap.get("registers") or {}).get(u)
+        if re.fullmatch(r"M\d+", u):
+            return (snap.get("memory") or {}).get(u)
+        for table in ("dv_vars", "av_vars"):
+            t = snap.get(table) or {}
+            if r in t:         return t[r]
+            if r.lower() in t: return t[r.lower()]
+        return None
+
+    @staticmethod
+    def _truthy(v) -> bool:
+        try:
+            return float(v) != 0.0
+        except (TypeError, ValueError):
+            return bool(v)
+
+    def _send_async(self, text: str):
+        """Envoi dans un thread : un Telegram injoignable (timeout 35 s) ne doit jamais
+        bloquer le cycle de régulation, d'où appelée depuis la boucle de scan."""
+        threading.Thread(target=self.send, args=(text,), daemon=True).start()
+
+    @staticmethod
+    def _fmt_duration(sec: float) -> str:
+        sec = int(max(0, sec))
+        if sec < 90:
+            return f"{sec} s"
+        if sec < 5400:
+            return f"{sec // 60} min"
+        return f"{sec // 3600} h {(sec % 3600) // 60:02d} min"
+
+    def _tor_info_lines(self, snap: dict, d: dict) -> str:
+        lines = []
+        for it in d["info"]:
+            v = self._resolve_ref(snap, it.get("ref"))
+            if v is None:
+                continue
+            try:
+                txt = f"{float(v):.1f}"
+            except (TypeError, ValueError):
+                txt = str(v)
+            unit = it.get("unit", "")
+            lines.append(f"{_md_escape(it.get('label', it['ref']))} : *{txt}{(' ' + unit) if unit else ''}*")
+        return ("\n" + "\n".join(lines)) if lines else ""
+
+    def _tor_step(self, key: str, in_alarm: bool, delay_s: float, repeat_s: float, now: float):
+        """Machine à états commune aux alarmes de config et aux blocs TELEGRAM.
+        Retourne "alarm" (défaut confirmé), "clear" (retour à la normale confirmé),
+        "repeat" (rappel) ou None. Seul un état stable depuis delay_s est confirmé."""
+        st = self._tor_state.setdefault(key, {
+            "raw": False, "since": now, "confirmed": False, "t_start": 0.0, "last_sent": 0.0})
+        if in_alarm != st["raw"]:
+            st["raw"], st["since"] = in_alarm, now
+        stable = (now - st["since"]) >= delay_s
+        if stable and in_alarm and not st["confirmed"]:
+            st["confirmed"], st["t_start"], st["last_sent"] = True, now, now
+            return "alarm"
+        if stable and not in_alarm and st["confirmed"]:
+            st["confirmed"] = False
+            return "clear"
+        if st["confirmed"] and repeat_s > 0 and now - st["last_sent"] >= repeat_s:
+            st["last_sent"] = now
+            return "repeat"
+        return None
+
+    def check_digital_alarms(self, snap: dict):
+        """À appeler à chaque scan avec le snapshot du moteur.
+        Envoie un message quand une source passe en alarme (après delay_s de stabilité),
+        un rappel optionnel tant qu'elle dure, et « retour à la normale » à la fin."""
+        if not self.enabled or not self.chat_ids or not self._tor_defs:
+            return
+        now = time.time()
+        for d in self._tor_defs:
+            raw_v = self._resolve_ref(snap, d["source"])
+            if raw_v is None:
+                if d["key"] not in self._tor_warned:
+                    self._tor_warned.add(d["key"])
+                    log.warning(f"Alarme TOR « {d['name']} » : source {d['source']} introuvable dans le moteur")
+                continue
+            in_alarm = (self._truthy(raw_v) == d["active"])
+            ev = self._tor_step(d["key"], in_alarm, d["delay_s"], d["repeat_s"], now)
+            if ev is None:
+                continue
+            st = self._tor_state[d["key"]]
+            if ev == "alarm":
+                self._send_async(f"🚨 *{_md_escape(d['name'])}*\n_{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}_"
+                                 + self._tor_info_lines(snap, d))
+            elif ev == "clear":
+                if d["notify_clear"]:
+                    self._send_async(f"✅ *{_md_escape(d['name'])}* — retour à la normale\n"
+                                     f"_{datetime.now().strftime('%H:%M:%S')} · durée {self._fmt_duration(now - st['t_start'])}_")
+            elif ev == "repeat":
+                self._send_async(f"🚨 *{_md_escape(d['name'])}* — toujours en défaut "
+                                 f"depuis {self._fmt_duration(now - st['t_start'])}"
+                                 + self._tor_info_lines(snap, d))
+
+    # ── Bloc FBD « TELEGRAM » ────────────────────────────────────────────────
+    _TPL = re.compile(r"\{([^{}:]+)(?::([^{}]*))?\}")
+
+    def format_message(self, template: str, snap: dict) -> str:
+        """Remplace {RF247}, {RF247:.1f}, {M7}, {nom_variable}, {date}, {heure} par leur valeur."""
+        def sub(m):
+            ref, spec = m.group(1).strip(), m.group(2)
+            low = ref.lower()
+            if low == "date":  return datetime.now().strftime("%d/%m/%Y")
+            if low == "heure": return datetime.now().strftime("%H:%M:%S")
+            v = self._resolve_ref(snap, ref)
+            if v is None:
+                return "?"
+            if isinstance(v, bool):
+                return "1" if v else "0"
+            try:
+                return format(float(v), spec) if spec else (f"{float(v):.1f}" if not float(v).is_integer() else str(int(float(v))))
+            except (TypeError, ValueError):
+                return str(v)
+        return self._TPL.sub(sub, str(template))
+
+    def notify_block(self, key: str, in_alarm: bool, msg: str, msg_clear: str,
+                     delay_s: float, repeat_s: float, snap_fn):
+        """Appelé à chaque scan par chaque bloc TELEGRAM du programme.
+        msg      : envoyé quand l'entrée reste active delay_s secondes
+        msg_clear: envoyé au retour à l'état inactif (vide = pas de message)
+        repeat_s : rappel (msg) toutes les N s tant que l'entrée reste active (0 = jamais)
+        snap_fn  : fonction sans argument retournant le snapshot du moteur (appelée seulement à l'envoi)"""
+        if not self.enabled or not self.chat_ids:
+            return
+        ev = self._tor_step("blk:" + str(key), bool(in_alarm), max(0.0, delay_s), max(0.0, repeat_s), time.time())
+        if ev is None:
+            return
+        text = msg if ev in ("alarm", "repeat") else msg_clear
+        if not str(text or "").strip():
+            return
+        try:
+            snap = snap_fn() if callable(snap_fn) else {}
+        except Exception:
+            snap = {}
+        self._send_async(self.format_message(text, snap))
 
     def check_relay_changes(self, gpio: dict):
         if not self.enabled or not self.chat_ids or not self.notify_relays:
@@ -1045,6 +1236,9 @@ class TelegramBot:
         self._last_relay    = {}
         self._prev_gpio     = {}
         self._prev_running  = None
+        self._tor_defs      = self._parse_tor(cfg.get("alarmes_tor", []))
+        self._tor_state     = {}
+        self._tor_warned    = set()
         log.warning(f"Bot Telegram restart — token={'OK' if self.token else 'VIDE !'} "
                     f"enabled={self.enabled} chat_ids={self.chat_ids}")
         self.start()

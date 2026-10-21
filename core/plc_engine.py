@@ -20,6 +20,7 @@ class PLCEngine:
         self._lock        = threading.Lock()
 
         self.program: list = []
+        self._tg_prev: dict = {}     # bloc TELEGRAM : état précédent (simulation, aucun message réel)
 
         # GPIO numériques simulés
         # GPIO réels de la carte E/S PT100
@@ -615,6 +616,17 @@ class PLCEngine:
             return f"CTU {bid} {c['acc']}/{preset} done={c['done']}"
 
         # ── Compteur descendant (CTD) ──────────────────────────────────
+        if btype == "telegram":
+            # Simulation studio : aucun envoi réel (le bot Telegram n'existe que sur le RPi).
+            # Trace le message dans le journal lors du front montant de l'entrée.
+            trig = bool(self.eval_cond(block.get("condition"), default_if_none=False))
+            if block.get("invert"): trig = not trig
+            prev = self._tg_prev.get(bid, False)
+            self._tg_prev[bid] = trig
+            if trig and not prev:
+                return f"📨 [simulation] Telegram {bid} : {block.get('msg', '')}"
+            return f"TELEGRAM {bid} actif={trig}"
+
         if btype == "ctd":
             preset = self.read_analog(block.get("pv_ref")) if block.get("pv_ref") else block.get("preset", 10)
             # ld et cd : ports optionnels — absent = non câblé = False

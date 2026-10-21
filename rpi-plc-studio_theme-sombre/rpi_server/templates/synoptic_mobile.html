@@ -2,11 +2,12 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Synoptique — RPi-PLC Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Synoptique — RPi-PLC</title>
 <style>
 :root {
   --bg:#0d1117; --bg2:#161b22; --bg3:#1c2128; --bg4:#21262d;
-  --border:#30363d; --text:#e6edf3; --text2:#8b949e; --text3:#484f58;
+  --border:#444c56; --text:#f0f6fc; --text2:#c9d1d9; --text3:#8b949e;
   --accent:#58a6ff; --green:#3fb950; --red:#f85149; --amber:#d29922;
   --purple:#bc8cff; --cyan:#00d4ff; --orange:#f0883e;
   --r:8px; --font:'Segoe UI',system-ui,sans-serif;
@@ -32,9 +33,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .tbtn.active{background:#1a2f45;border-color:var(--accent);color:var(--accent);}
 /* Contrôles grille synoptique */
 .grid-group{display:flex;align-items:center;gap:4px;}
-.grid-lbl{font-size:9px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
+.grid-lbl{font-size:10px;color:var(--text3);letter-spacing:.4px;white-space:nowrap;}
 .grid-sel{height:24px;border-radius:4px;border:1px solid var(--border);
-  background:var(--bg3);color:var(--text2);font-size:10px;padding:0 5px;
+  background:var(--bg3);color:var(--text2);font-size:11px;padding:0 5px;
   cursor:pointer;outline:none;font-family:var(--font);}
 .grid-sel:hover,.grid-sel:focus{border-color:var(--accent);color:var(--accent);}
 .snap-btn{padding:3px 9px;border-radius:5px;cursor:pointer;font-size:11px;
@@ -65,11 +66,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .sb-panel::-webkit-scrollbar-thumb{background:var(--border);}
 
 /* Items widgets */
-.sb-section{padding:6px 10px 3px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
+.sb-section{padding:6px 10px 3px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;}
 .sb-item{display:flex;align-items:center;gap:7px;padding:5px 9px;cursor:grab;border-radius:5px;margin:1px 5px;transition:background .1s;font-size:11px;color:var(--text2);}
 .sb-item:hover{background:var(--bg3);color:var(--text);}
 .sb-item:active{cursor:grabbing;}
-.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:10px;flex-shrink:0;}
+.sb-icon{width:22px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:11px;flex-shrink:0;}
 
 /* Grille symboles */
 .sym-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:5px;}
@@ -77,7 +78,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .sym-cell:hover{border-color:var(--accent);background:var(--bg4);}
 .sym-cell:active{cursor:grabbing;}
 .sym-cell svg{width:34px;height:34px;}
-.sym-label{font-size:8px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
+.sym-label{font-size:9px;color:var(--text3);text-align:center;line-height:1.2;padding:0 2px;}
 
 /* Images */
 .img-bar{padding:5px 6px;flex-shrink:0;}
@@ -85,9 +86,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .img-thumb{position:relative;border-radius:5px;overflow:hidden;cursor:grab;border:1px solid var(--border);aspect-ratio:1;background:var(--bg3);}
 .img-thumb:hover{border-color:var(--accent);}
 .img-thumb img{width:100%;height:100%;object-fit:contain;}
-.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:10px;opacity:0;transition:opacity .15s;}
+.img-del{position:absolute;top:2px;right:2px;background:#0d111190;border:none;color:var(--red);cursor:pointer;border-radius:3px;padding:1px 5px;font-size:11px;opacity:0;transition:opacity .15s;}
 .img-thumb:hover .img-del{opacity:1;}
-.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:8px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
+.img-name{position:absolute;bottom:0;left:0;right:0;background:#0d111790;font-size:9px;color:var(--text2);padding:2px 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
 .img-empty{padding:18px;text-align:center;color:var(--text3);font-size:11px;line-height:1.9;}
 
 /* CANVAS */
@@ -98,13 +99,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 /* PROPS */
 .props-panel{width:220px;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
 .props-panel.hidden{width:0;overflow:hidden;border:none;}
-.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
+.props-hdr{padding:7px 12px 5px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:700;letter-spacing:.5px;flex-shrink:0;}
 .props-scroll{flex:1;overflow-y:auto;padding:8px;}
 .props-scroll::-webkit-scrollbar{width:4px;}
 .props-scroll::-webkit-scrollbar-thumb{background:var(--border);}
-.prop-section{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
+.prop-section{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--bg4);}
 .prop-row{margin-bottom:6px;}
-.prop-label{font-size:10px;color:var(--text2);margin-bottom:2px;}
+.prop-label{font-size:11px;color:var(--text2);margin-bottom:2px;}
 .prop-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:5px;font-size:11px;font-family:var(--font);}
 .prop-input:focus{outline:none;border-color:var(--accent);}
 select.prop-input{cursor:pointer;}
@@ -155,7 +156,7 @@ select.prop-input{cursor:pointer;}
 .page-tab{
   padding:3px 12px;border-radius:5px;cursor:pointer;
   border:1px solid var(--border);background:var(--bg3);
-  color:var(--text2);font-size:10px;font-weight:600;
+  color:var(--text2);font-size:11px;font-weight:600;
   white-space:nowrap;transition:all .15s;user-select:none;
 }
 .page-tab:hover{border-color:var(--accent);color:var(--accent);}
@@ -171,7 +172,7 @@ select.prop-input{cursor:pointer;}
 .page-tab-del{
   padding:1px 5px;border-radius:3px;cursor:pointer;
   background:transparent;border:none;color:var(--text3);
-  font-size:10px;margin-left:2px;
+  font-size:11px;margin-left:2px;
 }
 .page-tab-del:hover{color:var(--red);}
 .page-tab.popup-tab{border-style:dashed !important;}
@@ -243,13 +244,13 @@ select.prop-input{cursor:pointer;}
   white-space:nowrap;transition:all .15s;min-height:30px;
 }
 .nav-prev-btn:hover,.nav-next-btn:hover{border-color:var(--accent);color:var(--accent);background:#1a2f45;}
-.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.25;cursor:default;pointer-events:none;}
+.nav-prev-btn:disabled,.nav-next-btn:disabled{opacity:0.55;cursor:default;pointer-events:none;}
 /* Fil d'Ariane central */
 .nav-breadcrumb{
   display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);
   flex:1;overflow:hidden;
 }
-.nav-breadcrumb-sep{color:var(--border);font-size:10px;}
+.nav-breadcrumb-sep{color:var(--border);font-size:11px;}
 .nav-breadcrumb-item{color:var(--text2);cursor:pointer;font-size:11px;padding:2px 5px;border-radius:4px;transition:all .12s;}
 .nav-breadcrumb-item:hover{color:var(--accent);background:rgba(88,166,255,.1);}
 .nav-breadcrumb-item.current{color:var(--text);font-weight:700;cursor:default;background:rgba(255,255,255,.05);}
@@ -261,14 +262,43 @@ select.prop-input{cursor:pointer;}
   transition:all .15s;flex-shrink:0;min-height:30px;
 }
 .nav-back-btn:hover{border-color:var(--amber);color:var(--amber);background:rgba(210,153,34,.1);}
-.nav-back-btn:disabled{opacity:0.25;cursor:default;}
+.nav-back-btn:disabled{opacity:0.55;cursor:default;}
 #nav-bar-toggle{
-  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:10px;
+  padding:2px 8px;border-radius:5px;cursor:pointer;font-size:11px;
   border:1px solid var(--border);background:var(--bg3);color:var(--text2);
   transition:all .15s;
 }
 #nav-bar-toggle.on{border-color:var(--green);color:var(--green);background:rgba(63,185,80,.1);}
+
+/* ═══ MOBILE — écran étroit (<= 700px) ═══════════════════════════════════════
+   En mode opérateur (toolbar masquée) :
+   - sidebar et props-panel disparaissent → canvas plein écran
+   - touch-action:none sur le canvas → le JS gère pan/zoom, pas le browser
+   - nav-fixed-bar plus haute pour les doigts
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width:700px){
+  /* Sidebar et props masqués par défaut (mode opérateur) */
+  .sidebar{display:none !important;}
+  .props-panel{display:none !important;}
+  /* Canvas plein écran */
+  .canvas-wrap{flex:1;width:100%;}
+  /* Touch-action sur canvas : le JS gère les gestes */
+  #syn-canvas{touch-action:none;}
+  /* Nav bar plus grande pour les doigts */
+  #nav-fixed-bar{min-height:48px;height:48px;padding:4px 8px;gap:4px;}
+  .nav-fixed-btn,.nav-prev-btn,.nav-next-btn,.nav-back-btn{
+    min-height:38px;font-size:13px;padding:6px 12px;
+  }
+  /* Barre de pages : onglets plus grands */
+  .page-tab{padding:5px 16px;font-size:12px;}
+  /* Toast plus visible */
+  #toast{bottom:60px;right:8px;font-size:13px;padding:10px 16px;}
+  /* Sidebar visible uniquement si toolbar visible (mode édition) */
+  #toolbar.visible ~ .workspace .sidebar{display:flex !important;}
+  #toolbar.visible ~ .workspace .props-panel{display:flex !important;}
+}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body tabindex="-1">
 
@@ -297,14 +327,9 @@ select.prop-input{cursor:pointer;}
   <button class="tbtn" onclick="bringToFront()">▲ Avant</button>
   <button class="tbtn" onclick="sendToBack()">▼ Arrière</button>
   <div class="tb-div"></div>
-  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (sélection multiple : sur le bord gauche du groupe)">⬤⟵</button>
+  <button class="tbtn" onclick="alignLeft()"   title="Aligner à gauche (widget sélectionné comme référence)">⬤⟵</button>
   <button class="tbtn" onclick="alignVCenter()" title="Centrer verticalement">⬤⟷</button>
   <button class="tbtn" onclick="alignTop()"    title="Aligner en haut">⟰</button>
-  <button class="tbtn" onclick="alignRight()"   title="Aligner à droite (sélection multiple)">Droite</button>
-  <button class="tbtn" onclick="alignBottom()" title="Aligner en bas (sélection multiple)">Bas</button>
-  <button class="tbtn" onclick="alignHCenter()" title="Centrer horizontalement (sélection multiple)">Centre H</button>
-  <button class="tbtn" onclick="distributeH()" title="Répartir horizontalement (3 widgets ou plus)">Répart. ↔</button>
-  <button class="tbtn" onclick="distributeV()" title="Répartir verticalement (3 widgets ou plus)">Répart. ↕</button>
   <div class="tb-div"></div>
   <button class="tbtn" id="nav-bar-toggle" onclick="toggleNavBar()" title="Barre de navigation fixe">⊟ Nav</button>
   <div id="tb-sep"></div>
@@ -328,6 +353,7 @@ select.prop-input{cursor:pointer;}
   <div style="flex:1;"></div>
   <span id="nav-page-counter" style="font-size:10px;color:var(--text3);margin-right:6px;flex-shrink:0;"></span>
   <button class="nav-fixed-btn" id="edit-mode-btn" onclick="toggleMode()" title="Basculer mode Édition / Opérateur" style="border-color:var(--accent);color:var(--accent);">👁 Opérateur</button>
+  <button class="nav-fixed-btn" onclick="window._synResetView&&window._synResetView()" title="Réinitialiser la vue (double-tap aussi)" style="display:none;border-color:var(--text3);color:var(--text3);font-size:13px;padding:4px 10px;" id="reset-view-btn">⌖</button>
 </div>
 
 <div class="workspace">
@@ -350,7 +376,6 @@ select.prop-input{cursor:pointer;}
       <div class="sb-item" draggable="true" data-type="gauge"><div class="sb-icon" style="background:color-mix(in srgb,var(--purple) 15%,var(--bg3));color:var(--purple)">◎</div>Jauge circulaire</div>
       <div class="sb-item" draggable="true" data-type="bar"><div class="sb-icon" style="background:color-mix(in srgb,var(--green) 15%,var(--bg3));color:var(--green)">▮</div>Barre de niveau</div>
       <div class="sb-item" draggable="true" data-type="trend"><div class="sb-icon" style="background:color-mix(in srgb,var(--accent) 15%,var(--bg3));color:var(--accent)">📈</div>Courbe tendance</div>
-      <div class="sb-item" draggable="true" data-type="trend_db"><div class="sb-icon" style="background:color-mix(in srgb,#bc8cff 15%,var(--bg3));color:#bc8cff">🗄📈</div>Courbe historisée</div>
       <div class="sb-item" draggable="true" data-type="value"><div class="sb-icon" style="background:var(--bg4);color:var(--text)">123</div>Valeur numérique</div>
       <div class="sb-item" draggable="true" data-type="av_display"><div class="sb-icon" style="background:color-mix(in srgb,#ffa030 15%,var(--bg3));color:#ffa030">AV</div>Afficheur AV/RF</div>
       <div class="sb-section">Commande</div>
@@ -447,7 +472,171 @@ select.prop-input{cursor:pointer;}
 <div id="toast"></div>
 <input type="file" id="img-file-input" accept="image/*" multiple>
 
-<script src="synoptic_canvas.js"></script>
+<script src="/static/synoptic_canvas.js"></script>
+
+<script>
+/* ═══ TOUCH PAN / ZOOM — mode opérateur mobile ════════════════════════════
+   Gestion des gestes tactiles sur le canvas en mode opérateur :
+   - 1 doigt  → pan (déplacement)
+   - 2 doigts → pinch-to-zoom
+   Le canvas est un élément <canvas> positionné en absolu dans .canvas-wrap.
+   On applique une transform CSS (translate + scale) pour naviguer.
+   ════════════════════════════════════════════════════════════════════════ */
+(function(){
+  var cvs = document.getElementById('syn-canvas');
+  if(!cvs) return;
+
+  var _tx=0, _ty=0, _scale=1;
+  var _dragging=false, _startX=0, _startY=0, _startTx=0, _startTy=0;
+  var _pinching=false, _startDist=0, _startScale=1, _pinchCx=0, _pinchCy=0;
+  var _startTxP=0, _startTyP=0;
+
+  var MIN_SCALE=0.3, MAX_SCALE=4.0;
+
+  function _applyTransform(){
+    cvs.style.transformOrigin = '0 0';
+    cvs.style.transform = 'translate('+_tx+'px,'+_ty+'px) scale('+_scale+')';
+    // Synchroniser la div HTML widgets
+    var hd = document.getElementById('widgets-html');
+    if(hd){
+      hd.style.transformOrigin='0 0';
+      hd.style.transform=cvs.style.transform;
+    }
+  }
+
+  function _dist(t){ return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY); }
+  function _mid(t){ return {x:(t[0].clientX+t[1].clientX)/2, y:(t[0].clientY+t[1].clientY)/2}; }
+
+  function _isOperator(){ return typeof editMode!=='undefined' && !editMode; }
+
+  cvs.addEventListener('touchstart', function(e){
+    if(!_isOperator()) return;
+    if(e.touches.length===1){
+      // Un doigt : vérifier si on touche un widget HTML interactif
+      var hd=document.getElementById('widgets-html');
+      if(hd){
+        var el=document.elementFromPoint(e.touches[0].clientX,e.touches[0].clientY);
+        if(el&&el!==cvs&&hd.contains(el)) return; // laisser passer le tap widget
+      }
+      _dragging=true; _pinching=false;
+      _startX=e.touches[0].clientX; _startY=e.touches[0].clientY;
+      _startTx=_tx; _startTy=_ty;
+      e.preventDefault();
+    } else if(e.touches.length===2){
+      _pinching=true; _dragging=false;
+      _startDist=_dist(e.touches);
+      _startScale=_scale;
+      var m=_mid(e.touches);
+      _pinchCx=m.x; _pinchCy=m.y;
+      _startTxP=_tx; _startTyP=_ty;
+      e.preventDefault();
+    }
+  },{passive:false});
+
+  cvs.addEventListener('touchmove', function(e){
+    if(!_isOperator()) return;
+    if(_pinching && e.touches.length===2){
+      var d=_dist(e.touches);
+      var newScale=Math.min(MAX_SCALE, Math.max(MIN_SCALE, _startScale*(d/_startDist)));
+      var m=_mid(e.touches);
+      // Zoom centré sur le point de pincement
+      _tx = m.x - ((_pinchCx - _startTxP)/_startScale)*newScale - (_pinchCx-m.x);
+      _ty = m.y - ((_pinchCy - _startTyP)/_startScale)*newScale - (_pinchCy-m.y);
+      _scale=newScale;
+      _applyTransform();
+      e.preventDefault();
+    } else if(_dragging && e.touches.length===1){
+      _tx=_startTx+(e.touches[0].clientX-_startX);
+      _ty=_startTy+(e.touches[0].clientY-_startY);
+      _applyTransform();
+      e.preventDefault();
+    }
+  },{passive:false});
+
+  cvs.addEventListener('touchend', function(e){
+    if(e.touches.length<2) _pinching=false;
+    if(e.touches.length===0) _dragging=false;
+  });
+
+  // Double-tap → reset vue
+  var _lastTap=0;
+  cvs.addEventListener('touchend', function(e){
+    if(!_isOperator()) return;
+    var now=Date.now();
+    if(now-_lastTap<300 && e.changedTouches.length===1){
+      _tx=0; _ty=0; _scale=1; _applyTransform();
+    }
+    _lastTap=now;
+  });
+
+  // Exposer reset pour bouton éventuel
+  window._synResetView = function(){ _tx=0;_ty=0;_scale=1;_applyTransform(); };
+})();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   INITIALISATION SERVEUR RPi — Mode opérateur autonome
+   Charge le synoptique depuis /api/synoptic, reçoit les états PLC
+   via Socket.IO (événement plc_update).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  // ── 1. Mode opérateur dès le démarrage ──────────────────────────
+  function _initOperator(){
+    if(window.setOperatorMode) window.setOperatorMode(true);
+  }
+
+  // ── 2. Chargement du synoptique depuis l'API ─────────────────────
+  function _loadSynoptic(){
+    fetch('/api/synoptic')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(window.loadSynopticData) window.loadSynopticData(data);
+      })
+      .catch(function(e){ console.error('[synoptic.html] Erreur chargement synoptique:', e); });
+  }
+
+  // ── 3. État PLC initial ──────────────────────────────────────────
+  function _loadInitialState(){
+    fetch('/api/state')
+      .then(function(r){ return r.json(); })
+      .then(function(s){ if(window.updatePLCState) window.updatePLCState(s); })
+      .catch(function(){});
+  }
+
+  // ── 4. Mises à jour temps réel via Socket.IO ─────────────────────
+  function _connectSocket(){
+    try{
+      var socket = io();
+      socket.on('plc_update', function(s){
+        if(window.updatePLCState) window.updatePLCState(s);
+      });
+      socket.on('connect', function(){
+        _loadInitialState();
+      });
+      socket.on('connect_error', function(e){
+        console.warn('[synoptic.html] Socket.IO:', e.message);
+      });
+    } catch(e){
+      // Socket.IO non disponible : repli sur polling 2 s
+      console.warn('[synoptic.html] Socket.IO absent, polling actif');
+      setInterval(_loadInitialState, 2000);
+    }
+  }
+
+  // Lancer dans l'ordre après chargement complet du canvas JS
+  _initOperator();
+  _loadSynoptic();
+  _loadInitialState();
+  _connectSocket();
+  // Afficher le bouton reset-vue sur mobile
+  if(window.innerWidth<=700){
+    var rvb=document.getElementById('reset-view-btn');
+    if(rvb) rvb.style.display='';
+  }
+})();
+</script>
+
 
 <div id="sim-panel-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(3px);align-items:center;justify-content:center;">
   <div style="background:#0d1117;border:1.5px solid #30363d;border-radius:14px;width:min(96vw,820px);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.8);overflow:hidden;">
@@ -458,11 +647,11 @@ select.prop-input{cursor:pointer;}
     </div>
     <div style="display:flex;gap:4px;padding:6px 12px;background:#0d1117;border-bottom:1px solid #21262d;flex-shrink:0;">
       <button id="simtab-sondes" onclick="switchSimTab('sondes')" style="padding:4px 12px;border-radius:6px;border:1px solid #58a6ff;background:#1a2f45;color:#58a6ff;font-size:11px;cursor:pointer;">🌡 Sondes</button>
-      <button id="simtab-registres" onclick="switchSimTab('registres')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#8b949e;font-size:11px;cursor:pointer;">📊 Registres RF</button>
-      <button id="simtab-bits" onclick="switchSimTab('bits')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#8b949e;font-size:11px;cursor:pointer;">⚡ Bits M / GPIO</button>
+      <button id="simtab-registres" onclick="switchSimTab('registres')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;font-size:11px;cursor:pointer;">📊 Registres RF</button>
+      <button id="simtab-bits" onclick="switchSimTab('bits')" style="padding:4px 12px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;font-size:11px;cursor:pointer;">⚡ Bits M / GPIO</button>
     </div>
     <div id="sim-panel-body" style="overflow-y:auto;flex:1;padding:12px 16px;"></div>
-    <div style="padding:6px 16px;background:#161b22;border-top:1px solid #30363d;font-size:9px;color:#484f58;flex-shrink:0;">
+    <div style="padding:6px 16px;background:#161b22;border-top:1px solid #30363d;font-size:9px;color:#8b949e;flex-shrink:0;">
       Démarrer ▶ la simulation, puis utiliser ce panneau. Sondes : slider ou saisie directe en °C. Registres RF4/5/6/7/8/9/12 modifiables.
     </div>
   </div>

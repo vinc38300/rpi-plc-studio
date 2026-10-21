@@ -74,6 +74,11 @@ def main():
     if not os.path.exists(_qss_path):
         _qss_path = os.path.join(_base, "style.qss")
     app.setStyleSheet(open(_qss_path, encoding="utf-8").read())
+    # Palette + contraste renforcé (thème sombre) : dialogues natifs, textes grisés en dur
+    from ui import theme_fix
+    theme_fix.install_contrast_filter(app)
+    theme_fix.apply_theme_palette(_theme)
+    theme_fix.set_dark_mode(_theme == "dark")
 
     log.info(f"RPi-PLC Studio démarré — Python {sys.version.split()[0]}")
     log.info(f"Logs : {_log_file}")
