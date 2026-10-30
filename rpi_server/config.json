@@ -15,7 +15,7 @@
     "alarm_high": 90.0,
     "alarm_low": 2.0,
     "alarm_cooldown_s": 600,
-    "notify_relays": true,
+    "notify_relays": false,
     "relay_cooldown_s": 30,
     "notify_plc": true,
     "report_enabled": true,
@@ -113,87 +113,32 @@
   },
   "gpio": {
     "5": {
-      "name": "K1 Autorisation Chaudière",
+      "name": "K1 Circulateur CR1",
       "mode": "output",
       "active_low": true
     },
     "6": {
-      "name": "K2 V3V Chaudière",
+      "name": "K2 CP1",
+      "mode": "output",
+      "active_low": true
+    },
+    "11": {
+      "name": "K3 Stop bois",
       "mode": "output",
       "active_low": true
     },
     "13": {
-      "name": "K4 Réhausse Chaudière",
+      "name": "K4 CT 20/21",
       "mode": "output",
       "active_low": true
-    },
-    "9": {
-      "name": "K5 Circulateur ECS Solaire",
-      "mode": "output",
-      "active_low": true
-    },
-    "19": {
-      "name": "K6 Circulateur ECS Chaudière",
-      "mode": "output",
-      "active_low": true
-    },
-    "10": {
-      "name": "K7 V3V Ouverte",
-      "mode": "output",
-      "active_low": true
-    },
-    "26": {
-      "name": "K8 V3V Fermé",
-      "mode": "output",
-      "active_low": true
-    },
-    "22": {
-      "name": "K9 Circulateur Planché Chauffant",
-      "mode": "output",
-      "active_low": true
-    },
-    "21": {
-      "name": "K10 V3V Solaire",
-      "mode": "output",
-      "active_low": true
-    },
-    "7": {
-      "name": "TOR  8",
-      "mode": "input",
-      "pull": "up"
-    },
-    "8": {
-      "name": "TOR  7",
-      "mode": "input",
-      "pull": "up"
     },
     "14": {
-      "name": "TOR 1 alarme_chaudiere",
-      "mode": "input",
-      "pull": "up"
-    },
-    "15": {
-      "name": "TOR 2",
-      "mode": "input",
-      "pull": "up"
-    },
-    "18": {
-      "name": "TOR  3",
+      "name": "TOR 1 TAI G14",
       "mode": "input",
       "pull": "up"
     },
     "23": {
-      "name": "TOR 4 Production_chaudiere",
-      "mode": "input",
-      "pull": "up"
-    },
-    "24": {
-      "name": "TOR  5",
-      "mode": "input",
-      "pull": "up"
-    },
-    "25": {
-      "name": "TOR  6",
+      "name": "TOR 4 TS1 G23",
       "mode": "input",
       "pull": "up"
     }

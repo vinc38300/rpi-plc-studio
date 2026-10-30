@@ -9,7 +9,7 @@
 #
 # UTILISATION :
 #   Méthode 1 — via le .deb (recommandé) :
-#     sudo dpkg -i rpi-plc_3.5-1-serveur.deb && sudo apt-get install -f
+#     sudo dpkg -i rpi-plc_X.Y-N-serveur.deb && sudo apt-get install -f
 #
 #   Méthode 2 — ce script (installation directe depuis les sources) :
 #     sudo bash install.sh
@@ -340,7 +340,7 @@ else
     # Aucune source trouvée → instructions .deb
     warn "Sources non trouvées dans $SCRIPT_DIR"
     info "→ Installer via le paquet .deb :"
-    info "  sudo dpkg -i rpi-plc_3.5-1-serveur.deb && sudo apt-get install -f"
+    info "  sudo dpkg -i rpi-plc_X.Y-N-serveur.deb && sudo apt-get install -f"
 
     # Vérifier si /opt/rpi-plc existe déjà (installé par .deb)
     if [ -f "$APP_DIR/server.py" ]; then
@@ -531,7 +531,7 @@ echo -e "  ┌──────────────────────
 echo -e "  │  systemctl start|stop|restart|status rpi-plc        │"
 echo -e "  │  journalctl -u rpi-plc -f           (logs en direct)│"
 echo -e "  │  rpi-plc --help                     (options serveur)│"
-echo -e "  │  sudo dpkg -i rpi-plc_X.Y-1.deb    (mise à jour)    │"
+echo -e "  │  sudo dpkg -i rpi-plc_X.Y-N-serveur.deb (mise à jour)│"
 echo -e "  └─────────────────────────────────────────────────────┘"
 sep
 echo ""

@@ -298,7 +298,7 @@ class DeployDialog(QDialog):
 
         # Notifications relais et PLC
         self.tg_notify_relays_cb = QCheckBox("Notifier les changements d'état relais")
-        self.tg_notify_relays_cb.setChecked(tg_cfg.get("notify_relays", True))
+        self.tg_notify_relays_cb.setChecked(tg_cfg.get("notify_relays", False))
         tg_form.addRow(self.tg_notify_relays_cb)
 
         self.tg_relay_cooldown = QSpinBox()

@@ -3051,7 +3051,7 @@ def load_config():
     return {"scan_time_ms":100,"web_port":5000,"web_enabled":True,"watchdog_sec":10,"auto_start":True,
             "security":{"enabled":False,"username":"admin","password":"plc1234"},
             "mqtt":{"enabled":False,"host":"192.168.1.x","port":1883,"username":"","password":"","keepalive":60},
-            "telegram":{"enabled":False,"token":"","chat_ids":[],"alarm_high":90.0,"alarm_low":2.0,"notify_relays":True,"notify_plc":True,"alarm_cooldown_s":600,"relay_cooldown_s":30,
+            "telegram":{"enabled":False,"token":"","chat_ids":[],"alarm_high":90.0,"alarm_low":2.0,"notify_relays":False,"notify_plc":True,"alarm_cooldown_s":600,"relay_cooldown_s":30,
                         "report_hour":8,"report_enabled":True},
             "analog":{"enabled":True,"r_ref_ohm":10000,"vcc":3.3,
                       "ads":[{"id":f"ADS{i}","address":f"0x{0x48+i:02X}",
@@ -3921,7 +3921,7 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
     def api_telegram_cfg():
         cfg = engine.config.get("telegram", {})
         # Valeurs par défaut pour les nouveaux champs
-        cfg.setdefault("notify_relays", True)
+        cfg.setdefault("notify_relays", False)
         cfg.setdefault("notify_plc", True)
         cfg.setdefault("alarm_cooldown_s", 600)
         cfg.setdefault("relay_cooldown_s", 30)

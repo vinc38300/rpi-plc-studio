@@ -60,7 +60,7 @@ Le programme est conçu sur PC dans le Studio, puis transféré sur le Raspberry
 ### Studio (PC Linux — Ubuntu 22.04+, Debian 12+)
 
 ```bash
-sudo apt install ./rpi-plc-studio_3.4-1.deb
+sudo apt install ./rpi-plc-studio_3.5-26.deb
 ```
 
 ou depuis les sources :
@@ -72,7 +72,7 @@ sudo bash install-studio.sh
 ### Serveur (Raspberry Pi — Bookworm/Bullseye, 32 ou 64 bits)
 
 ```bash
-sudo dpkg -i rpi-plc_3.4-serveur-arm64.deb && sudo apt-get install -f
+sudo dpkg -i rpi-plc_3.5-15-serveur.deb && sudo apt-get install -f
 ```
 
 ou depuis les sources :

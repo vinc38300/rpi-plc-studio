@@ -8,7 +8,7 @@
 #
 # UTILISATION :
 #   Méthode 1 — via le .deb (recommandé, résout les dépendances automatiquement) :
-#     sudo apt install ./rpi-plc-studio_3.5-1.deb
+#     sudo apt install ./rpi-plc-studio_X.Y-N.deb   # (le plus récent)
 #
 #   Méthode 2 — ce script (installation directe depuis les sources) :
 #     sudo bash install-studio.sh
@@ -90,16 +90,9 @@ ok "Python $PY_VER"
 
 # ── Vérifier si .deb disponible ───────────────────────────────────────────────
 DEB_FILE=""
-for p in "$SCRIPT_DIR/rpi-plc-studio_3.5-1.deb" \
-          "$SCRIPT_DIR/rpi-plc-studio_"*.deb \
-          "./rpi-plc-studio_"*.deb; do
-    # shellcheck disable=SC2086
-    FOUND=$(ls $p 2>/dev/null | head -1)
-    if [ -n "$FOUND" ] && [ -f "$FOUND" ]; then
-        DEB_FILE="$FOUND"
-        break
-    fi
-done
+# Plusieurs .deb peuvent coexister : on prend la version la plus récente (tri par version)
+DEB_FILE=$(ls -1 "$SCRIPT_DIR"/rpi-plc-studio_*.deb ./rpi-plc-studio_*.deb 2>/dev/null | sort -V | tail -1)
+[ -n "$DEB_FILE" ] && [ ! -f "$DEB_FILE" ] && DEB_FILE=""
 
 if [ -n "$DEB_FILE" ]; then
     echo ""
