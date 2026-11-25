@@ -46,7 +46,11 @@ HELP_TEXT = """
 /recette — Lister les recettes (avec boutons ▶)
 /recette NomRecette — Appliquer une recette
 
-💡 /recette et /relais affichent des boutons tactiles —
+🔘 *Boutons (blocs « Bouton Telegram » du studio)*
+/boutons — Tous les boutons ON / OFF
+/nom — Un seul bouton (ex : /booster) · /nom on · /nom off
+
+💡 /recette, /relais et /boutons affichent des boutons tactiles —
 pas besoin de retaper le nom à la main.
 
 ℹ️ /menu ou /aide — Afficher cette aide
@@ -574,7 +578,7 @@ class TelegramBot:
         log.info(f"Telegram cmd: /{cmd} {args} (chat {chat_id})")
         try:
             if cmd in ("aide", "help", "menu"):
-                self.send(HELP_TEXT, chat_id)
+                self.send(HELP_TEXT + self._btn_help_suffix(), chat_id)
             elif cmd == "ping":
                 self.send(f"🏓 Pong !\n_{datetime.now().strftime('%H:%M:%S')}_", chat_id)
             elif cmd == "diagnose":
@@ -611,6 +615,8 @@ class TelegramBot:
             elif cmd == "plcstop_confirm":
                 self.engine.stop()
                 self.send("■ PLC *arrêté*.", chat_id)
+            elif cmd in ("boutons", "btn", "commandes"):
+                self._cmd_boutons(chat_id)
             elif cmd == "notifs":
                 self._cmd_notifs(chat_id, args)
             elif cmd == "consigne":
@@ -621,6 +627,8 @@ class TelegramBot:
                 self._cmd_log(chat_id)
             elif cmd == "rapport":
                 self._send_daily_report()
+            elif self._cmd_bouton_nomme(chat_id, cmd, args):
+                pass    # /booster, /booster on… : commande d'un bloc « Bouton Telegram »
             else:
                 # Vérifier si la commande correspond à un nom de variable AV
                 # ex: /conssigne_ambiance 20  ou  /temp_chaudiere
@@ -708,6 +716,9 @@ class TelegramBot:
                 self._req("answerCallbackQuery", callback_query_id=cq_id,
                           text=f"{name} {'ON' if state else 'OFF'}")
                 self._cmd_relais(chat_id)  # renvoie la liste à jour avec boutons
+
+            elif data.startswith("tgb:"):
+                self._callback_bouton(cq, chat_id, data)
 
             else:
                 self._req("answerCallbackQuery", callback_query_id=cq_id,
@@ -870,6 +881,131 @@ class TelegramBot:
             self.send("\n".join(lines), chat_id)
         except Exception as e:
             self.send(f"⚠️ Erreur temp : `{e}`", chat_id)
+
+    # ── Boutons Telegram (blocs FBD « Bouton Telegram ») ──────────────────────
+    # Le studio compile chaque bloc en {"type":"telegram_btn","label","target","cmd"} ; le bot
+    # lit ces blocs dans le programme déployé : rien à configurer dans config.json.
+
+    @staticmethod
+    def _btn_slug(text) -> str:
+        s = re.sub(r"[^a-z0-9_]+", "_", str(text or "").strip().lower()).strip("_")
+        return s[:32]
+
+    def _tg_buttons(self) -> list:
+        """Boutons déclarés dans le programme déployé : [{bid, label, target, cmd}, ...]."""
+        try:
+            with self.engine._lock:
+                prog = list(getattr(self.engine, "program", None) or [])
+        except Exception:
+            return []
+        out, seen = [], set()
+        for blk in prog:
+            if not isinstance(blk, dict) or str(blk.get("type", "")).lower() != "telegram_btn":
+                continue
+            bid    = str(blk.get("id", "")).strip()
+            target = str(blk.get("target", "") or "").strip()
+            if not bid or not target or bid in seen:
+                continue
+            seen.add(bid)
+            label = str(blk.get("label") or "").strip() or target
+            cmd   = self._btn_slug(blk.get("cmd") or label) or self._btn_slug(target)
+            out.append({"bid": bid, "label": label[:40], "target": target, "cmd": cmd})
+        return out
+
+    def _btn_write(self, target: str, state: bool):
+        """Écrit la variable pilotée (même chemin que le SCADA pour une DV : engine.write_dv)."""
+        t = str(target).strip()
+        if re.fullmatch(r"(?i)RF\d+", t):
+            self.engine.write_register(t.upper(), 1.0 if state else 0.0)
+        elif t.isdigit():
+            self.engine.write_dv(int(t), bool(state))       # GPIO
+        else:
+            self.engine.write_dv(t, bool(state))            # DV nommée ou bit Mn
+
+    def _btn_view(self, buttons: list, override: dict = None):
+        """Texte + clavier inline pour une liste de boutons (override = {bid: état} juste écrit)."""
+        override = override or {}
+        try:
+            snap = self.engine.snapshot()
+        except Exception:
+            snap = {}
+        lines, rows = [], []
+        for b in buttons:
+            on = override.get(b["bid"])
+            if on is None:
+                on = self._truthy(self._resolve_ref(snap, b["target"]))
+            icon = "🟢 *ON*" if on else "⚫ off"
+            lines.append(f"{icon} — {_safe_name(b['label'])}")
+            rows.append([
+                {"text": f"🟢 {b['label']} ON",  "callback_data": f"tgb:{b['bid']}:on"},
+                {"text": f"⚫ {b['label']} OFF", "callback_data": f"tgb:{b['bid']}:off"},
+            ])
+        head = "🔘 *Commandes :*\n\n" if len(buttons) > 1 else ""
+        return head + "\n".join(lines), {"inline_keyboard": rows}
+
+    def _btn_help_suffix(self) -> str:
+        cmds = [b["cmd"] for b in self._tg_buttons() if b["cmd"]]
+        if not cmds:
+            return ""
+        return "\n\n🔘 Boutons : " + ", ".join("/" + _md_escape(c) for c in cmds)
+
+    def _cmd_boutons(self, chat_id):
+        try:
+            buttons = self._tg_buttons()
+            if not buttons:
+                self.send("🔘 Aucun bouton défini.\n"
+                          "Ajouter un bloc *Bouton Telegram* dans le studio, puis redéployer.", chat_id)
+                return
+            text, kb = self._btn_view(buttons)
+            self.send(text, chat_id, reply_markup=kb)
+        except Exception as e:
+            self.send(f"⚠️ Erreur boutons : `{e}`", chat_id)
+
+    def _cmd_bouton_nomme(self, chat_id, cmd: str, args: list) -> bool:
+        """/nom [on|off] pour le bloc « Bouton Telegram » de commande « nom ». True si géré."""
+        try:
+            matches = [b for b in self._tg_buttons() if b["cmd"] and b["cmd"] == cmd]
+        except Exception:
+            return False
+        if not matches:
+            return False
+        b = matches[0]
+        arg = (args[0].lower() if args else "")
+        if arg in ("on", "1", "off", "0"):
+            state = arg in ("on", "1")
+            self._btn_write(b["target"], state)
+            self.send(f"🔘 {_safe_name(b['label'])} {'🟢 activé' if state else '⚫ désactivé'}", chat_id)
+        else:
+            text, kb = self._btn_view([b])
+            self.send(text, chat_id, reply_markup=kb)
+        return True
+
+    def _callback_bouton(self, cq: dict, chat_id: str, data: str):
+        cq_id = cq.get("id")
+        try:
+            _, bid, action = data.split(":", 2)
+        except ValueError:
+            self._req("answerCallbackQuery", callback_query_id=cq_id, text="❓ Action inconnue")
+            return
+        buttons = self._tg_buttons()          # liste blanche : seuls les blocs du programme déployé
+        b = next((x for x in buttons if x["bid"] == bid), None)
+        if b is None:
+            self._req("answerCallbackQuery", callback_query_id=cq_id,
+                      text="❓ Bouton expiré — relance /boutons", show_alert=True)
+            return
+        state = action == "on"
+        self._btn_write(b["target"], state)
+        self._req("answerCallbackQuery", callback_query_id=cq_id,
+                  text=f"{b['label']} {'ON' if state else 'OFF'}")
+        # Met à jour le message d'origine : un seul bouton (/nom) ou la liste complète (/boutons)
+        msg     = cq.get("message", {}) or {}
+        rows    = (msg.get("reply_markup") or {}).get("inline_keyboard") or []
+        shown   = [b] if len(rows) == 1 else buttons
+        text, kb = self._btn_view(shown, {bid: state})
+        if msg.get("message_id"):
+            self._req("editMessageText", _warn=False, chat_id=chat_id,
+                      message_id=msg["message_id"], text=text, parse_mode="Markdown",
+                      reply_markup=kb)
 
     def _cmd_relais(self, chat_id):
         try:

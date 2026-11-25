@@ -27,6 +27,7 @@ SERVER_FILES = [
     "mqtt_bridge.py",
     "calibration.py",
     "report_generator.py",
+    "guest.py",
     # config.json envoyé séparément avec fusion RPi (voir ci-dessous)
     "templates/index.html",
     "templates/scada.html",
@@ -455,6 +456,19 @@ class RPiDeployer:
         return result
 
     # ── Déploiement programme seul ────────────────────────────────────────────
+    def _log_guest_page(self, synoptic):
+        """Journalise l'adresse de la page « Invité » (page du synoptique nommée Invité)."""
+        try:
+            import re as _re, unicodedata as _ud
+            for _p in (synoptic or {}).get("pages", []) if isinstance(synoptic, dict) else []:
+                _n = _ud.normalize("NFKD", str(_p.get("name", ""))).encode("ascii", "ignore").decode().lower()
+                if _re.sub(r"[^a-z0-9]+", " ", _n).strip() in ("invite", "invites", "guest", "guests"):
+                    self.log_cb(f"[INVITÉ] page « {_p.get('name')} » diffusée sur http://{self.host}:5001/ "
+                                f"(port web + 1, réglable dans config.json > guest)")
+                    return
+        except Exception:
+            pass
+
     def deploy_prog_only(self, program_json, synoptic=None, extra_config: dict = None, fbd_diagram: dict = None) -> "DeployResult":
         """Envoie uniquement programme.json, fbd_diagram.json et synoptic.json puis redémarre le service.
         Si server.py est absent ou a un contenu (md5) différent de la version locale, il est mis à jour
@@ -617,6 +631,7 @@ class RPiDeployer:
                 self._sftp.putfo(_io.BytesIO(syn_json.encode()), f"{rd}/synoptic.json")
                 nw = sum(len(p.get("widgets",[])) for p in synoptic["pages"]) if isinstance(synoptic,dict) and "pages" in synoptic else len(synoptic.get("widgets",[]))
                 self.log_cb(f"[PROG] Synoptique envoyé ({nw} widgets)")
+                self._log_guest_page(synoptic)
 
             # ── Vérification md5 des fichiers serveur avant de redémarrer ──────
             self.log_cb("[MD5] Vérification du contenu des fichiers envoyés…")
@@ -873,6 +888,7 @@ class RPiDeployer:
                     nw = len(synoptic.get("widgets", []))
                     self.log_cb(f"[PROG] Envoi du synoptique ({nw} widget(s))…")
                 self._sftp.putfo(_io.BytesIO(syn_json.encode("utf-8")), syn_remote)
+                self._log_guest_page(synoptic)
             else:
                 empty_syn = json.dumps({
                     "pages": [{"id": "P1", "name": "Vue principale",

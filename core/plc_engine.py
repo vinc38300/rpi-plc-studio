@@ -627,6 +627,10 @@ class PLCEngine:
                 return f"📨 [simulation] Telegram {bid} : {block.get('msg', '')}"
             return f"TELEGRAM {bid} actif={trig}"
 
+        if btype == "telegram_btn":
+            # Bouton Telegram : purement déclaratif (le bot n'existe que sur le RPi).
+            return None
+
         if btype == "ctd":
             preset = self.read_analog(block.get("pv_ref")) if block.get("pv_ref") else block.get("preset", 10)
             # ld et cd : ports optionnels — absent = non câblé = False

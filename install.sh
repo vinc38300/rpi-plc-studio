@@ -314,7 +314,7 @@ if [ "$HAS_SOURCES" = true ]; then
     fi
 
     # Copier les fichiers serveur
-    for f in server.py auth.py backup_manager.py calibration.py recipes.py \
+    for f in server.py guest.py auth.py backup_manager.py calibration.py recipes.py \
               report_generator.py telegram_bot.py mqtt_bridge.py testeur_plc.html synoptic.json; do
         [ -f "$SRC/$f" ] && cp "$SRC/$f" "$APP_DIR/" && ok "→ $f"
     done

@@ -369,6 +369,8 @@ const DEFS = {
   VALVE3V:  {cat:'Actionneurs',col:'#1a0f0a',hdr:'#251510',bdg:'#ff8040',ins:['OINC','ODEC'],outs:['Q_OUV','Q_FER'],desc:'Vanne 3 voies — Q_OUV=ouverture, Q_FER=fermeture'},
   // Alerte Telegram : message personnalisable quand IN est actif
   TELEGRAM: {cat:'Actionneurs',col:'#0a1a2a',hdr:'#0d2340',bdg:'#29b6f6',ins:['IN'],        outs:[],             desc:'Telegram — envoie un message quand IN est actif (texte, anti-parasite, retour a la normale)'},
+  // Bouton Telegram : ajoute un bouton ON/OFF (et une commande /nom) dans le bot, sans entree ni sortie
+  TELEGRAM_BTN: {cat:'Actionneurs',col:'#0a1a2a',hdr:'#0d2340',bdg:'#29b6f6',ins:[],        outs:[],             desc:'Bouton Telegram — ajoute un bouton ON/OFF dans le bot qui pilote une variable (DV, Mx ou RFx)'},
   // Compteur de marche
   RUNTIMCNT:{cat:'Compteurs',  col:'#0a2a0a',hdr:'#103510',bdg:'#50ff50',ins:['RUN','RST'], outs:['STARTS','TOTAL','RUNTIME'],desc:'Compteur marche — RUN=signal, RST=reset'},
 };
@@ -1274,6 +1276,7 @@ function defParams(t){
   if(t==='OUTPUT')  return{pin:5,name:'K1'};
   if(t==='CONST')   return{value:0};
   if(t==='TELEGRAM')return{msg:'Alerte : defaut detecte',msg_clear:'Retour a la normale',delay_s:3,repeat_s:0,trigger:'1'};
+  if(t==='TELEGRAM_BTN')return{label:'Booster',target:'booster',cmd:'booster'};
   if(t==='MEM')     return{bit:'M0'};
   if(t==='PAGE_IN') return{signal:'SIG1'};
   if(t==='PAGE_OUT')return{signal:'SIG1'};
@@ -1601,6 +1604,9 @@ function render(){
   ctx.clearRect(0,0,cvs.width,cvs.height);
   if(!pg())return;
   ctx.save();ctx.translate(vp.x,vp.y);ctx.scale(vp.scale,vp.scale);
+  // Cartouches (cadres titrés) : toujours en arrière-plan, sous les fils et les blocs,
+  // quel que soit leur rang dans pg().blocks.
+  pg().blocks.forEach(b=>{ if(b.type==='CARTOUCHE') drawBlock(b,b===selB||multiSel.has(b)); });
   pg().wires.forEach(w=>drawWire(w,w===selW));
   _drawChainWires();
   if(wireFrom){
@@ -1611,7 +1617,7 @@ function render(){
     bez(ctx,wireFrom.wx,wireFrom.wy,mw.x,mw.y);
     ctx.stroke();ctx.setLineDash([]);
   }
-  pg().blocks.forEach(b=>drawBlock(b,b===selB||multiSel.has(b)));
+  pg().blocks.forEach(b=>{ if(b.type!=='CARTOUCHE') drawBlock(b,b===selB||multiSel.has(b)); });
   _drawConnLinks();
   drawRubber();
   ctx.restore();
@@ -2141,6 +2147,7 @@ function pdisp(b){
   if(b.type==='VALVE3V') return p.name||'V3V';
   if(b.type==='RUNTIMCNT')return p.name||'Cpt';
   if(b.type==='TELEGRAM'){const m=String(p.msg||'').trim();return '> '+(m.length>22?m.slice(0,21)+'..':m);}
+  if(b.type==='TELEGRAM_BTN'){const m=String(p.label||p.target||'').trim();return '[ '+(m.length>20?m.slice(0,19)+'..':m)+' ]';}
   if(b.type==='MQTT'){
     const t=p.topic||'';
     const parts=t.split('/');
@@ -2170,9 +2177,17 @@ function rrTop(x,y,w,h,r){
 // ════════════════════════════════════════════════════════════
 function hitBlock(wx,wy){
   const bs=pg().blocks;
+  // 1) blocs ordinaires (le plus en avant d'abord) ; 2) cartouches, en arrière-plan :
+  // un cartouche ne masque jamais un bloc situé dans son cadre.
   for(let i=bs.length-1;i>=0;i--){
-    const b=bs[i];if(wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h)return b;
-  }return null;
+    const b=bs[i];if(b.type==='CARTOUCHE')continue;
+    if(wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h)return b;
+  }
+  for(let i=bs.length-1;i>=0;i--){
+    const b=bs[i];if(b.type!=='CARTOUCHE')continue;
+    if(wx>=b.x&&wx<=b.x+b.w&&wy>=b.y&&wy<=b.y+b.h)return b;
+  }
+  return null;
 }
 function hitPort(wx,wy){
   for(const b of pg().blocks){
@@ -2264,7 +2279,7 @@ cvs.addEventListener('mousedown',e=>{
   // avant : hitBlock() renvoie simplement null dans ce cas et on retombe sur
   // hitWire() ci-dessous.
   const bh=hitBlock(w.x,w.y);
-  if(!bh){
+  if(!bh||bh.type==='CARTOUCHE'){   // un cartouche est un fond : les fils restent cliquables
     const wh=hitWire(w.x,w.y);
     if(wh){selW=wh;selB=null;multiSel.clear();showWireProps(wh);render();return;}
   }
@@ -2286,7 +2301,8 @@ cvs.addEventListener('mousedown',e=>{
     multiSel.clear();
     selB=bh; selW=null;
     drag='block'; dragOX=w.x-bh.x; dragOY=w.y-bh.y;
-    pg().blocks=[...pg().blocks.filter(b=>b!==bh),bh];
+    // Un cartouche reste en arrière-plan : on ne le remonte jamais devant les blocs.
+    if(bh.type!=='CARTOUCHE') pg().blocks=[...pg().blocks.filter(b=>b!==bh),bh];
     showBlockProps(bh); render(); return;
   }
   // Clic sur fond vide
@@ -2743,20 +2759,17 @@ function showBlockProps(b){
   }else if(b.type==='MEM'){
     h+=pSel('bit','Bit mémoire',b.params.bit,MEMS.map(m=>({v:m,l:m})));
   }else if(b.type==='CARTOUCHE'){
-    html=`<div class='pr'><label class='pl'>TITRE</label>
-      <input class='pi' value='${ep(p.title||'')}' onchange="_upd(b,'title',this.value)"></div>
-      <div class='pr'><label class='pl'>SOUS-TITRE</label>
-      <input class='pi' value='${ep(p.subtitle||'')}' onchange="_upd(b,'subtitle',this.value)"></div>
-      <div class='pr'><label class='pl'>AUTEUR</label>
-      <input class='pi' value='${ep(p.author||'')}' onchange="_upd(b,'author',this.value)"></div>
-      <div class='pr'><label class='pl'>RÉVISION</label>
-      <input class='pi' value='${ep(p.rev||'1')}' onchange="_upd(b,'rev',this.value)"></div>
-      <div class='pr'><label class='pl'>DATE</label>
-      <input class='pi' type='date' value='${p.date||''}' onchange="_upd(b,'date',this.value)"></div>
-      <div class='pr'><label class='pl'>N° FEUILLE</label>
-      <input class='pi' value='${ep(p.sheet||'1')}' onchange="_upd(b,'sheet',this.value)"></div>
-      <hr class='psep'>
-      <button class='pb' onclick="_printCartouche('${b.id}')">🖨 Imprimer cette zone</button>`;
+    // Champs édités par le gestionnaire générique (data-key -> b.params[k]).
+    const _ea=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const _cf=(k,l,v,t)=>`<div class="pr"><span class="pl">${l}</span><input class="pi" data-key="${k}" type="${t||'text'}" value="${_ea(v)}"></div>`;
+    h+=_cf('title','Titre',p.title||'');
+    h+=_cf('subtitle','Sous-titre',p.subtitle||'');
+    h+=_cf('author','Auteur',p.author||'');
+    h+=_cf('rev','Révision',p.rev||'1');
+    h+=_cf('date','Date',p.date||'','date');
+    h+=_cf('sheet','N° feuille',p.sheet||'1');
+    h+=`<hr class="psep">
+      <button class="pb" onclick="_printCartouche('${b.id}')">🖨 Imprimer cette zone</button>`;
   }else if(b.type==='CONN'||b.type==='CONN_TX'||b.type==='CONN_RX'){
     h+=pNum('num','Numéro',b.params.num||1,1,999);
     h+=pTxt('label','Étiquette',b.params.label||'C1');
@@ -2996,6 +3009,17 @@ function showBlockProps(b){
     h+=pNum('delay_s','Anti-parasite (s)',tp.delay_s??3,0,3600,1);
     h+=pNum('repeat_s','Rappel toutes les (s, 0 = jamais)',tp.repeat_s??0,0,86400,1);
     h+=`<div style="color:var(--fbd-text3);font-size:9px;padding:4px 0">Necessite le bot Telegram active sur le RPi (SCADA / fenetre de deploiement).</div>`;
+  }else if(b.type==='TELEGRAM_BTN'){
+    const tp=b.params, _esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    h+=`<div style="color:var(--fbd-text2);font-size:10px;padding:4px 0 6px;line-height:1.6">
+      Ajoute un bouton <b>ON / OFF</b> dans le bot Telegram (commande <code>/boutons</code> ou <code>/commande</code>).<br>
+      Au clic, la variable ci-dessous passe a 1 (ON) ou 0 (OFF).<br>
+      Pas d'entree ni de sortie : il suffit de poser le bloc sur le schema.
+    </div>`;
+    h+=`<div class="pr"><span class="pl">Texte du bouton</span><input class="pi" data-key="label" type="text" value="${_esc(tp.label)}" style="width:100%;box-sizing:border-box"></div>`;
+    h+=`<div class="pr"><span class="pl">Variable pilotee (nom d'une DV, M7 ou RF414)</span><input class="pi" data-key="target" type="text" value="${_esc(tp.target)}" style="width:100%;box-sizing:border-box"></div>`;
+    h+=`<div class="pr"><span class="pl">Commande Telegram (sans /, ex : booster)</span><input class="pi" data-key="cmd" type="text" value="${_esc(tp.cmd)}" style="width:100%;box-sizing:border-box"></div>`;
+    h+=`<div style="color:var(--fbd-text3);font-size:9px;padding:4px 0;line-height:1.5">Pour un interrupteur, mets le nom de la variable du bloc DV (ex : <code>booster</code>), comme le bouton du SCADA.<br>Necessite le bot Telegram active sur le RPi.</div>`;
   }else if(b.type==='MQTT'){
     h+=`<div style="color:var(--fbd-text2);font-size:10px;padding:4px 0 6px">
       <b>Subscribe (SUB)</b> : lit le topic → ecrit dans reg_out (RF*)<br>

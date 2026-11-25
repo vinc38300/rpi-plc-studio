@@ -678,7 +678,27 @@ class BlockEditor(QWidget):
                         })
 
                 # Ajouter les blocs et fils réels du groupe
-                new_blocks.extend(_copy.deepcopy(real_blocks))
+                _inner_copy = _copy.deepcopy(real_blocks)
+                # FIX : entrée analogique d'un PYBLOCK/CARITHM interne alimentée de
+                # l'extérieur du groupe. Le registre a{N}_ref du bloc interne a été
+                # renuméré (RF neuf) par _renumber ; or resolve_reg_out() le renvoyait
+                # au producteur amont (PYBLOCK OA{k} via CONN ou fil direct), qui
+                # écrivait donc dans ce registre neuf, alors que le bloc interne lit
+                # le registre de la source (signal_ref). Résultat : l'entrée restait à
+                # 0 (ex. « Horaire ballon » -> consigne ballon). On neutralise le
+                # registre interne : le producteur garde alors son propre oa{k}_ref,
+                # celui que le consommateur lit.
+                _by_id = {ib.get("id"): ib for ib in _inner_copy}
+                for ew in ext_wires_in:
+                    inner_dst = gin_map.get(ew["dst"]["port"])
+                    if not inner_dst:
+                        continue
+                    ib = _by_id.get(inner_dst["bid"])
+                    if ib and str(ib.get("type", "")).upper() in ("PYBLOCK", "CARITHM"):
+                        _pt = str(inner_dst["port"])
+                        if _re.fullmatch(r"[Aa]\d+", _pt):
+                            ib.setdefault("params", {})[_pt.lower() + "_ref"] = None
+                new_blocks.extend(_inner_copy)
                 new_wires.extend(_copy.deepcopy(real_inner_wires))
 
             return {**page_dict, "blocks": new_blocks, "wires": new_wires}, changed
@@ -1875,6 +1895,16 @@ class BlockEditor(QWidget):
                     blk["invert"] = True            # déclenche quand IN est inactif (contact NF)
                 if cond: blk["condition"] = cond
                 prog.append(blk)
+
+            elif bt == "TELEGRAM_BTN":
+                # Bouton Telegram : aucune entrée câblée. Le bot du RPi lit ces champs dans le
+                # programme déployé pour proposer un bouton ON/OFF (voir telegram_bot.py).
+                blk["type"]   = "telegram_btn"
+                blk["label"]  = str(p.get("label", "")).strip()
+                blk["target"] = str(p.get("target", "")).strip()
+                blk["cmd"]    = str(p.get("cmd", "")).strip()
+                if blk["target"]:            # sans variable pilotée, le bloc ne ferait rien
+                    prog.append(blk)
 
             elif bt == "RUNTIMCNT":
                 runsb, run_port = wire_src(bid, "RUN")

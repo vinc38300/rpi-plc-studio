@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=6.0, user-scalable=yes">
 <title>Synoptique — RPi-PLC</title>
 <style>
 :root {
@@ -480,6 +480,23 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   <!-- Rempli dynamiquement par renderPagesBar() -->
 </div>
 
+<style>
+/* Boutons de zoom flottants : écran étroit ou ?mobile=1 uniquement */
+#syn-zoom-ctl{position:fixed;right:10px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:500;
+  display:none;flex-direction:column;gap:8px;}
+#syn-zoom-ctl button{width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.28);
+  background:rgba(22,27,34,.88);color:#e6edf3;font-size:24px;line-height:1;padding:0;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.45);touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#syn-zoom-ctl button:active{background:rgba(88,166,255,.35);}
+@media (max-width:700px){ #syn-zoom-ctl{display:flex;} }
+body.force-mobile #syn-zoom-ctl{display:flex;}
+</style>
+<div id="syn-zoom-ctl" role="group" aria-label="Zoom">
+  <button type="button" title="Agrandir" onclick="window._synZoomBy&&window._synZoomBy(1.4)">+</button>
+  <button type="button" title="Réduire" onclick="window._synZoomBy&&window._synZoomBy(1/1.4)">−</button>
+  <button type="button" title="Vue d'ensemble" onclick="window._synResetView&&window._synResetView()">⌖</button>
+</div>
+
 <div id="toast"></div>
 <input type="file" id="img-file-input" accept="image/*" multiple>
 
@@ -500,6 +517,28 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   // Scroll natif activé pour tous (pan vertical mobile + desktop si besoin)
   inner.style.overflow              = 'auto';
   inner.style.webkitOverflowScrolling = 'touch';
+
+  // Zoom choisi par l'utilisateur (boutons + / − ou pincement), appliqué PAR-DESSUS l'ajustement
+  // à la largeur. Il est conservé quand la fenêtre change de taille (rotation, zoom du navigateur) :
+  // avant, chaque re-calage remettait la page à la largeur de l'écran et annulait le zoom, de sorte
+  // que seule la barre des pages (hors canevas) grossissait.
+  var _userZoom = 1, _baseRatio = 1, _bw = 1, _bh = 1;
+
+  function _zoomBy(f){
+    var nz = Math.min(6, Math.max(1, _userZoom * f));
+    if(Math.abs(nz - _userZoom) < 0.001) return;
+    var oldEff = _baseRatio * _userZoom, newEff = _baseRatio * nz;
+    // Point d'ancrage = centre de la partie VISIBLE DU SYNOPTIQUE (et non de l'écran : au départ
+    // la page est plus petite que l'écran et le centre de l'écran tombe dans le vide).
+    var visW = Math.min(inner.clientWidth,  _bw * oldEff - inner.scrollLeft);
+    var visH = Math.min(inner.clientHeight, _bh * oldEff - inner.scrollTop);
+    var cx = (inner.scrollLeft + visW / 2) / oldEff;
+    var cy = (inner.scrollTop  + visH / 2) / oldEff;
+    _userZoom = nz;
+    wrap.style.zoom = newEff;
+    inner.scrollLeft = cx * newEff - inner.clientWidth  / 2;
+    inner.scrollTop  = cy * newEff - inner.clientHeight / 2;
+  }
 
   function _fitToWidth(){
     if(typeof window.getSynopticBounds !== 'function') return;
@@ -540,9 +579,9 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
     var ratio = window.innerWidth / bounds.xMax;
     ratio = Math.max(0.10, ratio);   // plancher 10% (garde contre synoptique vide)
 
-    wrap.style.zoom = ratio;
-    inner.scrollTop  = 0;
-    inner.scrollLeft = 0;
+    _baseRatio = ratio; _bw = bounds.xMax; _bh = bounds.yMax;
+    wrap.style.zoom = ratio * _userZoom;
+    if(_userZoom === 1){ inner.scrollTop = 0; inner.scrollLeft = 0; }
   }
 
   // ── Hooks ──────────────────────────────────────────────────────────────
@@ -553,8 +592,9 @@ body.force-mobile #toolbar.visible ~ .workspace .props-panel{display:flex !impor
   // → applyMode() → _resize() → _fitToWidth() automatique
   window.onAfterResize = _fitToWidth;
 
-  // Bouton ⌖ reset-vue
-  window._synResetView = _fitToWidth;
+  // Bouton ⌖ reset-vue (revient à la vue d'ensemble) et boutons + / −
+  window._synResetView = function(){ _userZoom = 1; _fitToWidth(); };
+  window._synZoomBy    = _zoomBy;
 
   // Re-fit sur redimensionnement fenêtre
   window.addEventListener('resize', function(){ setTimeout(_fitToWidth, 60); });

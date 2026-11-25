@@ -5,3 +5,6 @@ $~
 .cache/
 *.kcache
 mesa_shader_cache/
+__pycache__/
+*.pyc
+*.patch

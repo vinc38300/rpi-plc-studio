@@ -477,6 +477,11 @@ function _resize(){
 }
 window.addEventListener('resize',_resize);
 // ═══════════════ GESTION DES PAGES ═══════════════
+// Page « Invité » : nom reconnu sans tenir compte des accents, de la casse ni des décorations
+function _isGuestPageName(n){
+  const s=String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  return s==='invite'||s==='invites'||s==='guest'||s==='guests';
+}
 function renderPagesBar(){
   const bar=document.getElementById('pages-bar');
   if(!bar)return;
@@ -488,7 +493,9 @@ function renderPagesBar(){
     if(isPopup){tab.style.cssText='border-style:dashed;border-color:var(--purple);color:var(--purple);';}
     // Nom cliquable
     const lbl=document.createElement('span');
-    lbl.textContent=p.name;
+    const _isGuest=_isGuestPageName(p.name);
+    lbl.textContent=(_isGuest?'🌐 ':'')+p.name;
+    if(_isGuest) lbl.title='Page invité : diffusée seule sur le réseau local (port web + 1), commandes limitées aux widgets de cette page';
     lbl.onclick=()=>{ if(p.isPopup) openPopup(i); else switchPage(i); };
     // Double-clic pour renommer (mode édition)
     lbl.ondblclick=()=>{

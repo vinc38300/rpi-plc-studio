@@ -4157,6 +4157,17 @@ def start_web(engine, db, port, recipes=None, backup=None, bot=None, calibration
         else:
             sio.run(app, host="0.0.0.0", port=port, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
 
+    # ── Page « Invité » : second port, uniquement la page nommée Invité ─────────
+    # (voir guest.py). Sans effet s'il n'existe aucune page de ce nom ; ne peut
+    # jamais empêcher le démarrage du serveur principal.
+    try:
+        import guest as _guest
+        _guest.attach(engine, app, BASE_DIR,
+                      snapshot_fn=lambda: _apply_calibration(engine.snapshot()),
+                      history_fn=lambda ref, hours: db.get_var_history(ref, hours))
+    except (Exception, SystemExit) as _ge:
+        log.warning(f"[GUEST] module indisponible : {_ge}")
+
     threading.Thread(target=run, daemon=True, name="web").start()
 
 

@@ -128,7 +128,7 @@
       "active_low": true
     },
     "13": {
-      "name": "K4 CT 20/21",
+      "name": "K4 DT 10/11",
       "mode": "output",
       "active_low": true
     },

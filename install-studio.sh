@@ -263,7 +263,7 @@ rsync_or_cp "$SRC_ROOT/ui"        "$APP_DIR/ui"        && ok "→ ui/"
 rsync_or_cp "$SRC_ROOT/resources" "$APP_DIR/resources" && ok "→ resources/"
 
 # rpi_server (pour le déploiement depuis le studio)
-for f in server.py auth.py backup_manager.py calibration.py config.json \
+for f in server.py guest.py auth.py backup_manager.py calibration.py config.json \
           recipes.py report_generator.py rpi-plc.service setup_autonomy.sh \
           synoptic.json telegram_bot.py mqtt_bridge.py testeur_plc.html; do
     [ -f "$SRC_ROOT/rpi_server/$f" ] && \
