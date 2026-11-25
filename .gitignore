@@ -8,3 +8,5 @@ mesa_shader_cache/
 __pycache__/
 *.pyc
 *.patch
+rpi_server/config.json
+*.plcproj
